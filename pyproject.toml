@@ -1,0 +1,115 @@
+[project]
+name = 'clunkster'
+version = '0.1.0'
+description = 'Add your description here'
+readme = 'README.md'
+requires-python = '>=3.14'
+dependencies = [
+    'rustworkx>=0.17.1',
+]
+
+[dependency-groups]
+dev = [
+    'deptry>=0.25.1',
+    'pytest>=9.0.3',
+    'ruff>=0.15.14',
+    'ty>=0.0.38',
+]
+
+[tool.pytest.ini_options]
+testpaths = ['tests']
+python_files = 'test_*.py'
+addopts = '-v --tb=short'
+
+[tool.ruff]
+target-version = 'py314'
+line-length = 79
+fix = true
+
+[tool.ruff.format]
+quote-style = 'single'
+docstring-code-format = false
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = 'single'
+
+[tool.ruff.lint.isort]
+known-first-party = ['pult']
+
+[tool.ruff.lint]
+select = [
+    'A',
+    'ANN',
+    'B',
+    'BLE',
+    'C4',
+    'C90',
+    'COM',
+    'D',
+    'DTZ',
+    'E',
+    'ERA',
+    'EXE',
+    'F',
+    'FBT',
+    'FLY',
+    'FURB',
+    'G',
+    'I',
+    'ICN',
+    'ISC',
+    'LOG',
+    'N',
+    'PERF',
+    'PGH',
+    'PIE',
+    'PLR',
+    'PT',
+    'PTH',
+    'Q',
+    'RET',
+    'RSE',
+    'RUF',
+    'S',
+    'SIM',
+    'SLF',
+    'SLOT',
+    'T100',
+    'TRY',
+    'UP',
+    'W',
+    'YTT',
+]
+
+ignore = [
+    # trailing comma, conflicts with `ruff format`
+    'COM812',
+
+    # implicit string concat conflicts with `ruff format`
+    'ISC001',
+
+    # prefer explicit string concat over implicit concat
+    'ISC003',
+
+    # long exception messages from `tryceratops`
+    'TRY003',
+
+    # this rule always does false positives
+    'D401',
+
+    # allow asserts in simple projects
+    'S101',
+
+    # conflicting rules
+
+    # prefer no blank line before class docstring
+    'D203',
+    # prefer multiline summary being placed on """ line
+    'D213',
+]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = [
+    'rustworkx'
+]
+
