@@ -58,74 +58,7 @@ class Project:
 
 
 class AssetType(Enum):
-    """GameMaker8.2 asset type.
-
-    =========================================
-    Dehydration strategy for each asset type
-    =========================================
-
-    Backgrounds: impactful, high priority.
-
-    * dehydrate: TODO find a way to generate .gmbck files
-    * store-dry: pink-black checkerboard with transparent padding
-    * store-wet: .gmbck files
-    * hydrate: use ``background_replace_background`` to load externally
-
-    ____
-
-    Fonts: aren't numerous enough, and difficult.
-
-    ____
-
-    Objects: moderately impactful, but risky (and difficult).
-
-    ____
-
-    Paths: aren't impactful.
-
-    ____
-
-    Room: those are quite impactful, but also pretty risky.
-
-    * dehydrate: read instances.txt, tiles and each object creation code,
-      turn them into scripts that add them back in via ``room_instance_add``
-      (don't forget their respective globalvars) and ``room_tile_add``,
-      generate objects for each room instance creation code to be ran on
-      room start.
-    * store-dry: blank room with a single stub object (to raise errors).
-    * store-wet: aforementioned script and object.
-    * hydrate: run the scripts, add the room start object as well.
-
-    ____
-
-    Scripts: impossible to create dynamically.
-
-    ____
-
-    Sprites: impactful, high priority.
-
-    * dehydrate: TODO find a way to generate .gmspr files
-    * store-dry: pink-black checkerboard with transparent padding
-    * store-wet: .gmspr files
-    * hydrate: use ``sprite_replace_sprite`` to load externally
-
-    ____
-
-    Sounds: very impactful, TODO.
-
-    ____
-
-    Data: Sounds and Music: impactful, high priority.
-
-    * dehydrate: iterate through all sounds, put sounds from same cluster-set
-      into WASD packs, generate a script that loads every existing sound
-      as ``null.wav`` (or ``buzz.wav``) via ``sound_add_ext``,
-      generate a script that would load said WASD pack
-    * store-dry: those live as ``null.wav`` files.
-    * store-wet: WASD pack.
-    * hydrate: run the WASD loader script.
-
-    """
+    """GameMaker8.2 asset type."""
 
     BACKGROUND = auto()
     FONT = auto()
