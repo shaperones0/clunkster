@@ -28,8 +28,12 @@ test-cov: ## Run tests and print a terminal coverage report
 	@echo "Running tests with coverage: Pytest"
 	@uv run pytest --cov=clunkster --cov-report=term-missing
 
+.PHONY: readme
+readme:	## Autogen in readme (examples and whatnot)
+	@cog -r README.md
+
 .PHONY: check
-check: format lint test ## Run all local checks, fixes, and tests
+check: format lint test readme ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="
 
 .PHONY: help

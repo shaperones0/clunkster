@@ -11,6 +11,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "cogapp>=3.6.0",
     'deptry>=0.25.1',
     'pytest>=9.0.3',
     'ruff>=0.15.14',
@@ -109,8 +110,15 @@ ignore = [
     'D213',
 ]
 
+[tool.ruff.lint.extend-per-file-ignores]
+"examples/*" = [
+    "D103"
+]
+
 [tool.deptry.per_rule_ignores]
 DEP002 = [
     'rustworkx'
 ]
-
+DEP001 = [
+    'cog'
+]
