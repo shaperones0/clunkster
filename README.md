@@ -36,6 +36,9 @@ This script scans the project's `tree.yyd` files to automatically group
 assets into clusters based on their top-level folder in the IDE.
 Outputs a Python dictionary that you can edit and copy into later scripts.
 
+It also outputs a table of cluster names, so you can pinpoint cases like
+separate clusters "StageA" and "stage_a" when they should be the same thing.
+
 ```python
 import json
 import sys
@@ -83,6 +86,7 @@ print(json.dumps(cluster_map, indent=4))
 clusters_all = sorted(
     {name for clusters in asset_to_cluster.values() for name in clusters}
 )
+print('All clusters:', *clusters_all)
 for asset_type, clusters in asset_to_cluster.items():
     cluster_set = set(clusters)
     row: list[str] = []
@@ -91,7 +95,7 @@ for asset_type, clusters in asset_to_cluster.items():
             row.append(col)
         else:
             row.append(' ' * len(col))
-    print(f'{asset_type.get_dir(): >15}:', *row)
+    print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
 ```
 <!--[[[end]]]-->
 
