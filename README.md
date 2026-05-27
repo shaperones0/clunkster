@@ -34,8 +34,8 @@ generate_toc()
     * [Dev solution](#dev-solution)
     * [Prod solution](#prod-solution)
     * [Safety backbone (dependency linter)](#safety-backbone-dependency-linter)
-    * [Workflow](#workflow)
-    * [Prerequisites](#prerequisites)
+  * [Prerequisites](#prerequisites)
+  * [Workflow](#workflow)
     * [Dehydration strategy for each asset type](#dehydration-strategy-for-each-asset-type)
 <!--[[[end]]]-->
 
@@ -337,7 +337,7 @@ What happens if a developer accidentally references a `StageB` sprite inside a `
 
 To prevent this, a dependency linter is included. It builds dependency graph based on static `.gml` and meta file analysis. This results in sets of assets "referenced" (both directly and indirectly) in each room. The linter then yells at you if a room references something that it isn't explicitly marked to load.
 
-### Prerequisites
+## Prerequisites
 
 0. Use this tool only if it's necessary.
     - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 2 GB of RAM and your project takes more than 10 seconds to build.
@@ -361,7 +361,7 @@ And some less ideological requirements:
 5. Python 3.10+ (`uv` recommended)
 6. Close IDE before running the tool (or you'll get annoying popup (gross))
 
-### Workflow
+## Workflow
 
 This is the workflow that I used for the project that this tool was initially made for. As of now, each step of the workflow is represented as an example in [Examples](#examples) section. Examples without links are WIP.
 
