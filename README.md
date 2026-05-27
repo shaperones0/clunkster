@@ -16,6 +16,29 @@ Planned tools:
 - [ ] Externator (generate external versions of assets and generate code for their loading)
 - [ ] Game splitter (run Externator, ensure rooms will have assets from their chunks loaded)
 
+## TOC
+
+<!--[[[cog
+import sys
+sys.path.append("scripts")
+from readme_toc import generate_toc
+
+generate_toc()
+]]]-->
+* [Clunkster](#clunkster)
+  * [Examples](#examples)
+    * [Example 1 - Generating an initial Cluster Map.](#example-1---generating-an-initial-cluster-map)
+    * [Example 2 - Populating Cluster Map with external assets (`data/`)](#example-2---populating-cluster-map-with-external-assets-data)
+    * [Example 3 - Fixing issues in cluster map via aliases](#example-3---fixing-issues-in-cluster-map-via-aliases)
+  * [Rationale](#rationale)
+    * [Dev solution](#dev-solution)
+    * [Prod solution](#prod-solution)
+    * [Safety backbone (dependency linter)](#safety-backbone-dependency-linter)
+    * [Workflow](#workflow)
+    * [Prerequisites](#prerequisites)
+    * [Dehydration strategy for each asset type](#dehydration-strategy-for-each-asset-type)
+<!--[[[end]]]-->
+
 ## Examples
 
 The following examples represent actual workflows. Copy and modify as needed.
