@@ -36,7 +36,7 @@ generate_toc()
     * [Safety backbone (dependency linter)](#safety-backbone-dependency-linter)
   * [Prerequisites](#prerequisites)
   * [Workflow](#workflow)
-    * [Dehydration strategy for each asset type](#dehydration-strategy-for-each-asset-type)
+  * [Dehydration strategy for each asset type](#dehydration-strategy-for-each-asset-type)
 <!--[[[end]]]-->
 
 ## Examples
@@ -383,7 +383,7 @@ Preparation:
    - See examples ?
 4. TODO setup stub resources and script generation
 
-### Dehydration strategy for each asset type
+## Dehydration strategy for each asset type
 
 Following terms are used:
 - dehydrate: the process of stripping the asset from the project.
