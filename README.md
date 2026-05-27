@@ -28,16 +28,14 @@ import sys
 sys.path.append("scripts")
 from readme_example import example_inject
 
-example_inject("examples/main_1_gen_cluster_map.py")
+example_inject("examples/main_1_clustermap_gen.py")
 ]]]-->
-Build cluster map out of tree data.
+Build cluster map out of tree data (minimalist version).
 
 This script scans the project's `tree.yyd` files to automatically group
 assets into clusters based on their top-level folder in the IDE.
-Outputs a Python dictionary that you can edit and copy into later scripts.
-
-It also outputs a table of cluster names, so you can pinpoint cases like
-separate clusters "StageA" and "stage_a" when they should be the same thing.
+Outputs a Python dictionary that you can inspect, before moving
+onto next examples.
 
 ```python
 import json
@@ -62,27 +60,213 @@ project_root = Path(sys.argv[1])
 
 # map of cluster to its assets
 cluster_map: dict[str, list[str]] = {}
-# map of asset type to clusters (useful for initial cleanup)
-asset_to_cluster: dict[AssetType, list[str]] = {}
 
+# iterate through all clusterable assets to check their tree.yyd
+for asset_type in CLUSTERABLE_ASSETS:
+    asset_dir = project_root / asset_type.get_dir()
+    # skip assets that are not present in the project
+    if not asset_dir.exists():
+        continue
+
+    # read tree.yyd
+    tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+    # run parsing
+    for asset_name, path in tree.parse(tree_text.splitlines()):
+        # if asset is in asset type root, then its common
+        cluster_name = path[0] if path else 'Common'
+        # fill in the map
+        cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+# json.dumps gives better formatting that pprint
+print(json.dumps(cluster_map, indent=4))
+```
+<!--[[[end]]]-->
+
+### Example 2 - Populating Cluster Map with external assets (`data/`)
+
+<!--[[[cog
+import sys
+sys.path.append("scripts")
+from readme_example import example_inject
+
+example_inject("examples/main_2_clustermap_data.py")
+]]]-->
+Populate clustermap with unconventional assets.
+
+Some projects make use of external assets, such as for gm82snd.
+In case of gm82snd, I have hardcoded it to look for music in `data/music`
+and for sounds in `data/sounds`.
+
+```python
+import json
+import sys
+from pathlib import Path
+
+from clunkster.asset import AssetType
+from clunkster.parse import tree
+
+CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
+    AssetType.SPRITE,
+    AssetType.BACKGROUND,
+    AssetType.SOUND,
+    AssetType.PATH,
+    AssetType.SCRIPT,
+    AssetType.FONT,
+    AssetType.OBJECT,
+    AssetType.ROOM,
+)
+
+CLUSTERABLE_DATA: tuple[AssetType, ...] = (
+    AssetType.DATA_SFX,
+    AssetType.DATA_MUSIC,
+)
+
+project_root = Path(sys.argv[1])
+
+cluster_map: dict[str, list[str]] = {}
 for asset_type in CLUSTERABLE_ASSETS:
     asset_dir = project_root / asset_type.get_dir()
     if not asset_dir.exists():
         continue
 
     tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-    cluster_set: set[str] = set()
     for asset_name, path in tree.parse(tree_text.splitlines()):
         cluster_name = path[0] if path else 'Common'
+        cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+# add external data
+for asset_type in CLUSTERABLE_DATA:
+    # you may want to manually map dir names if you don't use
+    #  data/sounds for sfx and data/music for bgm
+    asset_dir = project_root / asset_type.get_dir()
+    if not asset_dir.exists():
+        continue
+
+    # you may also want to set up a better glob filter here
+    for file in asset_dir.rglob('*'):
+        # split relative path into folders
+        path = file.relative_to(asset_dir).parts[:-1]
+        cluster_name = path[0] if path else 'Common'
+        # gm82snd uses file stems in quotes for referencing
+        cluster_map.setdefault(cluster_name, []).append(f'"{file.stem}"')
+
+# json.dumps gives better formatting that pprint
+print(json.dumps(cluster_map, indent=4))
+```
+<!--[[[end]]]-->
+
+### Example 3 - Fixing issues in cluster map via aliases
+
+<!--[[[cog
+import sys
+sys.path.append("scripts")
+from readme_example import example_inject
+
+example_inject("examples/main_3_clustermap_alias.py")
+]]]-->
+Manually fix inconsistencies in cluster map.
+
+After we did initial scan, you may encounter inconsistencies like different
+clusters `"StageA"` and `"stage_a"` (project didn't follow strict naming),
+as well as a bunch of things that should belong to Common cluster
+(Backgrounds, Game, etc.).
+
+That's why we added a few trinkets to the script:
+1. alias system.
+2. table like output, so you can easily sort out most duplicates.
+
+```python
+import json
+import sys
+from pathlib import Path
+
+from clunkster.asset import AssetType
+from clunkster.parse import tree
+
+CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
+    AssetType.SPRITE,
+    AssetType.BACKGROUND,
+    AssetType.SOUND,
+    AssetType.PATH,
+    AssetType.SCRIPT,
+    AssetType.FONT,
+    AssetType.OBJECT,
+    AssetType.ROOM,
+    # merged those 2 into all, added explicit logic later down the line.
+    AssetType.DATA_SFX,
+    AssetType.DATA_MUSIC,
+)
+
+# now we have the alias dictionary
+ALIAS: dict[str, list[str]] = {
+    'StageA': [
+        'stage_a',
+        'stageA',
+        'StageA Music',
+        # ...
+    ],
+    'StageB': [
+        'objStageB',
+        'rStageB',
+        # ...
+    ],
+    'Common': [
+        'Backgrounds',
+        'Blocks',
+        'Default',
+        # ...
+    ],
+    # ...
+}
+
+project_root = Path(sys.argv[1])
+
+# map of cluster to its assets
+cluster_map: dict[str, list[str]] = {}
+# map of asset type to clusters (useful for initial cleanup)
+asset_to_cluster: dict[AssetType, list[str]] = {}
+# build cluster to name (process ALIAS dict)
+cluster_to_name: dict[str, str] = {}
+for name, clusters in ALIAS.items():
+    for cluster in clusters:
+        if cluster in cluster_to_name:
+            raise ValueError('Invalid cluster map (duplicate aliases)')
+        cluster_to_name[cluster] = name
+
+for asset_type in CLUSTERABLE_ASSETS:
+    # this one assumes same search logic for all external assets
+    is_external = asset_type in (AssetType.DATA_SFX, AssetType.DATA_MUSIC)
+
+    asset_dir = project_root / asset_type.get_dir()
+    if not asset_dir.exists():
+        continue
+
+    # fill in set of clusters associated with this asset type
+    cluster_set: set[str] = set()
+    # create asset iterator (asset_name, folder path)
+    if is_external:
+        asset_iter = (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+        )
+    else:
+        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+        asset_iter = tree.parse(tree_text.splitlines())
+
+    # iterate them assets
+    for asset_name, path in asset_iter:
+        cluster_name = path[0] if path else 'Common'
+        if cluster_name in cluster_to_name:
+            cluster_name = cluster_to_name[cluster_name]
+
         cluster_set.add(cluster_name)
         cluster_map.setdefault(cluster_name, []).append(asset_name)
     asset_to_cluster[asset_type] = list(cluster_set)
 
-# json.dumps gives better formatting that pprint
 print(json.dumps(cluster_map, indent=4))
 
 # print the asset type to cluster
-# (visually set up to help finding missing ones)
+# (visually set up to help finding duplicates)
 clusters_all = sorted(
     {name for clusters in asset_to_cluster.values() for name in clusters}
 )

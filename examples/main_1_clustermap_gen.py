@@ -1,11 +1,9 @@
-"""Build cluster map out of tree data.
+"""Build cluster map out of tree data (minimalist version).
 
 This script scans the project's ``tree.yyd`` files to automatically group
 assets into clusters based on their top-level folder in the IDE.
-Outputs a Python dictionary that you can edit and copy into later scripts.
-
-It also outputs a table of cluster names, so you can pinpoint cases like
-separate clusters "StageA" and "stage_a" when they should be the same thing.
+Outputs a Python dictionary that you can inspect, before moving
+onto next examples.
 """
 
 import json
@@ -32,40 +30,25 @@ def main() -> None:
 
     # map of cluster to its assets
     cluster_map: dict[str, list[str]] = {}
-    # map of asset type to clusters (useful for initial cleanup)
-    asset_to_cluster: dict[AssetType, list[str]] = {}
 
+    # iterate through all clusterable assets to check their tree.yyd
     for asset_type in CLUSTERABLE_ASSETS:
         asset_dir = project_root / asset_type.get_dir()
+        # skip assets that are not present in the project
         if not asset_dir.exists():
             continue
 
+        # read tree.yyd
         tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        cluster_set: set[str] = set()
+        # run parsing
         for asset_name, path in tree.parse(tree_text.splitlines()):
+            # if asset is in asset type root, then its common
             cluster_name = path[0] if path else 'Common'
-            cluster_set.add(cluster_name)
+            # fill in the map
             cluster_map.setdefault(cluster_name, []).append(asset_name)
-        asset_to_cluster[asset_type] = list(cluster_set)
 
     # json.dumps gives better formatting that pprint
     print(json.dumps(cluster_map, indent=4))
-
-    # print the asset type to cluster
-    # (visually set up to help finding missing ones)
-    clusters_all = sorted(
-        {name for clusters in asset_to_cluster.values() for name in clusters}
-    )
-    print('All clusters:', *clusters_all)
-    for asset_type, clusters in asset_to_cluster.items():
-        cluster_set = set(clusters)
-        row: list[str] = []
-        for col in clusters_all:
-            if col in cluster_set:
-                row.append(col)
-            else:
-                row.append(' ' * len(col))
-        print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
 
 
 if __name__ == '__main__':
