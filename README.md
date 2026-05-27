@@ -6,7 +6,7 @@ You probably don't need assets from area A while playing or working on area B.
 
 Given the many different circumstances of the projects this tool might be used on, it was organized as a set of "examples" that can be copied and modified for best effect. Useful functions that facilitate the core logic are provided as well.
 
-However, you might want to address [Rationale](#rationale) to see if the tool fits your needs and your project.
+However, you might want to address [Rationale](#rationale) and [Prerequisites](#prerequisites) to see if the tool fits your needs and your project.
 
 Planned tools:
 - [x] Asset clusterizer based on folders in `tree.yyd` files (mostly helps other tools).
@@ -337,6 +337,30 @@ What happens if a developer accidentally references a `StageB` sprite inside a `
 
 To prevent this, a dependency linter is included. It builds dependency graph based on static `.gml` and meta file analysis. This results in sets of assets "referenced" (both directly and indirectly) in each room. The linter then yells at you if a room references something that it isn't explicitly marked to load.
 
+### Prerequisites
+
+0. Use this tool only if it's necessary.
+    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 2 GB of RAM and your project takes more than 10 seconds to build.
+1. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
+2. Follow good project keeping practices
+   - Keep asset names clean (press 🧹 icon on IDE's top toolbar to run required checks)
+   - Keep assets belonging to certain stage in that stage's folder
+   - Do not reference things from `stageA` in `stageB` objects (unless such an object is only placed in a room that guarantees both stages loaded)
+   - Reference Common objects in Stage-specific, not the other way around
+     - If this is unavoidable (for example, when making stage-specific a movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
+   - If an asset is shared between multiple stages, then it belongs in Common cluster
+3. Follow good coding practices
+    - no dynamic asset referencing tomfoolery (tool won't acknowledge those references when building dependency graph):
+      - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
+      - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
+      - DON'T hide script calls behind variables: `script_execute(current_state_script)`
+
+And some less ideological requirements:
+
+4. Use the modern project format (`.gm82`)
+5. Python 3.10+ (`uv` recommended)
+6. Close IDE before running the tool (or you'll get annoying popup (gross))
+
 ### Workflow
 
 This is the workflow that I used for the project that this tool was initially made for. As of now, each step of the workflow is represented as an example in [Examples](#examples) section. Examples without links are WIP.
@@ -345,28 +369,27 @@ Preparation:
 1. Parse `tree.yyd` files in order to generate initial cluster map:
    - ensure that stage assets are grouped in consistently named folders across all asset types
    - make aliases for folders that don't represent an actual cluster (such as "Tiles" backgrounds or "Killers" objects)
-   - see [Example 1](#example-1---generating-an-initial-cluster-map) & Example 2
+   - see examples:
+     - [1](#example-1---generating-an-initial-cluster-map) for generating initial map
+     - [2](#example-2---populating-cluster-map-with-external-assets-data) for adding external assets (`data/`)
+     - [3](#example-3---fixing-issues-in-cluster-map-via-aliases) for fixing duplicate clusters via aliases
 2. Build depgraph:
    - map out which clusters are referenced in each room
    - manually clean up any architectural issues or spaghetti code this reveals
    - setup rules for automatically expanding the map for any new rooms
-   - see Example 3
+   - see examples ?
 3. Setup depgraph linter:
    - bake finalized room-to-clusters map and feed into dependency linter
-   - See Example 4
+   - See examples ?
 4. TODO setup stub resources and script generation
-
-### Prerequisites
-
-TODO
 
 ### Dehydration strategy for each asset type
 
 Following terms are used:
 - dehydrate: the process of stripping the asset from the project.
-- store-dry: how the stripped asset is represented inside resuling build (stubs)
+- store-dry: how the stripped asset is represented inside resuling build (stubs).
 - store-wet: how the actual data is stored externally.
-- hydrate: the process of dynamically loading wet assets back into memory at runtime
+- hydrate: the process of dynamically loading wet assets back into memory at runtime.
 
 ___
 
@@ -376,7 +399,7 @@ ___
 - store-wet: `.gmbck` files
 - hydrate: use `background_replace_background` to load externally
 ____
-**Fonts**: aren't numerous enough, and difficult.
+**Fonts**: aren't numerous enough to be impactful, and difficult.
 ____
 **Objects**: moderately impactful, risky (and difficult).
 ____
