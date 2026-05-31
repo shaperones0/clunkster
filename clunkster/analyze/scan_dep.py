@@ -1,0 +1,71 @@
+"""Routines for scanning text files for dependencies."""
+
+import collections.abc as col
+from dataclasses import dataclass
+
+import ahocorasick  # ty: ignore[unresolved-import]
+
+import clunkster.analyze.location as my_analyze_location
+import clunkster.parse.gml as my_parse_gml
+
+
+@dataclass(frozen=True, slots=True)
+class DependencyMatch:
+    """Detected dependency."""
+
+    location: my_analyze_location.SourceLocation
+    target_asset: str
+    contexts: tuple[str, ...]
+
+
+def scan(
+    automaton: ahocorasick.Automaton,
+    asset_name: str,
+    file_name: str,
+    text: str,
+) -> col.Iterator[DependencyMatch]:
+    """Scans a single file's text for asset dependencies.
+
+    This routine is used in multiprocessing.
+    :param automaton: ahocorasick automaton with all asset names.
+    :param file_name: Name of the scanned file.
+    :param asset_name: Name of the scanned asset.
+    :param text: Text to scan.
+    :return: Dependency edges.
+    """
+    gml_index = my_parse_gml.GmlIndex.from_text(text)
+    gml_line_map = my_analyze_location.SourceLineMap.from_text(text)
+
+    for end_idx, target_asset in automaton.iter(text):
+        start_idx = end_idx - len(target_asset) + 1
+
+        # prevent self loops TODO do in graph build
+
+        # check if whole identifier
+        if start_idx > 0:
+            prev_char = text[start_idx - 1]
+            if prev_char.isalnum() or prev_char == '_':
+                continue
+        if end_idx + 1 < len(text):
+            next_char = text[end_idx + 1]
+            if next_char.isalnum() or next_char == '_':
+                continue
+
+        # check if symbol is not inside ignored syntax
+        if gml_index.is_ignored_at(start_idx):
+            continue
+
+        contexts = gml_index.get_contexts_at(start_idx)
+        line, column = gml_line_map.get_line_col(start_idx)
+
+        yield DependencyMatch(
+            location=my_analyze_location.SourceLocation(
+                asset_name=asset_name,
+                file_name=file_name,
+                loc_line=line,
+                loc_column=column,
+                loc_index=start_idx,
+            ),
+            target_asset=target_asset,
+            contexts=contexts,
+        )

@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from clunkster.asset import AssetType
+from clunkster.asset import AssetType, asset_get_project_dir
 from clunkster.parse import tree
 
 CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
@@ -34,7 +34,7 @@ def main() -> None:
 
     cluster_map: dict[str, list[str]] = {}
     for asset_type in CLUSTERABLE_ASSETS:
-        asset_dir = project_root / asset_type.get_dir()
+        asset_dir = project_root / asset_get_project_dir(asset_type)
         if not asset_dir.exists():
             continue
 
@@ -47,7 +47,7 @@ def main() -> None:
     for asset_type in CLUSTERABLE_DATA:
         # you may want to manually map dir names if you don't use
         #  data/sounds for sfx and data/music for bgm
-        asset_dir = project_root / asset_type.get_dir()
+        asset_dir = project_root / asset_get_project_dir(asset_type)
         if not asset_dir.exists():
             continue
 
