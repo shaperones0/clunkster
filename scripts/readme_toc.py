@@ -15,6 +15,7 @@ def generate_toc(filepath: str = 'README.md') -> None:
         lines = f.readlines()
 
     in_code_block = False
+    in_cog_block = False
     toc_lines = []
 
     for line in lines:
@@ -23,6 +24,14 @@ def generate_toc(filepath: str = 'README.md') -> None:
         # toggle code block state to avoid matching python comments
         if stripped_line.startswith('```'):
             in_code_block = not in_code_block
+            continue
+
+        if stripped_line.startswith('<!--[[[cog'):
+            in_cog_block = True
+        if stripped_line == ']]]-->':
+            in_cog_block = False
+            continue
+        if in_cog_block:
             continue
 
         if in_code_block:

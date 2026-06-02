@@ -22,6 +22,7 @@ lint: ## Check code without mutating (for CI/CD)
 test: ## Run the Pytest test suite
 	@echo "Running tests: Pytest"
 	@uv run pytest
+	@uv run pytest main.py
 
 .PHONY: test-cov
 test-cov: ## Run tests and print a terminal coverage report

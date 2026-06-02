@@ -6,14 +6,20 @@ from typing import Self
 
 
 @dataclass(frozen=True, slots=True)
-class SourceLocation:
+class Location:
     """Source location pointer."""
 
-    asset_name: str
-    file_name: str
     loc_line: int
     loc_column: int
     loc_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class BoundLocation(Location):
+    """Source location points with info about its source."""
+
+    asset_name: str
+    file_name: str
 
 
 class SourceLineMap:

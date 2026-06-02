@@ -13,23 +13,19 @@ import clunkster.parse.gml as my_parse_gml
 class DependencyMatch:
     """Detected dependency."""
 
-    location: my_analyze_location.SourceLocation
+    location: my_analyze_location.Location
     target_asset: str
     contexts: tuple[str, ...]
 
 
 def scan(
     automaton: ahocorasick.Automaton,
-    asset_name: str,
-    file_name: str,
     text: str,
 ) -> col.Iterator[DependencyMatch]:
     """Scans a single file's text for asset dependencies.
 
     This routine is used in multiprocessing.
     :param automaton: ahocorasick automaton with all asset names.
-    :param file_name: Name of the scanned file.
-    :param asset_name: Name of the scanned asset.
     :param text: Text to scan.
     :return: Dependency edges.
     """
@@ -59,9 +55,7 @@ def scan(
         line, column = gml_line_map.get_line_col(start_idx)
 
         yield DependencyMatch(
-            location=my_analyze_location.SourceLocation(
-                asset_name=asset_name,
-                file_name=file_name,
+            location=my_analyze_location.Location(
                 loc_line=line,
                 loc_column=column,
                 loc_index=start_idx,

@@ -27,11 +27,11 @@ generate_toc()
 ]]]-->
 * [Clunkster](#clunkster)
   * [Examples](#examples)
-    * [Example 0 - Finding assets](#example-0---finding-assets)
-    * [Example 1 - Generating an initial Cluster Map.](#example-1---generating-an-initial-cluster-map)
-    * [Example 2 - Populating Cluster Map with external assets (`data/`)](#example-2---populating-cluster-map-with-external-assets-data)
-    * [Example 3 - Fixing issues in cluster map via aliases](#example-3---fixing-issues-in-cluster-map-via-aliases)
-    * [Example 4 - References (simple)](#example-4---references-simple)
+    * [Example 1 - Finding assets](#example-1---finding-assets)
+    * [Example 2 - External assets (`data/`)](#example-2---external-assets-data)
+    * [Example 3 - Generating clusters](#example-3---generating-clusters)
+    * [Example 4 - Cluster aliasing](#example-4---cluster-aliasing)
+    * [Example 5 - Reference scanning](#example-5---reference-scanning)
   * [Rationale](#rationale)
     * [Dev solution](#dev-solution)
     * [Prod solution](#prod-solution)
@@ -45,42 +45,59 @@ generate_toc()
 
 The following examples represent actual workflows. Copy and modify as needed.
 
-### Example 0 - Finding assets
+### Example 1 - Finding assets
 
 <!--[[[cog
-import sys
-sys.path.append("scripts")
-from readme_example import example_inject
+from scripts import readme_snippets, readme_imports, readme_docstring
+import itertools as it
 
-example_inject("examples/main_0_assets.py")
+snippets = readme_snippets.SnippetExtractor.from_file_path('main.py')
+imports = readme_imports.ImportsFilter.from_file_path('main.py')
+docs = readme_docstring.extract_file('main.py')
+
+snips_main = snippets.extract('MAIN_EX_START')
+snips_prepend = [
+    snippets.extract('CLS_ASSET'),
+    snippets.extract('CLUSTERABLE_BUILTINS'),
+    snippets.extract('PROJECT')
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_start']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
+)
+
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
 ]]]-->
-Before we do clusters, check that all assets actually get scanned.
+First, we want to check that builtin assets get scanned correctly.
 
 ```python
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+from clunkster.asset import AssetType
+from clunkster.parse import tree as my_parse_tree
 
-from clunkster.asset import (
-    AssetType,
-    asset_get_project_dir,
-    asset_get_scannable_files,
-)
-from clunkster.parse import tree
-
-
-# asset struct is left to be made (and filled with all needed data) by user
 @dataclass
 class Asset:
+    """Simple asset definition."""
+
     asset_type: AssetType
     name: str
     cluster: str
     files_to_scan: tuple[Path, ...]
 
-
-# filter out clusters that you don't wanna even consider for clusterization
-# (like paths or fonts)
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
+CLUSTERABLE_BUILTINS: tuple[AssetType, ...] = (
     AssetType.SPRITE,
     AssetType.BACKGROUND,
     AssetType.SOUND,
@@ -91,200 +108,160 @@ CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
     AssetType.ROOM,
 )
 
-project_root = Path(sys.argv[1])
+PROJECT = Path('path/to/the/project')
+
 assets: list[Asset] = []
 
-for asset_type in CLUSTERABLE_ASSETS:
+for asset_type in CLUSTERABLE_BUILTINS:
     # get project directory for the given asset type
-    asset_dir = project_root / asset_get_project_dir(asset_type)
+    asset_dir = PROJECT / asset_type.get_dir()
     if not asset_dir.exists():
         continue
 
-    # iterate through tree.yyd file for given asset.
+    # iterate through tree.yyd file of the asset type
+
     # we use tree.yyd as source of truth for later examples,
     #  however, undesired results happen if tree.yyd has duplicate assets,
-    #  which it totally can have
+    #  which it technically can have
     tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
 
     # parser for tree files is included (second argument is path to asset)
-    for asset_name, _path in tree.parse(tree_text.splitlines()):
+    for asset_name, _path in my_parse_tree.parse(tree_text.splitlines()):
         # we don't have clusters yet so we'll just set it to "Unknown"
+        # also skip the scanning part
         assets.append(
             Asset(
                 asset_type=asset_type,
                 name=asset_name,
                 cluster='Unknown',
-                files_to_scan=asset_get_scannable_files(
-                    asset_type, asset_name, project_root
+                files_to_scan=tuple(
+                    asset_type.get_scannables(asset_name, PROJECT)
                 ),
             )
         )
 
-# you might want to inspect the resulting array to check for
-#  any inconsistencies
+# you should investigate the resulting array for inconsistencies
 print(f'Discovered {len(assets)} total assets.')
 ```
 <!--[[[end]]]-->
 
-### Example 1 - Generating an initial Cluster Map.
-
+### Example 2 - External assets (`data/`)
 
 <!--[[[cog
-import sys
-sys.path.append("scripts")
-from readme_example import example_inject
-
-example_inject("examples/main_1_clustermap_gen.py")
-]]]-->
-Build cluster map out of tree data (minimalist version).
-
-This script scans the project's `tree.yyd` files to automatically group
-assets into clusters based on their top-level folder in the IDE.
-Outputs a Python dictionary that you can inspect before moving on.
-
-```python
-import json
-import sys
-from pathlib import Path
-
-from clunkster.asset import AssetType, asset_get_project_dir
-from clunkster.parse import tree
-
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
+snips_main = snippets.extract('MAIN_EX_START_EXTERNALS_GIST')
+snips_prepend = [
+    snippets.extract('CLUSTERABLE_EXTERNALS'),
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_start_externals']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
 )
 
-# asset struct is omitted as it's not required until we actually scan
-#  files contents
-
-project_root = Path(sys.argv[1])
-
-# map of cluster to its assets
-cluster_map: dict[str, list[str]] = {}
-
-for asset_type in CLUSTERABLE_ASSETS:
-    asset_dir = project_root / asset_get_project_dir(asset_type)
-    if not asset_dir.exists():
-        continue
-
-    tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-    for asset_name, path in tree.parse(tree_text.splitlines()):
-        # if asset is in root, then it's common
-        cluster_name = path[0] if path else 'Common'
-        cluster_map.setdefault(cluster_name, []).append(asset_name)
-
-# json.dumps gives better formatting that pprint
-print(json.dumps(cluster_map, indent=4))
-```
-<!--[[[end]]]-->
-
-### Example 2 - Populating Cluster Map with external assets (`data/`)
-
-<!--[[[cog
-import sys
-sys.path.append("scripts")
-from readme_example import example_inject
-
-example_inject("examples/main_2_clustermap_data.py")
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    # snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
 ]]]-->
-Populate clustermap with unconventional assets.
+Populate assets with externals.
 
 Some projects make use of external assets, such as for gm82snd.
 In case of gm82snd, I have hardcoded it to look for music in `data/music`
 and for sounds in `data/sounds`.
 
 ```python
-import json
-import sys
-from pathlib import Path
-
-from clunkster.asset import AssetType, asset_get_project_dir
-from clunkster.parse import tree
-
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-)
-
-CLUSTERABLE_DATA: tuple[AssetType, ...] = (
+CLUSTERABLE_EXTERNALS: tuple[AssetType, ...] = (
     AssetType.DATA_SFX,
     AssetType.DATA_MUSIC,
 )
 
-project_root = Path(sys.argv[1])
-
-cluster_map: dict[str, list[str]] = {}
-for asset_type in CLUSTERABLE_ASSETS:
-    asset_dir = project_root / asset_get_project_dir(asset_type)
-    if not asset_dir.exists():
-        continue
-
-    tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-    for asset_name, path in tree.parse(tree_text.splitlines()):
-        cluster_name = path[0] if path else 'Common'
-        cluster_map.setdefault(cluster_name, []).append(asset_name)
+# ...
 
 # add external data
-for asset_type in CLUSTERABLE_DATA:
+for asset_type in CLUSTERABLE_EXTERNALS:
     # you may want to manually map dir names if you don't use
     #  data/sounds for sfx and data/music for bgm
-    asset_dir = project_root / asset_get_project_dir(asset_type)
+    asset_dir = PROJECT / asset_type.get_dir()
     if not asset_dir.exists():
         continue
 
     # you may also want to set up a better glob filter here
     for file in asset_dir.rglob('*'):
-        # split relative path into folders
-        path = file.relative_to(asset_dir).parts[:-1]
-        cluster_name = path[0] if path else 'Common'
-        # gm82snd uses file stems in quotes for referencing
-        cluster_map.setdefault(cluster_name, []).append(f'"{file.stem}"')
+        if not file.is_file():
+            continue
 
-# json.dumps gives better formatting that pprint
-print(json.dumps(cluster_map, indent=4))
+        # gm82snd references sounds by their file stems as strings
+        asset_name = f'"{file.stem}"'
+        assets.append(
+            Asset(
+                asset_type=asset_type,
+                name=asset_name,
+                cluster='Unknown',
+                files_to_scan=tuple(
+                    asset_type.get_scannables(asset_name, PROJECT)
+                ),
+            )
+        )
+
+# again, investigate the resulting array for inconsistencies
+print(f'Discovered {len(assets)} total assets.')
 ```
 <!--[[[end]]]-->
 
-### Example 3 - Fixing issues in cluster map via aliases
+### Example 3 - Generating clusters
 
 <!--[[[cog
-import sys
-sys.path.append("scripts")
-from readme_example import example_inject
+snips_main = snippets.extract('MAIN_EX_CLUSTERS')
+snips_prepend = [
+    snippets.extract('CLS_ASSET'),
+    snippets.extract('CLUSTERABLE_ASSETS'),
+    snippets.extract('PROJECT')
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_clusters']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
+)
 
-example_inject("examples/main_3_clustermap_alias.py")
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
 ]]]-->
-Manually fix inconsistencies in cluster map.
+Autogenerate clusters for the assets.
 
-After we did initial scan, you may encounter inconsistencies like different
-clusters `"StageA"` and `"stage_a"` (project didn't follow strict naming),
-as well as a bunch of things that should belong to Common cluster
-(Backgrounds, Game, etc.).
-
-That's why we added a few trinkets to the script:
-1. alias system.
-2. table like output, so you can easily sort out most duplicates.
+Now that assets discovering works, we may generate clusters.
 
 ```python
-import json
-import sys
+from dataclasses import dataclass
 from pathlib import Path
+from clunkster.asset import AssetType
+from clunkster.parse import tree as my_parse_tree
 
-from clunkster.asset import AssetType, asset_get_project_dir
-from clunkster.parse import tree
+@dataclass
+class Asset:
+    """Simple asset definition."""
+
+    asset_type: AssetType
+    name: str
+    cluster: str
+    files_to_scan: tuple[Path, ...]
 
 CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
     AssetType.SPRITE,
@@ -295,82 +272,58 @@ CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
     AssetType.FONT,
     AssetType.OBJECT,
     AssetType.ROOM,
-    # merged those 2 into all, added explicit logic later down the line.
     AssetType.DATA_SFX,
     AssetType.DATA_MUSIC,
 )
 
-# now we have the alias dictionary
-ALIAS: dict[str, list[str]] = {
-    'StageA': [
-        'stage_a',
-        'stageA',
-        'StageA Music',
-        # ...
-    ],
-    'StageB': [
-        'objStageB',
-        'rStageB',
-        # ...
-    ],
-    'Common': [
-        'Backgrounds',
-        'Blocks',
-        'Default',
-        # ...
-    ],
-    # ...
-}
+PROJECT = Path('path/to/the/project')
 
-project_root = Path(sys.argv[1])
+assets: list[Asset] = []
 
-# map of cluster to its assets
+# cluster -> its assets
 cluster_map: dict[str, list[str]] = {}
-# map of asset type to clusters (useful for initial cleanup)
+# asset type -> found clusters (useful for initial cleanup)
 asset_to_cluster: dict[AssetType, list[str]] = {}
-# build cluster to name (process ALIAS dict)
-cluster_to_name: dict[str, str] = {}
-for name, clusters in ALIAS.items():
-    for cluster in clusters:
-        if cluster in cluster_to_name:
-            raise ValueError('Invalid cluster map (duplicate aliases)')
-        cluster_to_name[cluster] = name
-
 for asset_type in CLUSTERABLE_ASSETS:
-    # this one assumes same search logic for all external assets
-    is_external = asset_type in (AssetType.DATA_SFX, AssetType.DATA_MUSIC)
-
-    asset_dir = project_root / asset_get_project_dir(asset_type)
+    # we merge logic for both builtins and externals into one loop
+    asset_dir = PROJECT / asset_type.get_dir()
     if not asset_dir.exists():
         continue
 
     # fill in set of clusters associated with this asset type
     cluster_set: set[str] = set()
     # create asset iterator (asset_name, folder path)
-    if is_external:
+    if asset_type.is_builtin():
+        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+        asset_iter = my_parse_tree.parse(tree_text.splitlines())
+    else:
         asset_iter = (
             (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
             for file in asset_dir.rglob('*')
             if file.is_file()
         )
-    else:
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        asset_iter = tree.parse(tree_text.splitlines())
 
     # iterate them assets
     for asset_name, path in asset_iter:
+        # use base folder as cluster name
         cluster_name = path[0] if path else 'Common'
-        if cluster_name in cluster_to_name:
-            cluster_name = cluster_to_name[cluster_name]
-
         cluster_set.add(cluster_name)
         cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+        assets.append(
+            Asset(
+                asset_type=asset_type,
+                name=asset_name,
+                cluster=cluster_name,
+                files_to_scan=tuple(
+                    asset_type.get_scannables(asset_name, PROJECT)
+                ),
+            )
+        )
     asset_to_cluster[asset_type] = list(cluster_set)
 
-print(json.dumps(cluster_map, indent=4))
-
-# print the asset type to cluster
-# (visually set up to help finding duplicates)
+# print the asset type to cluster table
+# (helps to find duplicates)
 clusters_all = sorted(
     {name for clusters in asset_to_cluster.values() for name in clusters}
 )
@@ -381,65 +334,49 @@ for asset_type, clusters in asset_to_cluster.items():
         col if col in cluster_set else ' ' * len(col)
         for col in clusters_all
     ]
-    print(f'{asset_get_project_dir(asset_type): >12}:', '|'.join(row))
+    print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
 ```
+
+There's a chance of duplicates in result. Also, some of those
+"clusters" (like Backgrounds, or World, etc.) should be a part of
+Common cluster.
 <!--[[[end]]]-->
 
-### Example 4 - References (simple)
-
+### Example 4 - Cluster aliasing
 <!--[[[cog
-import sys
-sys.path.append("scripts")
-from readme_example import example_inject
+snips_main = snippets.extract('MAIN_EX_ALIAS_GIST_INVERT') + \
+    snippets.extract('MAIN_EX_ALIAS_GIST_ALIAS')
+snips_prepend = [
+    snippets.extract('ALIAS'),
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_aliases']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
+)
 
-example_inject("examples/main_4_refs_sync.py")
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
 ]]]-->
-Simple scanner.
+Manually fix inconsistencies in cluster map.
 
-We compile Aho-Corasick automaton to quickly scan every text
-(script or metadata file) in the project for asset references.
+After we did initial scan, you may encounter inconsistencies like different
+clusters `"StageA"` and `"stage_a"` (project didn't follow strict
+naming), as well as a bunch of things that should belong to Common cluster
+(Backgrounds, Game, etc.).
 
-This code is done in a simple synchronous way, but it is possible to
-run the search in threads or multiprocessing (done in later examples).
+Which is easily fixed by a simple alias system for clusters.
 
 ```python
-import json
-import sys
-from dataclasses import dataclass
-from pathlib import Path
-
-from ahocorasick import Automaton  # ty: ignore[unresolved-import]
-
-from clunkster.analyze import scan_dep
-from clunkster.asset import (
-    AssetType,
-    asset_get_project_dir,
-    asset_get_scannable_files,
-)
-from clunkster.parse import tree
-
-
-@dataclass
-class Asset:
-    asset_type: AssetType
-    name: str
-    cluster: str
-    files_to_scan: tuple[Path, ...]
-
-
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
-)
-
 ALIAS: dict[str, list[str]] = {
     'StageA': [
         'stage_a',
@@ -461,100 +398,97 @@ ALIAS: dict[str, list[str]] = {
     # ...
 }
 
-project_root = Path(sys.argv[1])
-assets: list[Asset] = []
-
-cluster_map: dict[str, list[str]] = {}
-asset_to_cluster: dict[AssetType, list[str]] = {}
-
 # invert ALIAS
 cluster_to_name: dict[str, str] = {}
 for name, clusters in ALIAS.items():
     for cluster in clusters:
         if cluster in cluster_to_name:
-            raise ValueError('Invalid cluster map (duplicate aliases)')
+            raise ValueError('Invalid ALIAS (duplicate aliases)')
         cluster_to_name[cluster] = name
+```
 
-# discover assets and assign clusters
-for asset_type in CLUSTERABLE_ASSETS:
-    is_external = asset_type in (AssetType.DATA_SFX, AssetType.DATA_MUSIC)
+Then we apply aliasing in the asset iteration loop.
 
-    asset_dir = project_root / asset_get_project_dir(asset_type)
-    if not asset_dir.exists():
-        continue
+```python
+cluster_name = path[0] if path else 'Common'
+# replace clusters with aliases
+if cluster_name in cluster_to_name:
+    cluster_name = cluster_to_name[cluster_name]
+```
 
-    # asset iterator (asset_name, folder path)
-    if is_external:
-        asset_iter = (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
-    else:
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        asset_iter = tree.parse(tree_text.splitlines())
+Keep using the table thing until all aliases are gone.
+<!--[[[end]]]-->
 
-    cluster_set: set[str] = set()
-    for asset_name, path in asset_iter:
-        cluster_name = path[0] if path else 'Common'
-        cluster_name = cluster_to_name.get(cluster_name, cluster_name)
+### Example 5 - Reference scanning
 
-        cluster_set.add(cluster_name)
-        cluster_map.setdefault(cluster_name, []).append(asset_name)
-
-        assets.append(
-            Asset(
-                asset_type=asset_type,
-                name=asset_name,
-                cluster=cluster_name,
-                files_to_scan=asset_get_scannable_files(
-                    asset_type, asset_name, project_root
-                ),
-            )
-        )
-    asset_to_cluster[asset_type] = list(cluster_set)
-
-print(json.dumps(cluster_map, indent=4))
-
-clusters_all = sorted(
-    {name for clusters in asset_to_cluster.values() for name in clusters}
+<!--[[[cog
+snips_main = snippets.extract('MAIN_EX_SCAN_SYNC')
+snips_prepend = [
+    [readme_snippets.Snippet.from_code('# ... generate assets list')]
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_scan_sync']
 )
-print('All clusters:', *clusters_all)
-for asset_type, clusters in asset_to_cluster.items():
-    cluster_set = set(clusters)
-    row: list[str] = []
-    for col in clusters_all:
-        if col in cluster_set:
-            row.append(col)
-        else:
-            row.append(' ' * len(col))
-    print(f'{asset_get_project_dir(asset_type): >12}:', '|'.join(row))
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
+)
 
-# sync scan
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
+]]]-->
+Simple scanner.
+
+Before running dependency builder we need to set up scanning
+for the actual dependencies.
+
+We compile Aho-Corasick automaton to quickly scan every text
+(script or metadata file) in the project for asset references.
+
+This is a simple synchronous code, but in real projects scanning
+might take up 5-10 seconds.
+
+Multiprocessing version is available in later examples.
+
+```python
+from ahocorasick import Automaton
+from clunkster.analyze import scan_dep as my_analyze_scan_dep
+
+# ... generate assets list
+
 automaton = Automaton()
 for asset in assets:
     automaton.add_word(asset.name, asset.name)
 automaton.make_automaton()
-total_matches = 0
 
+total_matches = 0
 for asset in assets:
     for file_path in asset.files_to_scan:
-        text = file_path.read_text(encoding='utf-8')
-        matches: list[scan_dep.DependencyMatch] = list(
-            scan_dep.scan(automaton, asset.name, file_path.name, text)
+        matches: list[my_analyze_scan_dep.DependencyMatch] = list(
+            my_analyze_scan_dep.scan(
+                automaton, file_path.read_text(encoding='utf-8')
+            )
         )
 
         total_matches += len(matches)
 
         # print the first few matches just to prove it works
-        if matches:
-            for match in matches[:3]:
-                loc = match.location
-                print(
-                    f'[{loc.asset_name}] '
-                    f'-> {match.target_asset} '
-                    f'({loc.file_name}:{loc.loc_line}:{loc.loc_column})'
-                )
+        if total_matches > 100:  # noqa: PLR2004
+            continue
+        for match in matches[:3]:
+            loc = match.location
+            print(
+                f'[{asset.name}] -> {match.target_asset} '
+                f'({file_path.name}:{loc.loc_line}:{loc.loc_column})'
+            )
 
 print(f'\nDone! Found {total_matches} total dependency references.')
 ```
@@ -619,20 +553,20 @@ And some less ideological requirements:
 This is the workflow that I used for the project that this tool was initially made for. As of now, each step of the workflow is represented as an example in [Examples](#examples) section. Examples without links are WIP.
 
 Preparation:
-1. Parse `tree.yyd` files in order to generate initial cluster map:
+1. Parse `tree.yyd` files in order to discover assets and generate initial cluster map:
    - ensure that stage assets are grouped in consistently named folders across all asset types
    - make aliases for folders that don't represent an actual cluster (such as "Tiles" backgrounds or "Killers" objects)
    - see examples:
-     - [0](#example-0---finding-assets) setting up asset discovery
-     - [1](#example-1---generating-an-initial-cluster-map) generating initial map
-     - [2](#example-2---populating-cluster-map-with-external-assets-data) adding external assets (`data/`)
-     - [3](#example-3---fixing-issues-in-cluster-map-via-aliases) fixing duplicate clusters via aliases
+     - [1](#example-1---finding-assets) setting up asset discovery
+     - [2](#example-2---external-assets-data) adding external assets (`data/`)
+     - [3](#example-3---generating-clusters) generating initial cluster map
+     - [4](#example-4---cluster-aliasing) fixing duplicate clusters via aliases
 2. Build depgraph:
    - map out which clusters are referenced in each room
    - manually clean up any architectural issues or spaghetti code this reveals
    - setup rules for automatically expanding the map for any new rooms
    - see examples:
-     - [4](#example-4---references-simple) simple references generator 
+     - [5](#example-5---reference-scanning) simple references generator 
 3. Setup depgraph linter:
    - bake finalized room-to-clusters map and feed into dependency linter
    - See examples ?
