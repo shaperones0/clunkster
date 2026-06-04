@@ -1,12 +1,20 @@
 """Main pipeline, together with examples."""
 
 import json
+import multiprocessing as mp
+from concurrent import futures
 from dataclasses import dataclass
 from pathlib import Path
 
+import tqdm
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
 
-from clunkster.analyze import scan_dep as my_analyze_scan_dep
+from clunkster.analyze import (
+    location as my_analyze_location,
+)
+from clunkster.analyze import (
+    scan_dep as my_analyze_scan_dep,
+)
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
@@ -86,6 +94,76 @@ class Asset:
 
 
 # --- COG_END: CLS_ASSET ---
+
+
+# --- COG_START: CLS_SCAN_JOB ---
+@dataclass(frozen=True, slots=True)
+class ScanJob:
+    """A lightweight payload sent over IPC to a worker process.
+
+    Uses frozen and slots to speed up transfer across processes.
+    """
+
+    asset_name: str
+    file_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class ScanResult:
+    """Result of a scan."""
+
+    matches: list[my_analyze_scan_dep.DependencyMatch]
+    job: ScanJob
+
+
+# --- COG_END: CLS_SCAN_JOB ---
+
+
+# --- COG_START: CLS_DEPENDENCY ---
+@dataclass
+class Dependency:
+    """Full dependency data to be used in graph building."""
+
+    location: my_analyze_location.BoundLocation
+    source_asset: Asset
+    target_asset: Asset
+    contexts: tuple[str, ...]
+
+
+# --- COG_END: CLS_DEPENDENCY ---
+
+
+# --- COG_START: REG_WORKERS_EXPLAIN ---
+# MD: We cannot send the compiled Aho-Corasick `Automaton` across process
+# MD: boundaries safely. Instead, we use a global variable inside the worker
+# MD: process and initialize it once when the process boots up.
+# --- COG_END: REG_WORKERS_EXPLAIN ---
+# --- COG_START: REG_WORKERS ---
+_WORKER_AUTOMATON: Automaton | None = None
+
+
+def _worker_init(asset_names: list[str]) -> None:
+    """Initialize a worker process with its own local Aho-Corasick trie."""
+    global _WORKER_AUTOMATON
+    _WORKER_AUTOMATON = Automaton()
+    for name in asset_names:
+        _WORKER_AUTOMATON.add_word(name, name)
+    _WORKER_AUTOMATON.make_automaton()
+
+
+def _worker_scan(job: ScanJob) -> ScanResult:
+    """Process worker's job."""
+    assert _WORKER_AUTOMATON is not None
+
+    text = job.file_path.read_text(encoding='utf-8')
+
+    return ScanResult(
+        matches=list(my_analyze_scan_dep.scan(_WORKER_AUTOMATON, text)),
+        job=job,
+    )
+
+
+# --- COG_END: REG_WORKERS ---
 
 
 def main_ex_start() -> None:
@@ -371,6 +449,76 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
     # --- COG_END: MAIN_EX_SCAN_SYNC ---
 
 
+def main_ex_scan_mp(assets: list[Asset]) -> None:
+    """Multiprocessing scanner.
+
+    Projects this tool is intended for can have thousands of scripts and
+    metadata files. To speed up the scanning, we employ multiprocessing.
+    We divide all the scanning tasks across a pool of worker processes.
+
+    For this we must set up few additional methods - worker's "init" and
+    worker "work".
+    """
+    # --- COG_START: MAIN_EX_SCAN_MP ---
+
+    # generate list of atomic jobs
+    jobs = [
+        ScanJob(asset_name=asset.name, file_path=file_path)
+        for asset in assets
+        for file_path in asset.files_to_scan
+    ]
+
+    name2asset = {asset.name: asset for asset in assets}
+    total_matches = 0
+    dependencies: list[Dependency] = []
+
+    worker_count = mp.cpu_count()
+    print(f'Initializing executor pool with {worker_count} workers')
+
+    with futures.ProcessPoolExecutor(
+        max_workers=worker_count,
+        initializer=_worker_init,
+        initargs=(list(name2asset.keys()),),
+    ) as executor:
+        submits = {executor.submit(_worker_scan, job): job for job in jobs}
+
+        for future in tqdm.tqdm(
+            futures.as_completed(submits),
+            total=len(jobs),
+            desc='Scanning',
+        ):
+            result: ScanResult = future.result()
+            total_matches += len(result.matches)
+            for match in result.matches:
+                loc = match.location
+                dependencies.append(
+                    Dependency(
+                        location=my_analyze_location.BoundLocation(
+                            loc_line=loc.loc_line,
+                            loc_column=loc.loc_column,
+                            loc_index=loc.loc_index,
+                            asset_name=result.job.asset_name,
+                            file_name=result.job.file_path.name,
+                        ),
+                        source_asset=name2asset[result.job.asset_name],
+                        target_asset=name2asset[match.target_asset],
+                        contexts=match.contexts,
+                    )
+                )
+
+    # print a few matches to verify the results
+    print(f'\nDone! Found {total_matches} total dependency references.')
+
+    for dep in dependencies[:3]:
+        loc = dep.location
+        print(
+            f'[{dep.source_asset.name}] -> {dep.target_asset.name} '
+            f'(Line {loc.loc_line}, Col {loc.loc_column})'
+        )
+
+    # --- COG_END: MAIN_EX_SCAN_MP ---
+
+
 def _run_tutorials() -> None:
     main_ex_start()
     main_ex_start_externals()
@@ -398,7 +546,7 @@ def main() -> None:
     """Pipeline entrypoint."""
     assets = stage_discover_assets()
 
-    main_ex_scan_sync(assets)
+    main_ex_scan_mp(assets)
 
 
 if __name__ == '__main__':
