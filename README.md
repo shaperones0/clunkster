@@ -32,7 +32,8 @@ generate_toc()
     * [Example 3 - Generating clusters](#example-3---generating-clusters)
     * [Example 4 - Cluster aliasing](#example-4---cluster-aliasing)
     * [Example 5 - Reference scanning](#example-5---reference-scanning)
-    * [Example 6 - Reference scanning (multiprocessing)](#example-6---reference-scanning-multiprocessing)
+    * [Example 6 - Reference scanning (fancy)](#example-6---reference-scanning-fancy)
+    * [Example 7 - Reference scanning (multiprocessing)](#example-7---reference-scanning-multiprocessing)
   * [Rationale](#rationale)
     * [Dev solution](#dev-solution)
     * [Prod solution](#prod-solution)
@@ -496,7 +497,100 @@ print(f'\nDone! Found {total_matches} total dependency references.')
 ```
 <!--[[[end]]]-->
 
-### Example 6 - Reference scanning (multiprocessing)
+### Example 6 - Reference scanning (fancy)
+<!--[[[cog
+snips_main = snippets.extract('MAIN_EX_SCAN_SYNC2')
+snips_prepend = [
+    snippets.extract('CLS_DEPENDENCY'),
+    [readme_snippets.Snippet.from_code('# ... generate assets list')]
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_scan_sync2']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
+        )
+    )
+)
+
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
+]]]-->
+Simple scanner with some extra stuff.
+
+We can add a progress bar + robust struct for storing our dependencies.
+
+```python
+from dataclasses import dataclass
+import tqdm
+from ahocorasick import Automaton
+from clunkster.analyze import location as my_analyze_location
+from clunkster.analyze import scan_dep as my_analyze_scan_dep
+
+@dataclass
+class Dependency:
+    """Full dependency data to be used in graph building."""
+
+    location: my_analyze_location.BoundLocation
+    source_asset: Asset
+    target_asset: Asset
+    contexts: tuple[str, ...]
+
+# ... generate assets list
+
+automaton = Automaton()
+for asset in assets:
+    automaton.add_word(asset.name, asset.name)
+automaton.make_automaton()
+
+dependencies: list[Dependency] = []
+
+name2asset = {asset.name: asset for asset in assets}
+total_matches = 0
+scans = tuple(
+    (asset, file_path)
+    for asset in assets
+    for file_path in asset.files_to_scan
+)
+for asset, file_path in tqdm.tqdm(
+    scans, total=len(scans), desc='Scanning'
+):
+    matches: list[my_analyze_scan_dep.DependencyMatch] = list(
+        my_analyze_scan_dep.scan(
+            automaton, file_path.read_text(encoding='utf-8')
+        )
+    )
+
+    total_matches += len(matches)
+    for match in matches:
+        loc = match.location
+        dependencies.append(
+            Dependency(
+                location=my_analyze_location.BoundLocation(
+                    loc_line=loc.loc_line,
+                    loc_column=loc.loc_column,
+                    loc_index=loc.loc_index,
+                    asset_name=asset.name,
+                    file_name=file_path.name,
+                ),
+                source_asset=asset,
+                target_asset=name2asset[match.target_asset],
+                contexts=match.contexts,
+            )
+        )
+
+print(f'\nDone! Found {total_matches} total dependency references.')
+```
+<!--[[[end]]]-->
+
+### Example 7 - Reference scanning (multiprocessing)
 
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_SCAN_MP')
@@ -736,7 +830,8 @@ Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](h
 
 See examples:
 - [5](#example-5---reference-scanning) simple references generator 
-- [6](#example-6---reference-scanning-multiprocessing) multiprocessing reference generator
+- [6](#example-6---reference-scanning-fancy) reference generator with better struct and progressbar :3
+- [7](#example-7---reference-scanning-multiprocessing) multiprocessing reference generator
 
 Once that is done you may start with some initial cleaning.
 
@@ -755,7 +850,8 @@ Preparation:
    - setup rules for automatically expanding the map for any new rooms
    - see examples:
      - [5](#example-5---reference-scanning) simple references generator 
-     - [6](#example-6---reference-scanning-multiprocessing) multiprocessing reference generator
+     - [6](#example-6---reference-scanning-fancy) reference generator with better struct and progressbar :3
+     - [7](#example-7---reference-scanning-multiprocessing) multiprocessing reference generator
 3. Setup depgraph linter:
    - bake finalized room-to-clusters map and feed into dependency linter
    - See examples ?

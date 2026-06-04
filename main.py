@@ -77,6 +77,22 @@ ALIAS: dict[str, list[str]] = {
 }
 # --- COG_END: ALIAS ---
 
+# --- COG_START: LINT_RULES_EXPLAIN ---
+# MD: To validate the architecture, we must define strict boundary rules.
+# MD: For this, we implement this dictionary, which maps "Source Cluster" to
+# MD: a set of allowed "Target Clusters".
+# MD:
+# MD: Default value for clusters is themselves and "Common" cluster.
+# --- COG_END: LINT_RULES_EXPLAIN ---
+# --- COG_START: LINT_RULES ---
+LINT_RULES: dict[str, set[str]] = {
+    # common assets cannot borrow from Stage specific folders
+    'Common': {'Common'},
+    # example of a stage that shares assets with another
+    # "StageB": {"StageB", "StageA", "Common"},
+}
+# --- COG_END: LINT_RULES ---
+
 # --- COG_START: PROJECT ---
 PROJECT = Path('path/to/the/project')
 # --- COG_END: PROJECT ---
@@ -449,7 +465,59 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
     # --- COG_END: MAIN_EX_SCAN_SYNC ---
 
 
-def main_ex_scan_mp(assets: list[Asset]) -> None:
+def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
+    """Simple scanner with some extra stuff.
+
+    We can add a progress bar + robust struct for storing our dependencies.
+    """
+    # --- COG_START: MAIN_EX_SCAN_SYNC2 ---
+    automaton = Automaton()
+    for asset in assets:
+        automaton.add_word(asset.name, asset.name)
+    automaton.make_automaton()
+
+    dependencies: list[Dependency] = []
+
+    name2asset = {asset.name: asset for asset in assets}
+    total_matches = 0
+    scans = tuple(
+        (asset, file_path)
+        for asset in assets
+        for file_path in asset.files_to_scan
+    )
+    for asset, file_path in tqdm.tqdm(
+        scans, total=len(scans), desc='Scanning'
+    ):
+        matches: list[my_analyze_scan_dep.DependencyMatch] = list(
+            my_analyze_scan_dep.scan(
+                automaton, file_path.read_text(encoding='utf-8')
+            )
+        )
+
+        total_matches += len(matches)
+        for match in matches:
+            loc = match.location
+            dependencies.append(
+                Dependency(
+                    location=my_analyze_location.BoundLocation(
+                        loc_line=loc.loc_line,
+                        loc_column=loc.loc_column,
+                        loc_index=loc.loc_index,
+                        asset_name=asset.name,
+                        file_name=file_path.name,
+                    ),
+                    source_asset=asset,
+                    target_asset=name2asset[match.target_asset],
+                    contexts=match.contexts,
+                )
+            )
+
+    print(f'\nDone! Found {total_matches} total dependency references.')
+    # --- COG_END: MAIN_EX_SCAN_SYNC2 ---
+    return dependencies
+
+
+def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     """Multiprocessing scanner.
 
     Projects this tool is intended for can have thousands of scripts and
@@ -517,6 +585,7 @@ def main_ex_scan_mp(assets: list[Asset]) -> None:
         )
 
     # --- COG_END: MAIN_EX_SCAN_MP ---
+    return dependencies
 
 
 def _run_tutorials() -> None:
@@ -543,13 +612,9 @@ def test_tutorials() -> None:
 
 
 def main() -> None:
-    """Pipeline entrypoint."""
-    assets = stage_discover_assets()
+    """Pipeline private entrypoint."""
+    global PROJECT, ALIAS
 
-    main_ex_scan_mp(assets)
-
-
-if __name__ == '__main__':
     import sys
 
     _file_private_config = Path('input/config.json')
@@ -575,4 +640,10 @@ if __name__ == '__main__':
     if is_test:
         _run_tutorials()
     else:
-        main()
+        assets = stage_discover_assets()
+
+        main_ex_scan_sync2(assets)
+
+
+if __name__ == '__main__':
+    main()

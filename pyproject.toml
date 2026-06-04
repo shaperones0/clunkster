@@ -112,13 +112,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-'examples/*' = [
-    'D103',
-    'D101',
-
-    # example complexity is dictated by soul
-    'C901',
-    'PLR0912',
+'main.py' = [
+    'ERA001'
 ]
 
 [tool.deptry.per_rule_ignores]
