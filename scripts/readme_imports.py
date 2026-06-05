@@ -44,14 +44,38 @@ def _nodes_unparse(nodes: list[ast.stmt]) -> str:
     return ast.unparse(filtered_module)
 
 
+def _grouped_nodes_unparse(grouped_nodes: list[tuple[int, ImportNode]]) -> str:
+    """Turn grouped nodes into correct Python syntax with blank lines.
+
+    :param grouped_nodes: List of tuples containing (group_id, node).
+    :return: Python code with groups separated by double newlines.
+    """
+    if not grouped_nodes:
+        return ''
+
+    # group nodes by visually separated block (isort)
+    groups: dict[int, list[ast.stmt]] = {}
+    for group_id, node in grouped_nodes:
+        groups.setdefault(group_id, []).append(node)
+
+    group_strings: list[str] = []
+    for gid in sorted(groups.keys()):
+        # unparse each isort block as its own module
+        mod = ast.Module(body=groups[gid], type_ignores=[])
+        group_strings.append(ast.unparse(mod))
+
+    return '\n\n'.join(group_strings)
+
+
 class ImportsFilter:
     """Filter imports."""
 
-    def __init__(self, import_nodes: list[ImportNode]) -> None:
+    def __init__(self, import_nodes: list[tuple[int, ImportNode]]) -> None:
         """Initialize filter.
 
         Use from_code and from_file_path constructors preferably.
-        :param import_nodes: Master import nodes.
+        :param import_nodes: Master import nodes paired with their
+          block group ID.
         """
         self.import_nodes = import_nodes
 
@@ -61,13 +85,22 @@ class ImportsFilter:
 
         :param code: Code to parse.
         """
-        return cls(
-            [
-                node
-                for node in ast.parse(code).body
-                if isinstance(node, (ast.ImportFrom, ast.Import))
-            ]
-        )
+        tree = ast.parse(code)
+        nodes: list[tuple[int, ImportNode]] = []
+
+        current_group = 0
+        last_end = -1
+
+        for node in tree.body:
+            if isinstance(node, (ast.ImportFrom, ast.Import)):
+                # if gap >1 line - new block
+                if last_end != -1 and node.lineno > last_end + 1:
+                    current_group += 1
+
+                nodes.append((current_group, node))
+                last_end = getattr(node, 'end_lineno', node.lineno)
+
+        return cls(nodes)
 
     @classmethod
     def from_file_path(cls, file_path: str) -> Self:
@@ -80,17 +113,18 @@ class ImportsFilter:
             raise FileNotFoundError(f"Source file '{file_path}' not found.")
         return cls.from_code(path.read_text(encoding='utf-8'))
 
-    def filter_used(self, *snippets: str) -> list[ImportNode]:
+    def filter_used(self, *snippets: str) -> list[tuple[int, ImportNode]]:
         """Filter import nodes to only include ones used in the snippet.
 
         :param snippets: Snippets to look for used imports in.
-        :return: Filtered nodes.
+        :return: Filtered grouped nodes.
         """
         names: set[str] = set()
         for snippet in snippets:
             names.update(_snippet_used_names(snippet))
-        kept_nodes: list[ImportNode] = []
-        for node in self.import_nodes:
+
+        kept_nodes: list[tuple[int, ImportNode]] = []
+        for group_id, node in self.import_nodes:
             kept_aliases = [
                 a for a in node.names if _imported_name(a) in names
             ]
@@ -99,14 +133,17 @@ class ImportsFilter:
 
             if isinstance(node, ast.Import):
                 # keep the alias if its local name is referenced in the snippet
-                kept_nodes.append(ast.Import(names=kept_aliases))
+                kept_nodes.append((group_id, ast.Import(names=kept_aliases)))
             elif isinstance(node, ast.ImportFrom):
                 # reconstruct the node with only the used aliases
                 kept_nodes.append(
-                    ast.ImportFrom(
-                        module=node.module,
-                        names=kept_aliases,
-                        level=node.level,
+                    (
+                        group_id,
+                        ast.ImportFrom(
+                            module=node.module,
+                            names=kept_aliases,
+                            level=node.level,
+                        ),
                     )
                 )
         return kept_nodes
@@ -115,6 +152,6 @@ class ImportsFilter:
         """Filter imports to only include ones used in the snippet.
 
         :param snippets: Snippet to look for used imports in.
-        :return: Imports code with only used imports.
+        :return: Imports code with only used imports, preserving block spacing.
         """
-        return _nodes_unparse(self.filter_used(*snippets))  # ty: ignore[invalid-argument-type]
+        return _grouped_nodes_unparse(self.filter_used(*snippets))

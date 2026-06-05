@@ -89,6 +89,7 @@ First, we want to check that builtin assets get scanned correctly.
 ```python
 from dataclasses import dataclass
 from pathlib import Path
+
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
@@ -255,6 +256,7 @@ Now that assets discovering works, we may generate clusters.
 ```python
 from dataclasses import dataclass
 from pathlib import Path
+
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
@@ -455,6 +457,7 @@ Full example:
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
+
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
@@ -625,6 +628,7 @@ Multiprocessing version is available in later examples.
 
 ```python
 from ahocorasick import Automaton
+
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
 # ... generate assets list
@@ -691,8 +695,10 @@ We can add a progress bar + robust struct for storing our dependencies.
 
 ```python
 from dataclasses import dataclass
+
 import tqdm
 from ahocorasick import Automaton
+
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
@@ -796,8 +802,10 @@ import multiprocessing as mp
 from concurrent import futures
 from dataclasses import dataclass
 from pathlib import Path
+
 import tqdm
 from ahocorasick import Automaton
+
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
@@ -974,6 +982,7 @@ whatever references a room doesn't really depend on it.
 
 ```python
 from dataclasses import dataclass
+
 from clunkster.analyze import location as my_analyze_location
 from clunkster.asset import AssetType
 
