@@ -34,6 +34,7 @@ generate_toc()
     * [Example 5 - Reference scanning](#example-5---reference-scanning)
     * [Example 6 - Reference scanning (fancy)](#example-6---reference-scanning-fancy)
     * [Example 7 - Reference scanning (multiprocessing)](#example-7---reference-scanning-multiprocessing)
+    * [Example 8 - Linter (simple)](#example-8---linter-simple)
   * [Rationale](#rationale)
     * [Dev solution](#dev-solution)
     * [Prod solution](#prod-solution)
@@ -915,6 +916,143 @@ for dep in dependencies[:3]:
 ```
 <!--[[[end]]]-->
 
+### Example 8 - Linter (simple)
+
+<!--[[[cog
+snips_main = snippets.extract('MAIN_EX_LINT_SIMPLE')
+snips_prepend = [
+    snippets.extract('CLS_DEPENDENCY'),
+    [readme_snippets.Snippet.from_code('# ... generate dependencies list')]
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_lint']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
+        )
+    )
+)
+
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
+]]]-->
+Validate dependencies based on simple matching.
+
+We simply iterate through the dependencies and validate lint rules
+defined above, so this will filter out the majority of "stageA object
+referenced stageB asset" cases.
+
+However, this iteration (and following linters) have a few special rules:
+
+1. Most clusters are allowed to reference only themselves and Common
+cluster, but some may need to reference certain more localized "common"
+cluster. Such as when one collab maker creates multiple stages, and has
+many common scripts and util objects shared between them, but, technically,
+not between the rest of the collab. Such rules should be defined in
+`LINT_RULES`.
+
+2. We allow special context guard scripts in a form of:
+
+```
+if room_is_stageA() {
+    ...
+}
+```
+Those guards allow references to any foreign cluster inside them. Such
+guards must be defined in `CONTEXT_RULES`.
+
+3. References to rooms are severed. Since the only way to meaningfully
+"reference" a room is to go there, for all intents and purposes reference
+whatever references a room doesn't really depend on it.
+
+```python
+from dataclasses import dataclass
+from clunkster.analyze import location as my_analyze_location
+from clunkster.asset import AssetType
+
+@dataclass(frozen=True, slots=True)
+class Dependency:
+    """Full dependency data to be used in graph building."""
+
+    location: my_analyze_location.BoundLocation
+    source_asset: Asset
+    target_asset: Asset
+    contexts: tuple[str, ...]
+
+# ... generate dependencies list
+
+violations: dict[
+    str,
+    dict[str, list[str]],
+] = {}
+total_violations = 0
+
+for dep in dependencies:
+    target = dep.target_asset
+    source = dep.source_asset
+
+    # remove deps to room
+    if target.asset_type == AssetType.ROOM:
+        continue
+
+    # get permissions from lint rules
+    allowed_targets = set(
+        LINT_RULES.get(source.cluster, {source.cluster, 'Common'})
+    )
+
+    # expand permissions based on script guards
+    for ctx in dep.contexts:
+        if ctx in CONTEXT_RULES:
+            allowed_targets.update(CONTEXT_RULES[ctx])
+
+    # check for structural violations
+    if target.cluster not in allowed_targets:
+        total_violations += 1
+        loc = dep.location
+
+        # format the contexts for the error log
+        ctx_str = (
+            f' [Contexts: {", ".join(dep.contexts)}]'
+            if dep.contexts
+            else ''
+        )
+        err_msg = (
+            f'{loc.file_name}({loc.loc_line:}:{loc.loc_column:}) -> '
+            f"'{target.name}' [{target.cluster}]"
+            f'{ctx_str}'
+        )
+
+        cluster_errs = violations.setdefault(source.cluster, {})
+        asset_errs = cluster_errs.setdefault(source.name, [])
+        asset_errs.append(err_msg)
+
+# output linting report
+if total_violations == 0:
+    print('\nClear!!!')
+    return
+
+print(
+    f'\nFound {total_violations} dependency violations '
+    f'across {len(violations)} clusters:'
+)
+
+for cluster, asset_errs in sorted(violations.items()):
+    print(f'\n=== {cluster} ===')
+
+    for asset_name, errors in sorted(asset_errs.items()):
+        print(f'[{asset_name}]')
+        for err in errors:
+            print(f'  |-- {err}')
+```
+<!--[[[end]]]-->
+
 ## Rationale
 
 Game Maker 8.2 keeps the entire project in memory while open. The same goes for the `.exe` - the build process packs all resources into the executable, which are then unpacked and loaded during the initial loading screen.
@@ -955,7 +1093,7 @@ To prevent this, a dependency linter is included. It builds dependency graph bas
    - Keep assets belonging to certain stage in that stage's folder
    - Do not reference things from `stageA` in `stageB` objects (unless such an object is only placed in a room that guarantees both stages loaded)
    - Reference Common objects in Stage-specific, not the other way around
-     - If this is unavoidable (for example, when making stage-specific a movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
+     - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
    - If an asset is shared between multiple stages, then it belongs in Common cluster
 3. Follow good coding practices
     - no dynamic asset referencing tomfoolery (tool won't acknowledge those references when building dependency graph):
@@ -994,29 +1132,10 @@ See examples:
 - [6](#example-6---reference-scanning-fancy) reference generator with better struct and progressbar :3
 - [7](#example-7---reference-scanning-multiprocessing) multiprocessing reference generator
 
-Once that is done you may start with some initial cleaning.
+Once that's done you may start with some initial cleaning. Basic linter can find most violations just by checking each dependency on presence of cross-cluster references.
 
-Preparation:
-1. Parse `tree.yyd` files in order to discover assets and generate initial cluster map:
-   - ensure that stage assets are grouped in consistently named folders across all asset types
-   - make aliases for folders that don't represent an actual cluster (such as "Tiles" backgrounds or "Killers" objects)
-   - see examples:
-     - [1](#example-1---finding-assets) setting up asset discovery
-     - [2](#example-2---external-assets-data) adding external assets (`data/`)
-     - [3](#example-3---generating-clusters) generating initial cluster map
-     - [4](#example-4---cluster-aliasing) fixing duplicate clusters via aliases
-2. Build dependencies:
-   - map out which clusters are referenced in each room
-   - manually clean up any architectural issues or spaghetti code this reveals
-   - setup rules for automatically expanding the map for any new rooms
-   - see examples:
-     - [5](#example-5---reference-scanning) simple references generator 
-     - [6](#example-6---reference-scanning-fancy) reference generator with better struct and progressbar :3
-     - [7](#example-7---reference-scanning-multiprocessing) multiprocessing reference generator
-3. Setup depgraph linter:
-   - bake finalized room-to-clusters map and feed into dependency linter
-   - See examples ?
-4. TODO setup stub resources and script generation
+See example:
+- [8](#example-8---linter-simple) the linter
 
 ## Dehydration strategy for each asset type
 

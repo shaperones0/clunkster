@@ -683,6 +683,103 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     return dependencies
 
 
+def main_ex_lint(dependencies: list[Dependency]) -> None:
+    """Validate dependencies based on simple matching.
+
+    We simply iterate through the dependencies and validate lint rules
+    defined above, so this will filter out the majority of "stageA object
+    referenced stageB asset" cases.
+
+    However, this iteration (and following linters) have a few special rules:
+
+    1. Most clusters are allowed to reference only themselves and Common
+    cluster, but some may need to reference certain more localized "common"
+    cluster. Such as when one collab maker creates multiple stages, and has
+    many common scripts and util objects shared between them, but, technically,
+    not between the rest of the collab. Such rules should be defined in
+    ``LINT_RULES``.
+
+    2. We allow special context guard scripts in a form of:
+
+    ::
+
+        if room_is_stageA() {
+            ...
+        }
+
+    Those guards allow references to any foreign cluster inside them. Such
+    guards must be defined in ``CONTEXT_RULES``.
+
+    3. References to rooms are severed. Since the only way to meaningfully
+    "reference" a room is to go there, for all intents and purposes reference
+    whatever references a room doesn't really depend on it.
+    """
+    # --- COG_START: MAIN_EX_LINT_SIMPLE ---
+    violations: dict[
+        str,
+        dict[str, list[str]],
+    ] = {}
+    total_violations = 0
+
+    for dep in dependencies:
+        target = dep.target_asset
+        source = dep.source_asset
+
+        # remove deps to room
+        if target.asset_type == AssetType.ROOM:
+            continue
+
+        # get permissions from lint rules
+        allowed_targets = set(
+            LINT_RULES.get(source.cluster, {source.cluster, 'Common'})
+        )
+
+        # expand permissions based on script guards
+        for ctx in dep.contexts:
+            if ctx in CONTEXT_RULES:
+                allowed_targets.update(CONTEXT_RULES[ctx])
+
+        # check for structural violations
+        if target.cluster not in allowed_targets:
+            total_violations += 1
+            loc = dep.location
+
+            # format the contexts for the error log
+            ctx_str = (
+                f' [Contexts: {", ".join(dep.contexts)}]'
+                if dep.contexts
+                else ''
+            )
+            err_msg = (
+                f'{loc.file_name}({loc.loc_line:}:{loc.loc_column:}) -> '
+                f"'{target.name}' [{target.cluster}]"
+                f'{ctx_str}'
+            )
+
+            cluster_errs = violations.setdefault(source.cluster, {})
+            asset_errs = cluster_errs.setdefault(source.name, [])
+            asset_errs.append(err_msg)
+
+    # output linting report
+    if total_violations == 0:
+        print('\nClear!!!')
+        return
+
+    print(
+        f'\nFound {total_violations} dependency violations '
+        f'across {len(violations)} clusters:'
+    )
+
+    for cluster, asset_errs in sorted(violations.items()):
+        print(f'\n=== {cluster} ===')
+
+        for asset_name, errors in sorted(asset_errs.items()):
+            print(f'[{asset_name}]')
+            for err in errors:
+                print(f'  |-- {err}')
+    # --- COG_END: MAIN_EX_LINT_SIMPLE ---
+
+
 def _run_tutorials() -> None:
     main_ex_start()
     main_ex_start_externals()
@@ -706,13 +803,10 @@ def test_tutorials() -> None:
     _run_tutorials()
 
 
-def main() -> None:
-    """Pipeline private entrypoint."""
-    global PROJECT, ALIAS
+def _load_private(config_dir: Path) -> None:
+    global PROJECT, ALIAS, LINT_RULES, CONTEXT_RULES
 
-    import sys
-
-    _file_private_config = Path('input/config.json')
+    _file_private_config = config_dir / 'config.json'
     if not _file_private_config.exists():
         raise FileNotFoundError(
             f'Config file not found: {_file_private_config}'
@@ -723,23 +817,43 @@ def main() -> None:
     )
     PROJECT = Path(_private_config['project'])
 
-    _file_private_alias = Path('input/alias.json')
-    if _file_private_alias.exists():
-        ALIAS = json.loads(_file_private_alias.read_text(encoding='utf-8'))
+    _file_private_alias = config_dir / 'alias.json'
+    ALIAS = json.loads(_file_private_alias.read_text(encoding='utf-8'))
+
+    _file_private_lint_rules = config_dir / 'lint_rules.json'
+    rules = json.loads(_file_private_lint_rules.read_text(encoding='utf-8'))
+    LINT_RULES = {
+        cluster: set(allowed_clusters)
+        for cluster, allowed_clusters in rules.items()
+    }
+
+    _file_private_context_rules = config_dir / 'context_rules.json'
+    rules = json.loads(_file_private_context_rules.read_text(encoding='utf-8'))
+    CONTEXT_RULES = {
+        cluster: set(allowed_clusters)
+        for cluster, allowed_clusters in rules.items()
+    }
+
+
+def main() -> None:
+    """Pipeline private entrypoint."""
+    import sys
+
+    _load_private(Path(sys.argv[1]))
 
     # allow testing tutorials on private data as well
     is_test = False
-    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    if len(sys.argv) > 2 and sys.argv[2] == '--test':  # noqa: PLR2004
         is_test = True
 
     if is_test:
         _run_tutorials()
     else:
-        main_ex_aliases()
-        return
         assets = stage_discover_assets()
 
-        main_ex_scan_sync2(assets)
+        deps = main_ex_scan_sync2(assets)
+
+        main_ex_lint(deps)
 
 
 if __name__ == '__main__':
