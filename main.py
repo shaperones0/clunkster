@@ -2,6 +2,7 @@
 
 import json
 import multiprocessing as mp
+import warnings
 from concurrent import futures
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,13 +94,26 @@ LINT_RULES: dict[str, set[str]] = {
 }
 # --- COG_END: LINT_RULES ---
 
+# --- COG_START: CONTEXT_RULES_EXPLAIN ---
+# MD: Global controllers often check conditions (like `if room_is_StageA()`)
+# MD: before referencing stage-specific assets. We map those context strings to
+# MD: the additional clusters they temporarily grant access to.
+# --- COG_END: CONTEXT_RULES_EXPLAIN ---
+# --- COG_START: CONTEXT_RULES ---
+CONTEXT_RULES: dict[str, set[str]] = {
+    'room_is_stageA': {'StageA'},
+    'room_is_stageB': {'StageB'},
+    # ...
+}
+# --- COG_END: CONTEXT_RULES ---
+
 # --- COG_START: PROJECT ---
 PROJECT = Path('path/to/the/project')
 # --- COG_END: PROJECT ---
 
 
 # --- COG_START: CLS_ASSET ---
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Asset:
     """Simple asset definition."""
 
@@ -136,7 +150,7 @@ class ScanResult:
 
 
 # --- COG_START: CLS_DEPENDENCY ---
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
 
@@ -355,6 +369,8 @@ def main_ex_clusters() -> None:
 def stage_discover_assets() -> list[Asset]:
     """Asset discovery pipeline stage.
 
+    Removed various outputs and other useless shims.
+
     :return: List of found assets.
     """
     assets: list[Asset] = []
@@ -417,7 +433,86 @@ def main_ex_aliases() -> None:
 
     Which is easily fixed by a simple alias system for clusters.
     """
-    # see stage_discover_assets
+    # --- COG_START: MAIN_EX_ALIASES ---
+    assets: list[Asset] = []
+
+    # invert ALIAS
+    cluster_to_name: dict[str, str] = {}
+    existing_aliases: set[str] = set()
+    for name, clusters in ALIAS.items():
+        for cluster in clusters:
+            if cluster in cluster_to_name:
+                raise ValueError(
+                    f'Invalid ALIAS (duplicate aliases {cluster})'
+                )
+            cluster_to_name[cluster] = name
+            existing_aliases.add(cluster)
+            existing_aliases.add(name)
+
+    cluster_map: dict[str, list[str]] = {}
+    asset_to_cluster: dict[AssetType, list[str]] = {}
+    used_aliases: set[str] = set()
+    for asset_type in CLUSTERABLE_ASSETS:
+        asset_dir = PROJECT / asset_type.get_dir()
+        if not asset_dir.exists():
+            continue
+
+        cluster_set: set[str] = set()
+        if asset_type.is_builtin():
+            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+            asset_iter = my_parse_tree.parse(tree_text.splitlines())
+        else:
+            asset_iter = (
+                (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+                for file in asset_dir.rglob('*')
+                if file.is_file()
+            )
+
+        for asset_name, path in asset_iter:
+            cluster_name = path[0] if path else 'Common'
+            used_aliases.add(cluster_name)
+            if cluster_name in cluster_to_name:
+                cluster_name = cluster_to_name[cluster_name]
+            used_aliases.add(cluster_name)
+
+            cluster_set.add(cluster_name)
+            cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+            assets.append(
+                Asset(
+                    asset_type=asset_type,
+                    name=asset_name,
+                    cluster=cluster_name,
+                    files_to_scan=tuple(
+                        asset_type.get_scannables(asset_name, PROJECT)
+                    ),
+                )
+            )
+        asset_to_cluster[asset_type] = list(cluster_set)
+
+    clusters_all = sorted(
+        {name for clusters in asset_to_cluster.values() for name in clusters}
+    )
+    print('All clusters:', *clusters_all)
+    for asset_type, clusters in asset_to_cluster.items():
+        cluster_set = set(clusters)
+        row = [
+            col if col in cluster_set else ' ' * len(col)
+            for col in clusters_all
+        ]
+        print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
+
+    unused_aliases = existing_aliases - used_aliases
+    extra_aliases = used_aliases - existing_aliases
+    if unused_aliases:
+        warnings.warn(
+            f'Unused aliases: {" ".join(unused_aliases)}', stacklevel=2
+        )
+    if extra_aliases:
+        warnings.warn(
+            f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
+        )
+    # --- COG_END: MAIN_EX_ALIASES ---
 
 
 def main_ex_scan_sync(assets: list[Asset]) -> None:
@@ -640,6 +735,8 @@ def main() -> None:
     if is_test:
         _run_tutorials()
     else:
+        main_ex_aliases()
+        return
         assets = stage_discover_assets()
 
         main_ex_scan_sync2(assets)

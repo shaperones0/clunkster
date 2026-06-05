@@ -91,7 +91,7 @@ from pathlib import Path
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Asset:
     """Simple asset definition."""
 
@@ -257,7 +257,7 @@ from pathlib import Path
 from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Asset:
     """Simple asset definition."""
 
@@ -369,6 +369,33 @@ cog.outl(readme_snippets.snippets_render(
     *it.chain.from_iterable(snips_prepend),
     *snips_main
 ))
+
+cog.outl("\nFull example:\n")
+
+snips_main = snippets.extract('MAIN_EX_ALIASES')
+snips_prepend = [
+    snippets.extract('CLS_ASSET'),
+    snippets.extract('ALIAS'),
+    snippets.extract('CLUSTERABLE_ASSETS'),
+    snippets.extract('PROJECT')
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_aliases']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend
+        )
+    )
+)
+
+cog.outl(readme_snippets.snippets_render(
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
 ]]]-->
 Manually fix inconsistencies in cluster map.
 
@@ -420,6 +447,140 @@ if cluster_name in cluster_to_name:
 ```
 
 Keep using the table thing until all aliases are gone.
+
+Full example:
+
+```python
+import warnings
+from dataclasses import dataclass
+from pathlib import Path
+from clunkster.asset import AssetType
+from clunkster.parse import tree as my_parse_tree
+
+@dataclass(frozen=True, slots=True)
+class Asset:
+    """Simple asset definition."""
+
+    asset_type: AssetType
+    name: str
+    cluster: str
+    files_to_scan: tuple[Path, ...]
+
+ALIAS: dict[str, list[str]] = {
+    'StageA': [
+        'stage_a',
+        'stageA',
+        'StageA Music',
+        # ...
+    ],
+    'StageB': [
+        'objStageB',
+        'rStageB',
+        # ...
+    ],
+    'Common': [
+        'Backgrounds',
+        'Blocks',
+        'Default',
+        # ...
+    ],
+    # ...
+}
+
+CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
+    AssetType.SPRITE,
+    AssetType.BACKGROUND,
+    AssetType.SOUND,
+    AssetType.PATH,
+    AssetType.SCRIPT,
+    AssetType.FONT,
+    AssetType.OBJECT,
+    AssetType.ROOM,
+    AssetType.DATA_SFX,
+    AssetType.DATA_MUSIC,
+)
+
+PROJECT = Path('path/to/the/project')
+
+assets: list[Asset] = []
+
+# invert ALIAS
+cluster_to_name: dict[str, str] = {}
+existing_aliases: set[str] = set()
+for name, clusters in ALIAS.items():
+    for cluster in clusters:
+        if cluster in cluster_to_name:
+            raise ValueError(
+                f'Invalid ALIAS (duplicate aliases {cluster})'
+            )
+        cluster_to_name[cluster] = name
+        existing_aliases.add(cluster)
+        existing_aliases.add(name)
+
+cluster_map: dict[str, list[str]] = {}
+asset_to_cluster: dict[AssetType, list[str]] = {}
+used_aliases: set[str] = set()
+for asset_type in CLUSTERABLE_ASSETS:
+    asset_dir = PROJECT / asset_type.get_dir()
+    if not asset_dir.exists():
+        continue
+
+    cluster_set: set[str] = set()
+    if asset_type.is_builtin():
+        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+        asset_iter = my_parse_tree.parse(tree_text.splitlines())
+    else:
+        asset_iter = (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+            if file.is_file()
+        )
+
+    for asset_name, path in asset_iter:
+        cluster_name = path[0] if path else 'Common'
+        used_aliases.add(cluster_name)
+        if cluster_name in cluster_to_name:
+            cluster_name = cluster_to_name[cluster_name]
+        used_aliases.add(cluster_name)
+
+        cluster_set.add(cluster_name)
+        cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+        assets.append(
+            Asset(
+                asset_type=asset_type,
+                name=asset_name,
+                cluster=cluster_name,
+                files_to_scan=tuple(
+                    asset_type.get_scannables(asset_name, PROJECT)
+                ),
+            )
+        )
+    asset_to_cluster[asset_type] = list(cluster_set)
+
+clusters_all = sorted(
+    {name for clusters in asset_to_cluster.values() for name in clusters}
+)
+print('All clusters:', *clusters_all)
+for asset_type, clusters in asset_to_cluster.items():
+    cluster_set = set(clusters)
+    row = [
+        col if col in cluster_set else ' ' * len(col)
+        for col in clusters_all
+    ]
+    print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
+
+unused_aliases = existing_aliases - used_aliases
+extra_aliases = used_aliases - existing_aliases
+if unused_aliases:
+    warnings.warn(
+        f'Unused aliases: {" ".join(unused_aliases)}', stacklevel=2
+    )
+if extra_aliases:
+    warnings.warn(
+        f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
+    )
+```
 <!--[[[end]]]-->
 
 ### Example 5 - Reference scanning
@@ -534,7 +695,7 @@ from ahocorasick import Automaton
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
 
@@ -657,7 +818,7 @@ class ScanResult:
     matches: list[my_analyze_scan_dep.DependencyMatch]
     job: ScanJob
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
 
