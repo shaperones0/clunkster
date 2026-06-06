@@ -452,6 +452,7 @@ def main_ex_aliases() -> None:
     cluster_map: dict[str, list[str]] = {}
     asset_to_cluster: dict[AssetType, list[str]] = {}
     used_aliases: set[str] = set()
+    asset_name_set: set[str] = set()  # clean asset name issues
     for asset_type in CLUSTERABLE_ASSETS:
         asset_dir = PROJECT / asset_type.get_dir()
         if not asset_dir.exists():
@@ -477,6 +478,10 @@ def main_ex_aliases() -> None:
 
             cluster_set.add(cluster_name)
             cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+            if asset_name in asset_name_set:
+                raise ValueError(f'Duplicate asset name {asset_name}')
+            asset_name_set.add(asset_name)
 
             assets.append(
                 Asset(
@@ -780,6 +785,65 @@ def main_ex_lint(dependencies: list[Dependency]) -> None:
     # --- COG_END: MAIN_EX_LINT_SIMPLE ---
 
 
+def main_ex_lint_unused(
+    dependencies: list[Dependency], assets: list[Asset]
+) -> None:
+    """Find and report assets that are never referenced by anything.
+
+    Finding unused assets is a quick way to clean up a project and reduce
+    compile times. We can do this with a simple set difference: Total Assets
+    minus Used Assets.
+
+    This will not catch isolated reference loops (e.g., A references B,
+    B references A, but neither is used by the main game).
+
+    Also, some things that are referenced only by the engine (like
+    the first room) might still get reported.
+
+    Take the output of this with a grain of salt.
+    """
+    # --- COG_START: MAIN_EX_LINT_UNUSED ---
+    all_assets = {asset.name: asset for asset in assets}
+
+    # populate used set from dependencies
+    used_asset_names: set[str] = set()
+    for dep in dependencies:
+        # ignore self-references
+        if dep.source_asset.name == dep.target_asset.name:
+            continue
+        used_asset_names.add(dep.target_asset.name)
+
+    orphan_names = set(all_assets.keys()) - used_asset_names
+
+    orphans_by_cluster: dict[str, list[Asset]] = {}
+    total_orphans = 0
+
+    for name in orphan_names:
+        asset = all_assets[name]
+
+        orphans_by_cluster.setdefault(asset.cluster, []).append(asset)
+        total_orphans += 1
+
+    if total_orphans == 0:
+        print('\nProject is somehow clean - no orphaned assets found')
+        return
+
+    print(
+        f'\nFound {total_orphans} orphaned assets across '
+        f'{len(orphans_by_cluster)} clusters:'
+    )
+
+    for cluster, orphans in sorted(orphans_by_cluster.items()):
+        print(f'\n=== {cluster} ===')
+
+        # sort
+        orphans.sort(key=lambda a: (a.asset_type.name, a.name))
+
+        for asset in orphans:
+            print(f'[{asset.asset_type.name: <10}] {asset.name}')
+    # --- COG_END: MAIN_EX_LINT_UNUSED ---
+
+
 def _run_tutorials() -> None:
     main_ex_start()
     main_ex_start_externals()
@@ -849,11 +913,14 @@ def main() -> None:
     if is_test:
         _run_tutorials()
     else:
+        main_ex_aliases()
+        # return
         assets = stage_discover_assets()
 
         deps = main_ex_scan_sync2(assets)
 
-        main_ex_lint(deps)
+        main_ex_lint_unused(deps, assets)
+        # main_ex_lint(deps)
 
 
 if __name__ == '__main__':

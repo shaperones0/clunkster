@@ -34,7 +34,8 @@ generate_toc()
     * [Example 5 - Reference scanning](#example-5---reference-scanning)
     * [Example 6 - Reference scanning (fancy)](#example-6---reference-scanning-fancy)
     * [Example 7 - Reference scanning (multiprocessing)](#example-7---reference-scanning-multiprocessing)
-    * [Example 8 - Linter (simple)](#example-8---linter-simple)
+    * [Example 8 - Simple Linter (unused assets)](#example-8---simple-linter-unused-assets)
+    * [Example 9 - Simple Linter (cross-cluster references)](#example-9---simple-linter-cross-cluster-references)
   * [Rationale](#rationale)
     * [Dev solution](#dev-solution)
     * [Prod solution](#prod-solution)
@@ -524,6 +525,7 @@ for name, clusters in ALIAS.items():
 cluster_map: dict[str, list[str]] = {}
 asset_to_cluster: dict[AssetType, list[str]] = {}
 used_aliases: set[str] = set()
+asset_name_set: set[str] = set()  # clean asset name issues
 for asset_type in CLUSTERABLE_ASSETS:
     asset_dir = PROJECT / asset_type.get_dir()
     if not asset_dir.exists():
@@ -549,6 +551,10 @@ for asset_type in CLUSTERABLE_ASSETS:
 
         cluster_set.add(cluster_name)
         cluster_map.setdefault(cluster_name, []).append(asset_name)
+
+        if asset_name in asset_name_set:
+            raise ValueError(f'Duplicate asset name {asset_name}')
+        asset_name_set.add(asset_name)
 
         assets.append(
             Asset(
@@ -924,11 +930,123 @@ for dep in dependencies[:3]:
 ```
 <!--[[[end]]]-->
 
-### Example 8 - Linter (simple)
+### Example 8 - Simple Linter (unused assets)
+
+<!--[[[cog
+snips_main = snippets.extract('MAIN_EX_LINT_UNUSED')
+snips_prepend = [
+    snippets.extract('CLS_ASSET'),
+    snippets.extract('CLS_DEPENDENCY'),
+    [readme_snippets.Snippet.from_code('# ... generate dependencies list')]
+]
+snip_docs = readme_snippets.Snippet.from_md(
+    docs['main_ex_lint_unused']
+)
+snip_imports = readme_snippets.Snippet.from_code(
+    imports.filter_used_unparse(
+        snips_main[0].content,
+        *(
+            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
+        )
+    )
+)
+
+cog.outl(readme_snippets.snippets_render(
+    snip_docs,
+    snip_imports,
+    *it.chain.from_iterable(snips_prepend),
+    *snips_main
+))
+]]]-->
+Find and report assets that are never referenced by anything.
+
+Finding unused assets is a quick way to clean up a project and reduce
+compile times. We can do this with a simple set difference: Total Assets
+minus Used Assets.
+
+This will not catch isolated reference loops (e.g., A references B,
+B references A, but neither is used by the main game).
+
+Also, some things that are referenced only by the engine (like
+the first room) might still get reported.
+
+Take the output of this with a grain of salt.
+
+```python
+from dataclasses import dataclass
+from pathlib import Path
+
+from clunkster.analyze import location as my_analyze_location
+from clunkster.asset import AssetType
+
+@dataclass(frozen=True, slots=True)
+class Asset:
+    """Simple asset definition."""
+
+    asset_type: AssetType
+    name: str
+    cluster: str
+    files_to_scan: tuple[Path, ...]
+
+@dataclass(frozen=True, slots=True)
+class Dependency:
+    """Full dependency data to be used in graph building."""
+
+    location: my_analyze_location.BoundLocation
+    source_asset: Asset
+    target_asset: Asset
+    contexts: tuple[str, ...]
+
+# ... generate dependencies list
+
+all_assets = {asset.name: asset for asset in assets}
+
+# populate used set from dependencies
+used_asset_names: set[str] = set()
+for dep in dependencies:
+    # ignore self-references
+    if dep.source_asset.name == dep.target_asset.name:
+        continue
+    used_asset_names.add(dep.target_asset.name)
+
+orphan_names = set(all_assets.keys()) - used_asset_names
+
+orphans_by_cluster: dict[str, list[Asset]] = {}
+total_orphans = 0
+
+for name in orphan_names:
+    asset = all_assets[name]
+
+    orphans_by_cluster.setdefault(asset.cluster, []).append(asset)
+    total_orphans += 1
+
+if total_orphans == 0:
+    print('\nProject is somehow clean - no orphaned assets found')
+    return
+
+print(
+    f'\nFound {total_orphans} orphaned assets across '
+    f'{len(orphans_by_cluster)} clusters:'
+)
+
+for cluster, orphans in sorted(orphans_by_cluster.items()):
+    print(f'\n=== {cluster} ===')
+
+    # sort
+    orphans.sort(key=lambda a: (a.asset_type.name, a.name))
+
+    for asset in orphans:
+        print(f'[{asset.asset_type.name: <10}] {asset.name}')
+```
+<!--[[[end]]]-->
+
+### Example 9 - Simple Linter (cross-cluster references)
 
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_LINT_SIMPLE')
 snips_prepend = [
+    snippets.extract('LINT_RULES'),
+    snippets.extract('CONTEXT_RULES'),
     snippets.extract('CLS_DEPENDENCY'),
     [readme_snippets.Snippet.from_code('# ... generate dependencies list')]
 ]
@@ -985,6 +1103,19 @@ from dataclasses import dataclass
 
 from clunkster.analyze import location as my_analyze_location
 from clunkster.asset import AssetType
+
+LINT_RULES: dict[str, set[str]] = {
+    # common assets cannot borrow from Stage specific folders
+    'Common': {'Common'},
+    # example of a stage that shares assets with another
+    # "StageB": {"StageB", "StageA", "Common"},
+}
+
+CONTEXT_RULES: dict[str, set[str]] = {
+    'room_is_stageA': {'StageA'},
+    'room_is_stageB': {'StageB'},
+    # ...
+}
 
 @dataclass(frozen=True, slots=True)
 class Dependency:
@@ -1144,7 +1275,8 @@ See examples:
 Once that's done you may start with some initial cleaning. Basic linter can find most violations just by checking each dependency on presence of cross-cluster references.
 
 See example:
-- [8](#example-8---linter-simple) the linter
+- [8](#example-8---simple-linter-unused-assets) finding unused assets (simple ver)
+- [8](#example-9---simple-linter-cross-cluster-references) finding cross-cluster references
 
 ## Dehydration strategy for each asset type
 
