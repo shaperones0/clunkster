@@ -35,20 +35,22 @@ def scan(
     for end_idx, target_asset in automaton.iter(text):
         start_idx = end_idx - len(target_asset) + 1
 
-        # prevent self loops TODO do in graph build
+        # detect if this target is explicitly formatted as a string literal
+        is_string_ref = target_asset.startswith(('"', "'"))
 
         # check if whole identifier
-        if start_idx > 0:
-            prev_char = text[start_idx - 1]
-            if prev_char.isalnum() or prev_char == '_':
-                continue
-        if end_idx + 1 < len(text):
-            next_char = text[end_idx + 1]
-            if next_char.isalnum() or next_char == '_':
-                continue
+        if not is_string_ref:
+            if start_idx > 0:
+                prev_char = text[start_idx - 1]
+                if prev_char.isalnum() or prev_char == '_':
+                    continue
+            if end_idx + 1 < len(text):
+                next_char = text[end_idx + 1]
+                if next_char.isalnum() or next_char == '_':
+                    continue
 
         # check if symbol is not inside ignored syntax
-        if gml_index.is_ignored_at(start_idx):
+        if not is_string_ref and gml_index.is_ignored_at(start_idx):
             continue
 
         contexts = gml_index.get_contexts_at(start_idx)
