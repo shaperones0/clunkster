@@ -10,6 +10,10 @@ However, you might want to address [Rationale](#rationale) and [Prerequisites](#
 
 Planned tools:
 - [x] Asset clusterizer based on folders in `tree.yyd` files (mostly helps other tools).
+- [ ] Dependency linter suite:
+  - [x] Unused assets
+  - [x] Cross-cluster reference
+  - [ ] Dependency graph analyzer
 - [ ] Dependency graph builder (constructs the list of assets that are "potentially used" in each room).
 - [ ] Dependency linter (things in a room from chunk A should not require things bound to chunk B).
 - [ ] Project crippler (replace assets with lightweight dummies for faster development)
