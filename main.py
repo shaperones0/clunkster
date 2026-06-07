@@ -844,7 +844,11 @@ def main_ex_lint_unused(
         print(f'\n=== {cluster} ===')
 
         # sort
-        orphans.sort(key=lambda a: (a.asset_type.name, a.name))
+        orphans.sort(key=lambda a: (
+            a.asset_type.name,
+            a.tree_path,
+            a.name
+        ))
 
         for asset in orphans:
             print(
