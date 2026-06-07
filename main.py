@@ -119,6 +119,7 @@ class Asset:
 
     asset_type: AssetType
     name: str
+    tree_path: tuple[str, ...]
     cluster: str
     files_to_scan: tuple[Path, ...]
 
@@ -223,6 +224,7 @@ def main_ex_start() -> None:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=_path,
                     cluster='Unknown',
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -255,6 +257,7 @@ def main_ex_start_externals() -> None:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=_path,
                     cluster='Unknown',
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -284,6 +287,7 @@ def main_ex_start_externals() -> None:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=file.relative_to(PROJECT).parts[:-1],
                     cluster='Unknown',
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -338,6 +342,7 @@ def main_ex_clusters() -> None:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=path,
                     cluster=cluster_name,
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -414,6 +419,7 @@ def stage_discover_assets() -> list[Asset]:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=path,
                     cluster=cluster_name,
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -487,6 +493,7 @@ def main_ex_aliases() -> None:
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
+                    tree_path=path,
                     cluster=cluster_name,
                     files_to_scan=tuple(
                         asset_type.get_scannables(asset_name, PROJECT)
@@ -840,7 +847,10 @@ def main_ex_lint_unused(
         orphans.sort(key=lambda a: (a.asset_type.name, a.name))
 
         for asset in orphans:
-            print(f'[{asset.asset_type.name: <10}] {asset.name}')
+            print(
+                f'[{asset.asset_type.name: <10}] {"/".join(asset.tree_path)}'
+                f'/{asset.name}'
+            )
     # --- COG_END: MAIN_EX_LINT_UNUSED ---
 
 
