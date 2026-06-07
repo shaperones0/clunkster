@@ -171,6 +171,18 @@ def snippets_render(*snippets: Snippet | str) -> str:  # noqa: C901, PLR0912
     blocks: list[str] = []
     fence = chr(96) * 3  # don't ask
 
+    filtered_snippets: list[Snippet | str] = []
+    for snippet in snippets:
+        if isinstance(snippet, str):
+            is_empty = not snippet.strip()
+        elif isinstance(snippet, Snippet):
+            is_empty = not snippet.content.strip()
+        else:
+            raise NotImplementedError
+        if not is_empty:
+            filtered_snippets.append(snippet)
+    snippets = tuple(filtered_snippets)
+
     types: list[SnippetType] = []
     for idx, snippet in enumerate(snippets):
         if isinstance(snippet, str):
@@ -191,6 +203,9 @@ def snippets_render(*snippets: Snippet | str) -> str:  # noqa: C901, PLR0912
         else:
             raise NotImplementedError
 
+        if not any(c.isalnum() for c in new_block):
+            new_block = ''
+
         prev_type: SnippetType | None = types[idx - 1] if idx > 0 else None
         next_type: SnippetType | None = (
             types[idx + 1] if idx < len(snippets) - 1 else None
@@ -202,7 +217,8 @@ def snippets_render(*snippets: Snippet | str) -> str:  # noqa: C901, PLR0912
             if next_type != SnippetType.PYTHON:
                 new_block = f'{new_block}\n{fence}'
 
-        blocks.append(new_block)
+        if new_block:
+            blocks.append(new_block)
 
     return '\n\n'.join(blocks)
 

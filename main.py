@@ -1,13 +1,13 @@
 """Main pipeline, together with examples."""
 
+import collections.abc as col
 import json
 import multiprocessing as mp
 import warnings
 from concurrent import futures
 from dataclasses import dataclass
-from pathlib import Path
 from enum import Enum, auto
-import collections.abc as col
+from pathlib import Path
 
 import tqdm
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
@@ -90,6 +90,8 @@ class AssetType(Enum):
                 dir_room = asset_dir / asset_name
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
+
+
 # --- COG_END: CLS_ASSET_TYPE ---
 
 
@@ -239,9 +241,9 @@ class Dependency:
 
 
 # --- COG_START: REG_WORKERS_EXPLAIN ---
-# MD: We cannot send the compiled Aho-Corasick `Automaton` across process
-# MD: boundaries safely. Instead, we use a global variable inside the worker
-# MD: process and initialize it once when the process boots up.
+# we can't send the compiled Aho-Corasick automaton across process boundaries
+#  safely; instead, we use a global variable inside the worker process and
+#  initialize it once when the process boots up
 # --- COG_END: REG_WORKERS_EXPLAIN ---
 # --- COG_START: REG_WORKERS ---
 _WORKER_AUTOMATON: Automaton | None = None
@@ -918,11 +920,7 @@ def main_ex_lint_unused(
         print(f'\n=== {cluster} ===')
 
         # sort
-        orphans.sort(key=lambda a: (
-            a.asset_type.name,
-            a.tree_path,
-            a.name
-        ))
+        orphans.sort(key=lambda a: (a.asset_type.name, a.tree_path, a.name))
 
         for asset in orphans:
             print(

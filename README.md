@@ -28,8 +28,28 @@ Super destructive tools:
 <!--[[[cog
 import sys
 sys.path.append("scripts")
-from readme_toc import generate_toc
 
+from scripts import readme_snippets, readme_imports, readme_docstring
+import itertools as it
+
+snippets = readme_snippets.SnippetExtractor.from_file_path('main.py')
+imports = readme_imports.ImportsFilter.from_file_path('main.py')
+docs = readme_docstring.extract_file('main.py')
+
+# stubs
+def gen_stub_cls(*names):
+    lines = []
+    for name in names:
+        lines.append(f"class {name}: ...")
+    return "\n".join(lines)
+
+def gen_stub_var(*names):
+    lines = []
+    for name in names:
+        lines.append(f"{name} = ...")
+    return "\n".join(lines)
+
+from readme_toc import generate_toc
 generate_toc()
 ]]]-->
 * [Clunkster](#clunkster)
@@ -44,9 +64,7 @@ generate_toc()
     * [Example 8 - Simple Linter (unused assets)](#example-8---simple-linter-unused-assets)
     * [Example 9 - Simple Linter (cross-cluster references)](#example-9---simple-linter-cross-cluster-references)
   * [Rationale](#rationale)
-    * [Dev solution](#dev-solution)
-    * [Prod solution](#prod-solution)
-    * [Safety backbone (dependency linter)](#safety-backbone-dependency-linter)
+    * [Linters](#linters)
   * [Prerequisites](#prerequisites)
   * [Workflow](#workflow)
     * [Preparation](#preparation)
@@ -60,15 +78,9 @@ The following examples represent actual workflows. Copy and modify as needed.
 ### Example 1 - Finding assets
 
 <!--[[[cog
-from scripts import readme_snippets, readme_imports, readme_docstring
-import itertools as it
-
-snippets = readme_snippets.SnippetExtractor.from_file_path('main.py')
-imports = readme_imports.ImportsFilter.from_file_path('main.py')
-docs = readme_docstring.extract_file('main.py')
-
 snips_main = snippets.extract('MAIN_EX_START')
 snips_prepend = [
+    snippets.extract('CLS_ASSET_TYPE'),
     snippets.extract('CLS_ASSET'),
     snippets.extract('CLUSTERABLE_BUILTINS'),
     snippets.extract('PROJECT')
@@ -95,11 +107,81 @@ cog.outl(readme_snippets.snippets_render(
 First, we want to check that builtin assets get scanned correctly.
 
 ```python
+import collections.abc as col
 from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path
 
-from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
+
+class AssetType(Enum):
+    """GameMaker8.2 asset type."""
+
+    BACKGROUND = auto()
+    FONT = auto()
+    OBJECT = auto()
+    PATH = auto()
+    ROOM = auto()
+    SCRIPT = auto()
+    SPRITE = auto()
+    SOUND = auto()
+
+    DATA_SFX = auto()
+    DATA_MUSIC = auto()
+
+    def is_builtin(self) -> bool:
+        """Check whether this asset type is builtin or not."""
+        return self in {
+            AssetType.BACKGROUND,
+            AssetType.FONT,
+            AssetType.OBJECT,
+            AssetType.PATH,
+            AssetType.ROOM,
+            AssetType.SCRIPT,
+            AssetType.SPRITE,
+            AssetType.SOUND,
+        }
+
+    def get_dir(self) -> str:
+        """Get project's directory name for given asset type."""
+        return {
+            AssetType.BACKGROUND: 'backgrounds',
+            AssetType.FONT: 'fonts',
+            AssetType.OBJECT: 'objects',
+            AssetType.PATH: 'paths',
+            AssetType.ROOM: 'rooms',
+            AssetType.SCRIPT: 'scripts',
+            AssetType.SPRITE: 'sprites',
+            AssetType.SOUND: 'sounds',
+            AssetType.DATA_SFX: 'data/sounds',
+            AssetType.DATA_MUSIC: 'data/music',
+        }[self]
+
+    def get_scannables(
+        self, asset_name: str, project_root: Path
+    ) -> col.Iterator[Path]:
+        """Get scannable files for given asset type.
+
+        :param asset_name: Name of the asset.
+        :param project_root: Project root dir.
+        :return: List of scannable files.
+        """
+        asset_dir = project_root / self.get_dir()
+        match self:
+            case AssetType.SCRIPT:
+                file_gml = asset_dir / f'{asset_name}.gml'
+                yield file_gml  # guaranteed to exist
+
+            case AssetType.OBJECT:
+                file_meta = asset_dir / f'{asset_name}.txt'
+                file_gml = asset_dir / f'{asset_name}.gml'
+                yield file_meta
+                yield file_gml  # both guaranteed to exist
+
+            case AssetType.ROOM:
+                dir_room = asset_dir / asset_name
+                yield from dir_room.glob('*.txt')
+                yield from dir_room.glob('*.gml')
 
 @dataclass(frozen=True, slots=True)
 class Asset:
@@ -165,7 +247,10 @@ print(f'Discovered {len(assets)} total assets.')
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_START_EXTERNALS_GIST')
 snips_prepend = [
+    # [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
     snippets.extract('CLUSTERABLE_EXTERNALS'),
+    # snippets.extract('PROJECT'),
+    # [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_start_externals']
@@ -237,7 +322,7 @@ print(f'Discovered {len(assets)} total assets.')
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_CLUSTERS')
 snips_prepend = [
-    snippets.extract('CLS_ASSET'),
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
     snippets.extract('CLUSTERABLE_ASSETS'),
     snippets.extract('PROJECT')
 ]
@@ -265,21 +350,13 @@ Autogenerate clusters for the assets.
 Now that assets discovering works, we may generate clusters.
 
 ```python
-from dataclasses import dataclass
+import collections.abc as col
 from pathlib import Path
 
-from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
 
-@dataclass(frozen=True, slots=True)
-class Asset:
-    """Simple asset definition."""
-
-    asset_type: AssetType
-    name: str
-    tree_path: tuple[str, ...]
-    cluster: str
-    files_to_scan: tuple[Path, ...]
+class AssetType: ...
+class Asset: ...
 
 CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
     AssetType.SPRITE,
@@ -390,6 +467,7 @@ cog.outl("\nFull example:\n")
 
 snips_main = snippets.extract('MAIN_EX_ALIASES')
 snips_prepend = [
+    snippets.extract('CLS_ASSET_TYPE'),
     snippets.extract('CLS_ASSET'),
     snippets.extract('ALIAS'),
     snippets.extract('CLUSTERABLE_ASSETS'),
@@ -467,12 +545,82 @@ Keep using the table thing until all aliases are gone.
 Full example:
 
 ```python
+import collections.abc as col
 import warnings
 from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path
 
-from clunkster.asset import AssetType
 from clunkster.parse import tree as my_parse_tree
+
+class AssetType(Enum):
+    """GameMaker8.2 asset type."""
+
+    BACKGROUND = auto()
+    FONT = auto()
+    OBJECT = auto()
+    PATH = auto()
+    ROOM = auto()
+    SCRIPT = auto()
+    SPRITE = auto()
+    SOUND = auto()
+
+    DATA_SFX = auto()
+    DATA_MUSIC = auto()
+
+    def is_builtin(self) -> bool:
+        """Check whether this asset type is builtin or not."""
+        return self in {
+            AssetType.BACKGROUND,
+            AssetType.FONT,
+            AssetType.OBJECT,
+            AssetType.PATH,
+            AssetType.ROOM,
+            AssetType.SCRIPT,
+            AssetType.SPRITE,
+            AssetType.SOUND,
+        }
+
+    def get_dir(self) -> str:
+        """Get project's directory name for given asset type."""
+        return {
+            AssetType.BACKGROUND: 'backgrounds',
+            AssetType.FONT: 'fonts',
+            AssetType.OBJECT: 'objects',
+            AssetType.PATH: 'paths',
+            AssetType.ROOM: 'rooms',
+            AssetType.SCRIPT: 'scripts',
+            AssetType.SPRITE: 'sprites',
+            AssetType.SOUND: 'sounds',
+            AssetType.DATA_SFX: 'data/sounds',
+            AssetType.DATA_MUSIC: 'data/music',
+        }[self]
+
+    def get_scannables(
+        self, asset_name: str, project_root: Path
+    ) -> col.Iterator[Path]:
+        """Get scannable files for given asset type.
+
+        :param asset_name: Name of the asset.
+        :param project_root: Project root dir.
+        :return: List of scannable files.
+        """
+        asset_dir = project_root / self.get_dir()
+        match self:
+            case AssetType.SCRIPT:
+                file_gml = asset_dir / f'{asset_name}.gml'
+                yield file_gml  # guaranteed to exist
+
+            case AssetType.OBJECT:
+                file_meta = asset_dir / f'{asset_name}.txt'
+                file_gml = asset_dir / f'{asset_name}.gml'
+                yield file_meta
+                yield file_gml  # both guaranteed to exist
+
+            case AssetType.ROOM:
+                dir_room = asset_dir / asset_name
+                yield from dir_room.glob('*.txt')
+                yield from dir_room.glob('*.gml')
 
 @dataclass(frozen=True, slots=True)
 class Asset:
@@ -612,7 +760,8 @@ if extra_aliases:
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_SCAN_SYNC')
 snips_prepend = [
-    [readme_snippets.Snippet.from_code('# ... generate assets list')]
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
+    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_scan_sync']
@@ -651,7 +800,10 @@ from ahocorasick import Automaton
 
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
-# ... generate assets list
+class AssetType: ...
+class Asset: ...
+
+assets: list[Asset] = ...
 
 automaton = Automaton()
 for asset in assets:
@@ -687,8 +839,9 @@ print(f'\nDone! Found {total_matches} total dependency references.')
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_SCAN_SYNC2')
 snips_prepend = [
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
     snippets.extract('CLS_DEPENDENCY'),
-    [readme_snippets.Snippet.from_code('# ... generate assets list')]
+    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_scan_sync2']
@@ -722,6 +875,9 @@ from ahocorasick import Automaton
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
+class AssetType: ...
+class Asset: ...
+
 @dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
@@ -731,7 +887,7 @@ class Dependency:
     target_asset: Asset
     contexts: tuple[str, ...]
 
-# ... generate assets list
+assets: list[Asset] = ...
 
 automaton = Automaton()
 for asset in assets:
@@ -783,11 +939,12 @@ print(f'\nDone! Found {total_matches} total dependency references.')
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_SCAN_MP')
 snips_prepend = [
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
     snippets.extract('CLS_SCAN_JOB'),
     snippets.extract('CLS_DEPENDENCY'),
     snippets.extract('REG_WORKERS_EXPLAIN'),
     snippets.extract('REG_WORKERS'),
-    [readme_snippets.Snippet.from_code('# ... generate assets list')]
+    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_scan_mp']
@@ -829,6 +986,9 @@ from ahocorasick import Automaton
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
+class AssetType: ...
+class Asset: ...
+
 @dataclass(frozen=True, slots=True)
 class ScanJob:
     """A lightweight payload sent over IPC to a worker process.
@@ -855,13 +1015,11 @@ class Dependency:
     source_asset: Asset
     target_asset: Asset
     contexts: tuple[str, ...]
-```
 
-We cannot send the compiled Aho-Corasick `Automaton` across process
-boundaries safely. Instead, we use a global variable inside the worker
-process and initialize it once when the process boots up.
+# we can't send the compiled Aho-Corasick automaton across process boundaries
+#  safely; instead, we use a global variable inside the worker process and
+#  initialize it once when the process boots up
 
-```python
 _WORKER_AUTOMATON: Automaton | None = None
 
 
@@ -885,7 +1043,7 @@ def _worker_scan(job: ScanJob) -> ScanResult:
         job=job,
     )
 
-# ... generate assets list
+assets: list[Asset] = ...
 
 # generate list of atomic jobs
 jobs = [
@@ -949,9 +1107,8 @@ for dep in dependencies[:3]:
 <!--[[[cog
 snips_main = snippets.extract('MAIN_EX_LINT_UNUSED')
 snips_prepend = [
-    snippets.extract('CLS_ASSET'),
-    snippets.extract('CLS_DEPENDENCY'),
-    [readme_snippets.Snippet.from_code('# ... generate dependencies list')]
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset", "Dependency"))],
+    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]", "dependencies: list[Dependency]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_lint_unused']
@@ -987,32 +1144,12 @@ the first room) might still get reported.
 Take the output of this with a grain of salt.
 
 ```python
-from dataclasses import dataclass
-from pathlib import Path
+class AssetType: ...
+class Asset: ...
+class Dependency: ...
 
-from clunkster.analyze import location as my_analyze_location
-from clunkster.asset import AssetType
-
-@dataclass(frozen=True, slots=True)
-class Asset:
-    """Simple asset definition."""
-
-    asset_type: AssetType
-    name: str
-    tree_path: tuple[str, ...]
-    cluster: str
-    files_to_scan: tuple[Path, ...]
-
-@dataclass(frozen=True, slots=True)
-class Dependency:
-    """Full dependency data to be used in graph building."""
-
-    location: my_analyze_location.BoundLocation
-    source_asset: Asset
-    target_asset: Asset
-    contexts: tuple[str, ...]
-
-# ... generate dependencies list
+assets: list[Asset] = ...
+dependencies: list[Dependency] = ...
 
 all_assets = {asset.name: asset for asset in assets}
 
@@ -1048,7 +1185,7 @@ for cluster, orphans in sorted(orphans_by_cluster.items()):
     print(f'\n=== {cluster} ===')
 
     # sort
-    orphans.sort(key=lambda a: (a.asset_type.name, a.name))
+    orphans.sort(key=lambda a: (a.asset_type.name, a.tree_path, a.name))
 
     for asset in orphans:
         print(
@@ -1065,8 +1202,8 @@ snips_main = snippets.extract('MAIN_EX_LINT_SIMPLE')
 snips_prepend = [
     snippets.extract('LINT_RULES'),
     snippets.extract('CONTEXT_RULES'),
-    snippets.extract('CLS_DEPENDENCY'),
-    [readme_snippets.Snippet.from_code('# ... generate dependencies list')]
+    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset", "Dependency"))],
+    [readme_snippets.Snippet.from_code(gen_stub_var("dependencies: list[Dependency]"))]
 ]
 snip_docs = readme_snippets.Snippet.from_md(
     docs['main_ex_lint']
@@ -1117,11 +1254,6 @@ guards must be defined in `CONTEXT_RULES`.
 whatever references a room doesn't really depend on it.
 
 ```python
-from dataclasses import dataclass
-
-from clunkster.analyze import location as my_analyze_location
-from clunkster.asset import AssetType
-
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
@@ -1135,16 +1267,11 @@ CONTEXT_RULES: dict[str, set[str]] = {
     # ...
 }
 
-@dataclass(frozen=True, slots=True)
-class Dependency:
-    """Full dependency data to be used in graph building."""
+class AssetType: ...
+class Asset: ...
+class Dependency: ...
 
-    location: my_analyze_location.BoundLocation
-    source_asset: Asset
-    target_asset: Asset
-    contexts: tuple[str, ...]
-
-# ... generate dependencies list
+dependencies: list[Dependency] = ...
 
 violations: dict[
     str,
