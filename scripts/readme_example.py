@@ -439,12 +439,27 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 refs=[
                     'CLS_ASSET_TYPE',
                     'CLS_ASSET',
-                    'CLUSTERABLE_BUILTINS',
+                    'CLUSTERABLE_ASSETS',
                     'PROJECT',
                     'MAIN_EX_START',
                 ],
             ),
             source_of_stubs=('CLS_ASSET_TYPE', 'CLS_ASSET'),
+        ),
+        Example(
+            'ex_lint_tree',
+            'Reading project',
+            'Lint: `tree.yyd` files',
+            content=exs.gen_freeform(
+                func_name='main_ex_lint_tree',
+                refs=[
+                    '!CLS_ASSET_TYPE',
+                    'CLUSTERABLE_ASSETS',
+                    'PROJECT',
+                    'MAIN_EX_LINT_TREE',
+                ],
+            ),
+            source_of_stubs=(),
         ),
         Example(
             'ex_clusters',

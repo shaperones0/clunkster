@@ -20,6 +20,15 @@ from clunkster.analyze import (
 )
 from clunkster.parse import tree as my_parse_tree
 
+# --- COG_START: TERMINAL_COLORS ---
+# terminal color for output
+TER_RED = '\033[91m'
+TER_GREEN = '\033[92m'
+TER_YELLOW = '\033[93m'
+TER_CYAN = '\033[96m'
+TER_RESET = '\033[0m'
+# --- COG_END: TERMINAL_COLORS ---
+
 # --- COG_START: CLS_ASSET_TYPE ---
 # asset_name, tree_path (asset name not appended)
 TreeEntry = tuple[str, tuple[str, ...]]
@@ -315,7 +324,7 @@ def main_ex_start() -> None:
 
     assets: list[Asset] = []
 
-    for asset_type in CLUSTERABLE_BUILTINS:
+    for asset_type in CLUSTERABLE_ASSETS:
         # check if given asset type exist in the project
         if not asset_type.exists(PROJECT):
             continue
@@ -337,6 +346,53 @@ def main_ex_start() -> None:
     # you should investigate the resulting array for inconsistencies
     print(f'Discovered {len(assets)} total assets.')
     # --- COG_END: MAIN_EX_START ---
+
+
+def main_ex_lint_tree() -> None:
+    """Check integrity of ``tree.yyd`` files.
+
+    Asset discovery and clusterization is based on scanning ``tree.yyd``
+    files, so we have to ensure that they have no duplicate folders.
+
+    Technically, before doing that you should also check that there are also
+    no duplicate asset names via broom icon on IDE toolbar.
+    """
+
+    # --- COG_START: MAIN_EX_LINT_TREE ---
+    def lint_file(tree_lines: col.Iterable[str]) -> None:
+        seen_children: dict[str, set[str]] = {}
+        total_duplicates = 0
+
+        for node in my_parse_tree.nodes(tree_lines):
+            # format the tuple into path string (e.g., "/Player/SkinA")
+            path_str = '/' + '/'.join(node.parent_path)
+
+            if path_str not in seen_children:
+                seen_children[path_str] = set()
+
+            if node.name in seen_children[path_str]:
+                print(
+                    f'Duplicate {"Folder" if node.is_folder else "Asset???"}: '
+                    f"'{node.name}' in {path_str} (Line {node.line_num})"
+                )
+                total_duplicates += 1
+            else:
+                seen_children[path_str].add(node.name)
+
+    for asset_type in CLUSTERABLE_ASSETS:
+        # check if given asset type exist in the project
+        if not asset_type.exists(PROJECT):
+            continue
+        # tree.yyd exists only for builtin assets
+        if not asset_type.is_builtin():
+            continue
+
+        # feed into the linter
+        tree_file = PROJECT / asset_type.get_dir() / 'tree.yyd'
+        print(f'Checking {tree_file} ...')
+        lint_file(tree_file.read_text(encoding='utf-8').splitlines())
+    # MD: If you got no duplicates messages in the output then you're all good.
+    # --- COG_END: MAIN_EX_LINT_TREE ---
 
 
 def main_ex_clusters() -> None:
@@ -971,6 +1027,9 @@ def main() -> None:
     if is_test:
         _run_tutorials()
     else:
+        main_ex_lint_tree()
+        return
+
         main_ex_aliases()
         # return
         assets = stage_discover_assets()

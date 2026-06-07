@@ -67,8 +67,9 @@ cog.outl('\n'.join(generate_toc()))
 * [Examples](#examples)
   * [1 - Reading project](#1---reading-project)
     * [Example 1.1 - Finding assets](#example-11---finding-assets)
-    * [Example 1.2 - Generating clusters](#example-12---generating-clusters)
-    * [Example 1.3 - Cluster aliasing](#example-13---cluster-aliasing)
+    * [Example 1.2 - Lint: `tree.yyd` files](#example-12---lint-treeyyd-files)
+    * [Example 1.3 - Generating clusters](#example-13---generating-clusters)
+    * [Example 1.4 - Cluster aliasing](#example-14---cluster-aliasing)
   * [2 - References](#2---references)
     * [Example 2.1 - Reference scanning](#example-21---reference-scanning)
     * [Example 2.2 - Reference scanning (fancier)](#example-22---reference-scanning-fancier)
@@ -211,7 +212,7 @@ class Asset:
     cluster: str
     files_to_scan: tuple[Path, ...]
 
-CLUSTERABLE_BUILTINS: tuple[AssetType, ...] = (
+CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
     AssetType.SPRITE,
     AssetType.BACKGROUND,
     AssetType.SOUND,
@@ -220,13 +221,15 @@ CLUSTERABLE_BUILTINS: tuple[AssetType, ...] = (
     AssetType.FONT,
     AssetType.OBJECT,
     AssetType.ROOM,
+    AssetType.DATA_SFX,
+    AssetType.DATA_MUSIC,
 )
 
 PROJECT = Path('path/to/the/project')
 
 assets: list[Asset] = []
 
-for asset_type in CLUSTERABLE_BUILTINS:
+for asset_type in CLUSTERABLE_ASSETS:
     # check if given asset type exist in the project
     if not asset_type.exists(PROJECT):
         continue
@@ -248,7 +251,75 @@ for asset_type in CLUSTERABLE_BUILTINS:
 # you should investigate the resulting array for inconsistencies
 print(f'Discovered {len(assets)} total assets.')
 ```
-### Example 1.2 - Generating clusters
+### Example 1.2 - Lint: `tree.yyd` files
+Check integrity of `tree.yyd` files.
+
+Asset discovery and clusterization is based on scanning `tree.yyd`
+files, so we have to ensure that they have no duplicate folders.
+
+Technically, before doing that you should also check that there are also
+no duplicate asset names via broom icon on IDE toolbar.
+
+```python
+import collections.abc as col
+from pathlib import Path
+
+from clunkster.parse import tree as my_parse_tree
+
+# see Example 1.1 - Finding assets
+class AssetType: ...
+
+CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
+    AssetType.SPRITE,
+    AssetType.BACKGROUND,
+    AssetType.SOUND,
+    AssetType.PATH,
+    AssetType.SCRIPT,
+    AssetType.FONT,
+    AssetType.OBJECT,
+    AssetType.ROOM,
+    AssetType.DATA_SFX,
+    AssetType.DATA_MUSIC,
+)
+
+PROJECT = Path('path/to/the/project')
+
+def lint_file(tree_lines: col.Iterable[str]) -> None:
+    seen_children: dict[str, set[str]] = {}
+    total_duplicates = 0
+
+    for node in my_parse_tree.nodes(tree_lines):
+        # format the tuple into path string (e.g., "/Player/SkinA")
+        path_str = '/' + '/'.join(node.parent_path)
+
+        if path_str not in seen_children:
+            seen_children[path_str] = set()
+
+        if node.name in seen_children[path_str]:
+            print(
+                f'Duplicate {"Folder" if node.is_folder else "Asset???"}: '
+                f"'{node.name}' in {path_str} (Line {node.line_num})"
+            )
+            total_duplicates += 1
+        else:
+            seen_children[path_str].add(node.name)
+
+for asset_type in CLUSTERABLE_ASSETS:
+    # check if given asset type exist in the project
+    if not asset_type.exists(PROJECT):
+        continue
+    # tree.yyd exists only for builtin assets
+    if not asset_type.is_builtin():
+        continue
+
+    # feed into the linter
+    tree_file = PROJECT / asset_type.get_dir() / 'tree.yyd'
+    print(f'Checking {tree_file} ...')
+    lint_file(tree_file.read_text(encoding='utf-8').splitlines())
+```
+
+If you got no duplicates messages in the output then you're all good.
+### Example 1.3 - Generating clusters
 Autogenerate clusters for the assets.
 
 Now that assets discovering works, we may generate clusters. By default,
@@ -344,7 +415,7 @@ for asset_type, clusters in asset_to_cluster.items():
 There's a chance of duplicates in result. Also, some of those
 "clusters" (like Backgrounds, or World, etc.) should be a part of
 Common cluster.
-### Example 1.3 - Cluster aliasing
+### Example 1.4 - Cluster aliasing
 Manually fix inconsistencies in cluster map.
 
 After we did initial scan, you may encounter inconsistencies like different
@@ -655,7 +726,7 @@ class AssetType: ...
 # see Example 1.1 - Finding assets
 class Asset: ...
 
-# see Example 1.3 - Cluster aliasing
+# see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
 
 automaton = Automaton()
@@ -717,7 +788,7 @@ class Dependency:
     target_asset: Asset
     contexts: tuple[str, ...]
 
-# see Example 1.3 - Cluster aliasing
+# see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
 
 automaton = Automaton()
@@ -852,7 +923,7 @@ def _worker_scan(job: ScanJob) -> ScanResult:
         job=job,
     )
 
-# see Example 1.3 - Cluster aliasing
+# see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
 
 # generate list of atomic jobs
@@ -937,7 +1008,7 @@ class Asset: ...
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
-# see Example 1.3 - Cluster aliasing
+# see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
 
 # see Example 2.2 - Reference scanning (fancier)
@@ -1211,8 +1282,8 @@ After that we may generate initial cluster map. In this step our goal is:
 
 See examples:
 
-- [[ex1.2](#example-12---generating-clusters)] generating initial cluster map
-- [[ex1.3](#example-13---cluster-aliasing)] fixing duplicate clusters via aliases
+- [[ex1.3](#example-13---generating-clusters)] generating initial cluster map
+- [[ex1.4](#example-14---cluster-aliasing)] fixing duplicate clusters via aliases
 
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
 
