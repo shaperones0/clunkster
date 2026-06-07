@@ -43,7 +43,12 @@ def scan(
             if start_idx > 0:
                 prev_char = text[start_idx - 1]
                 if prev_char.isalnum() or prev_char == '_':
-                    continue
+                    # allow the match if it is strictly part of an event header
+                    if (prev_char == '_' and text[start_idx - 18:start_idx] ==
+                            "#define Collision_"):
+                        pass
+                    else:
+                        continue
             if end_idx + 1 < len(text):
                 next_char = text[end_idx + 1]
                 if next_char.isalnum() or next_char == '_':
