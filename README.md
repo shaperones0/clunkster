@@ -813,9 +813,11 @@ automaton.make_automaton()
 total_matches = 0
 for asset in assets:
     for file_path in asset.files_to_scan:
+        text = file_path.read_text(encoding='utf-8')
         matches: list[my_analyze_scan_dep.DependencyMatch] = list(
             my_analyze_scan_dep.scan(
-                automaton, file_path.read_text(encoding='utf-8')
+                text,
+                automaton.iter(text),
             )
         )
 
@@ -906,9 +908,11 @@ scans = tuple(
 for asset, file_path in tqdm.tqdm(
     scans, total=len(scans), desc='Scanning'
 ):
+    text = file_path.read_text(encoding='utf-8')
     matches: list[my_analyze_scan_dep.DependencyMatch] = list(
         my_analyze_scan_dep.scan(
-            automaton, file_path.read_text(encoding='utf-8')
+            text,
+            automaton.iter(text),
         )
     )
 
@@ -1039,7 +1043,12 @@ def _worker_scan(job: ScanJob) -> ScanResult:
     text = job.file_path.read_text(encoding='utf-8')
 
     return ScanResult(
-        matches=list(my_analyze_scan_dep.scan(_WORKER_AUTOMATON, text)),
+        matches=list(
+            my_analyze_scan_dep.scan(
+                text,
+                _WORKER_AUTOMATON.iter(text),
+            )
+        ),
         job=job,
     )
 

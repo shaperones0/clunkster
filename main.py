@@ -265,7 +265,12 @@ def _worker_scan(job: ScanJob) -> ScanResult:
     text = job.file_path.read_text(encoding='utf-8')
 
     return ScanResult(
-        matches=list(my_analyze_scan_dep.scan(_WORKER_AUTOMATON, text)),
+        matches=list(
+            my_analyze_scan_dep.scan(
+                text,
+                _WORKER_AUTOMATON.iter(text),
+            )
+        ),
         job=job,
     )
 
@@ -626,9 +631,11 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
     total_matches = 0
     for asset in assets:
         for file_path in asset.files_to_scan:
+            text = file_path.read_text(encoding='utf-8')
             matches: list[my_analyze_scan_dep.DependencyMatch] = list(
                 my_analyze_scan_dep.scan(
-                    automaton, file_path.read_text(encoding='utf-8')
+                    text,
+                    automaton.iter(text),
                 )
             )
 
@@ -671,9 +678,11 @@ def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
     for asset, file_path in tqdm.tqdm(
         scans, total=len(scans), desc='Scanning'
     ):
+        text = file_path.read_text(encoding='utf-8')
         matches: list[my_analyze_scan_dep.DependencyMatch] = list(
             my_analyze_scan_dep.scan(
-                automaton, file_path.read_text(encoding='utf-8')
+                text,
+                automaton.iter(text),
             )
         )
 

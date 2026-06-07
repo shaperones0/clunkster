@@ -4,17 +4,16 @@ version = '0.1.0'
 description = 'Add your description here'
 readme = 'README.md'
 requires-python = '>=3.14'
-dependencies = [
-    'pyahocorasick>=2.3.1',
-    'rustworkx>=0.17.1',
-]
+dependencies = []
 
 [dependency-groups]
 dev = [
     'cogapp>=3.6.0',
     'deptry>=0.25.1',
+    "pyahocorasick>=2.3.1",
     'pytest>=9.0.3',
     'ruff>=0.15.14',
+    "rustworkx>=0.17.1",
     "tqdm>=4.67.3",
     'ty>=0.0.38',
 ]
@@ -122,7 +121,7 @@ ignore = [
 
 [tool.deptry.per_rule_ignores]
 DEP002 = [
-    'rustworkx'
+
 ]
 DEP001 = [
     'cog'
