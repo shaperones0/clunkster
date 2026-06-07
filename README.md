@@ -1,24 +1,27 @@
 # Clunkster
 
-Split assets into clusters (or chunks, packs, or whatever) to lighten the load. 
+GameMaker 8.2 optimization tools.
 
-You probably don't need assets from area A while playing or working on area B.
+Most of the tools depend heavily on asset clustering (i.e., assigning each asset to an isolated group like "StageA", "StageB", "Common", etc.), but some use it only to group console output.
 
-Given the many different circumstances of the projects this tool might be used on, it was organized as a set of "examples" that can be copied and modified for best effect. Useful functions that facilitate the core logic are provided as well.
+Given the architectural differences across GameMaker projects, Clunkster is organized as a set of "[examples](#examples)" that you can copy and modify. The library itself provides the functions that facilitate the core logic and handle engine-specific edge cases.
 
-However, you might want to address [Rationale](#rationale) and [Prerequisites](#prerequisites) to see if the tool fits your needs and your project.
+Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see if these tools fit your project's needs.
 
-Planned tools:
-- [x] Asset clusterizer based on folders in `tree.yyd` files (mostly helps other tools).
-- [ ] Dependency linter suite:
-  - [x] Unused assets
-  - [x] Cross-cluster reference
-  - [ ] Dependency graph analyzer
-- [ ] Dependency graph builder (constructs the list of assets that are "potentially used" in each room).
-- [ ] Dependency linter (things in a room from chunk A should not require things bound to chunk B).
-- [ ] Project crippler (replace assets with lightweight dummies for faster development)
-- [ ] Externator (generate external versions of assets and generate code for their loading)
-- [ ] Game splitter (run Externator, ensure rooms will have assets from their chunks loaded)
+Non-destructive tools:
+- Linter: unused assets detector
+- Linter: heavy assets detector (RAM & disk size)
+- Linter: cross-cluster reference boundary validator
+- (TODO) Linter: room indirect reference validator via dependency graph
+
+Lightly destructive tools:
+- (TODO) Backgrounds minifier: strip tilesets of all unused space
+- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/)
+
+Super destructive tools:
+- (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
+- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration-strategy-for-each-asset-type))
+
 
 ## TOC
 
@@ -1210,57 +1213,50 @@ for cluster, asset_errs in sorted(violations.items()):
 
 ## Rationale
 
-Game Maker 8.2 keeps the entire project in memory while open. The same goes for the `.exe` - the build process packs all resources into the executable, which are then unpacked and loaded during the initial loading screen.
+GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having issues at even 2.5 GB of RAM consumption.
 
-A 450 MB project can consume 1.13 GB of RAM in the IDE (which translates into time spent on "Saving the project", "Saving the executable", "Loading" when the game is booting up, and some more loading on the first frame if the game uses external sound effects)
+Also, such large projects take 10-15 seconds to build.
 
-The problem:
-- Hitting "Run test build" can take 10-15 seconds to get the game running.
-- The game itself consumes around 2.5 GB of RAM.
+To solve this, you can split the large project into logical clusters. You have "Common" assets (`Player`, `Block`, ...), and stage-specific assets (`bStageATiles`, `StageAPostProc`, ...). So, when game is in a room from stage A, it technically doesn't require assets from Stage B.
 
-### Dev solution
+To lighten the load, unneeded assets can be replaced with lightweight stubs right in the project.
 
-Most large projects naturally separate into logical clusters. You have "Common" assets (`Player`, `Block`, ...), and stage-specific assets (`bStageATiles`, `StageAPostProc`, ...). When dev is working on Stage A, they technically don't need assets from Stage B loaded in.
+For dev builds, the tool can nuke all assets except for ones from specified clusters. Optionally, the stubs can be made more noticeable:
+- sprites and backgrounds become pink-black checkerboards
+- sounds get replaced with buzz.wav and/or [fiddlesticks.mp3](https://developer.valvesoftware.com/wiki/Missing_content)
 
-The solution is to replace the unneeded assets with lightweight stubs. You specify the clusters you are actively working on (e.g. `["Common", "StageA"]`), and the tool will carve out the rest.
+Prod builds are similar, but we add dynamic loading. The project is copied, only Common cluster is kept in the base executable. The stage-specific assets are packaged into external files ("wet" versions). When the player enters a new stage, the game dynamically loads ("hydrates") the required assets from the disk. Optionally the stubs can be made less noticeable (though you probably should still make them loud):
+- sprites and backgrounds become 2x2 transparent
+- sounds get replaced with null.wav
 
-Once the feature is done, discard the destructive edits via Git.
+### Linters
 
-### Prod solution
+To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
-The same strategy applies to optimized production builds. The tool packages each cluster into external packs ("wet" versions) and replaces assets inside the project with stubs ("dry" versions). When player enters a room that should have clusters "Common" and "StageA" loaded in, the game checks which required assets are missing and dynamically loads them ("hydrates") from the external packs.
-
-_Though for now I haven't bothered with explicit unloading logic when leaving clusters._
-
-### Safety backbone (dependency linter)
-
-What happens if a developer accidentally references a `StageB` sprite inside a `StageA` object? At runtime, entering Stage A would produce unexpected behavior (in current implementation, stub sprites are pink-black checkerboards).
-
-To prevent this, a dependency linter is included. It builds dependency graph based on static `.gml` and meta file analysis. This results in sets of assets "referenced" (both directly and indirectly) in each room. The linter then yells at you if a room references something that it isn't explicitly marked to load.
+From those dependencies, the tool can:
+- find orphaned assets that are not referenced by anything
+- find assets that reference other assets in disallowed clusters
+- construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.
 
 ## Prerequisites
 
-0. Use this tool only if it's necessary.
-    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 2 GB of RAM and your project takes more than 10 seconds to build.
-1. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
-2. Follow good project keeping practices
-   - Keep asset names clean (press 🧹 icon on IDE's top toolbar to run required checks)
+1. Use this tool only if it's necessary.
+    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
+2. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
+3. Follow good project keeping practices
+   - Keep asset names clean (press broom icon on IDE's top toolbar to run required checks)
    - Keep assets belonging to certain stage in that stage's folder
    - Do not reference things from `stageA` in `stageB` objects (unless such an object is only placed in a room that guarantees both stages loaded)
    - Reference Common objects in Stage-specific, not the other way around
      - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
    - If an asset is shared between multiple stages, then it belongs in Common cluster
-3. Follow good coding practices
-    - no dynamic asset referencing tomfoolery (tool won't acknowledge those references when building dependency graph):
+4. Follow good coding practices
+    - no dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
       - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
-      - DON'T hide script calls behind variables: `script_execute(current_state_script)`
+      - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
 
-And some less ideological requirements:
-
-4. Use the modern project format (`.gm82`)
-5. Python 3.10+ (`uv` recommended)
-6. Close IDE before running the tool (or you'll get annoying popup (gross))
+Other than that, use the modern project format (`.gm82`) and Python 3.10+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
 ## Workflow
 
@@ -1270,13 +1266,19 @@ This is the workflow that I used for the project that this tool was initially ma
 
 Firstly, you should build the initial dependency scanning pipeline.
 
-This starts with parsing `tree.yyd` files in order to discover assets and generate initial cluster map. Therefore, in this step your goal is to:
+This starts with parsing `tree.yyd` files in order to discover assets and run initial checks to determine, what needs to be fixed before generating clusters.  generate initial cluster map. Therefore, in this step your goal is to:
 - ensure that stage assets are grouped in consistently named folders across all asset types
-- make aliases for folders that don't represent actual clusters (such as "Tiles" backgrounds or "Killers" objects)
 
 See examples: 
 - [1](#example-1---finding-assets) setting up asset discovery
 - [2](#example-2---external-assets-data) adding external assets (`data/`)
+
+After that we may generate initial cluster map. In this step our goal is:
+- assign clusters based on `tree.yyd` data
+- make aliases for folders that don't represent actual clusters (such as "Tiles" backgrounds or "Killers" objects)
+
+See examples:
+
 - [3](#example-3---generating-clusters) generating initial cluster map
 - [4](#example-4---cluster-aliasing) fixing duplicate clusters via aliases
 
