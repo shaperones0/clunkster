@@ -20,8 +20,11 @@ from clunkster.analyze import (
 )
 from clunkster.parse import tree as my_parse_tree
 
-
 # --- COG_START: CLS_ASSET_TYPE ---
+# asset_name, tree_path (asset name not appended)
+TreeEntry = tuple[str, tuple[str, ...]]
+
+
 class AssetType(Enum):
     """GameMaker8.2 asset type."""
 
@@ -50,6 +53,10 @@ class AssetType(Enum):
             AssetType.SOUND,
         }
 
+    def exists(self, project_root: Path) -> bool:
+        """Check whether this asset type exists in the project."""
+        return (project_root / self.get_dir()).exists()
+
     def get_dir(self) -> str:
         """Get project's directory name for given asset type."""
         return {
@@ -68,12 +75,7 @@ class AssetType(Enum):
     def get_scannables(
         self, asset_name: str, project_root: Path
     ) -> col.Iterator[Path]:
-        """Get scannable files for given asset type.
-
-        :param asset_name: Name of the asset.
-        :param project_root: Project root dir.
-        :return: List of scannable files.
-        """
+        """Get scannable files for given asset."""
         asset_dir = project_root / self.get_dir()
         match self:
             case AssetType.SCRIPT:
@@ -90,6 +92,25 @@ class AssetType(Enum):
                 dir_room = asset_dir / asset_name
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
+
+    def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
+        """Iterate asset tree of given asset type.
+
+        :param project_root: Project's root directory.
+        :return: Iterator of (asset_name, tree_path). The ``tree_path``
+          contains path in asset's respective "tree" structure: ``tree.yyd``
+          for builtin assets and filesystem tree of ``data/`` for external
+          assets. The asset name is not appended to ``tree_path``.
+        """
+        asset_dir = project_root / self.get_dir()
+        if self.is_builtin():
+            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+            return my_parse_tree.parse(tree_text.splitlines())
+        return (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+            if file.is_file()
+        )
 
 
 # --- COG_END: CLS_ASSET_TYPE ---
@@ -179,6 +200,7 @@ LINT_RULES: dict[str, set[str]] = {
 CONTEXT_RULES: dict[str, set[str]] = {
     'room_is_stageA': {'StageA'},
     'room_is_stageB': {'StageB'},
+    'room_is_final': {'StageX', 'StageY', 'StageZ'},
     # ...
 }
 # --- COG_END: CONTEXT_RULES ---
@@ -279,37 +301,36 @@ def _worker_scan(job: ScanJob) -> ScanResult:
 
 
 def main_ex_start() -> None:
-    """First, we want to check that builtin assets get scanned correctly."""
+    """First, we want to check that builtin assets get scanned correctly.
+
+    For this we define classes ``AssetType``, which houses logic
+    for navigating GameMaker's project structure, as well as ``Asset``,
+    which stores necessary information of the assets.
+
+    Logic in ``AssetType`` includes external assets, and expects them to
+    be present in specific directories. You might want to modify them, if
+    yours are different.
+    """
     # --- COG_START: MAIN_EX_START ---
 
     assets: list[Asset] = []
 
     for asset_type in CLUSTERABLE_BUILTINS:
-        # get project directory for the given asset type
-        asset_dir = PROJECT / asset_type.get_dir()
-        if not asset_dir.exists():
+        # check if given asset type exist in the project
+        if not asset_type.exists(PROJECT):
             continue
 
-        # iterate through tree.yyd file of the asset type
-
-        # we use tree.yyd as source of truth for later examples,
-        #  however, undesired results happen if tree.yyd has duplicate assets,
-        #  which it technically can have
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-
-        # parser for tree files is included (second argument is path to asset)
-        for asset_name, _path in my_parse_tree.parse(tree_text.splitlines()):
+        # iterate through tree.yyd file or direct fs structure
+        for asset_name, asset_path in asset_type.iter_tree(PROJECT):
             # we don't have clusters yet so we'll just set it to "Unknown"
-            # also skip the scanning part
+            scannables = asset_type.get_scannables(asset_name, PROJECT)
             assets.append(
                 Asset(
                     asset_type=asset_type,
                     name=asset_name,
-                    tree_path=_path,
+                    tree_path=asset_path,
                     cluster='Unknown',
-                    files_to_scan=tuple(
-                        asset_type.get_scannables(asset_name, PROJECT)
-                    ),
+                    files_to_scan=tuple(scannables),
                 )
             )
 
@@ -318,73 +339,11 @@ def main_ex_start() -> None:
     # --- COG_END: MAIN_EX_START ---
 
 
-def main_ex_start_externals() -> None:
-    """Populate assets with externals.
-
-    Some projects make use of external assets, such as for gm82snd.
-    In case of gm82snd, I have hardcoded it to look for music in ``data/music``
-    and for sounds in ``data/sounds``.
-    """
-    assets: list[Asset] = []
-
-    for asset_type in CLUSTERABLE_BUILTINS:
-        asset_dir = PROJECT / asset_type.get_dir()
-        if not asset_dir.exists():
-            continue
-
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        for asset_name, _path in my_parse_tree.parse(tree_text.splitlines()):
-            assets.append(
-                Asset(
-                    asset_type=asset_type,
-                    name=asset_name,
-                    tree_path=_path,
-                    cluster='Unknown',
-                    files_to_scan=tuple(
-                        asset_type.get_scannables(asset_name, PROJECT)
-                    ),
-                )
-            )
-
-    # --- COG_START: MAIN_EX_START_EXTERNALS_GIST ---
-    # ...
-
-    # add external data
-    for asset_type in CLUSTERABLE_EXTERNALS:
-        # you may want to manually map dir names if you don't use
-        #  data/sounds for sfx and data/music for bgm
-        asset_dir = PROJECT / asset_type.get_dir()
-        if not asset_dir.exists():
-            continue
-
-        # you may also want to set up a better glob filter here
-        for file in asset_dir.rglob('*'):
-            if not file.is_file():
-                continue
-
-            # gm82snd references sounds by their file stems as strings
-            asset_name = f'"{file.stem}"'
-            assets.append(
-                Asset(
-                    asset_type=asset_type,
-                    name=asset_name,
-                    tree_path=file.relative_to(PROJECT).parts[:-1],
-                    cluster='Unknown',
-                    files_to_scan=tuple(
-                        asset_type.get_scannables(asset_name, PROJECT)
-                    ),
-                )
-            )
-
-    # again, investigate the resulting array for inconsistencies
-    print(f'Discovered {len(assets)} total assets.')
-    # --- COG_END: MAIN_EX_START_EXTERNALS_GIST ---
-
-
 def main_ex_clusters() -> None:
     """Autogenerate clusters for the assets.
 
-    Now that assets discovering works, we may generate clusters.
+    Now that assets discovering works, we may generate clusters. By default,
+    those are assigned based on the first directory in trees.
     """
     # --- COG_START: MAIN_EX_CLUSTERS ---
     assets: list[Asset] = []
@@ -510,7 +469,7 @@ def stage_discover_assets() -> list[Asset]:
     return assets
 
 
-def main_ex_aliases() -> None:
+def main_ex_aliases() -> list[Asset]:
     """Manually fix inconsistencies in cluster map.
 
     After we did initial scan, you may encounter inconsistencies like different
@@ -606,6 +565,7 @@ def main_ex_aliases() -> None:
             f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
         )
     # --- COG_END: MAIN_EX_ALIASES ---
+    return assets
 
 
 def main_ex_scan_sync(assets: list[Asset]) -> None:
@@ -712,9 +672,9 @@ def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
 def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     """Multiprocessing scanner.
 
-    Projects this tool is intended for can have thousands of scripts and
-    metadata files. To speed up the scanning, we employ multiprocessing.
-    We divide all the scanning tasks across a pool of worker processes.
+    Multiprocessing can speed up scanning (but in practice it didn't - we
+    left this sample moreso as a reference). To do this, we can divide
+    the scanning tasks across a pool of worker processes.
 
     For this we must set up few additional methods - worker's "init" and
     worker "work".
@@ -742,6 +702,7 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     ) as executor:
         submits = {executor.submit(_worker_scan, job): job for job in jobs}
 
+        # feed into mp
         for future in tqdm.tqdm(
             futures.as_completed(submits),
             total=len(jobs),
@@ -749,6 +710,7 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
         ):
             result: ScanResult = future.result()
             total_matches += len(result.matches)
+            # convert results
             for match in result.matches:
                 loc = match.location
                 dependencies.append(
@@ -780,12 +742,73 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     return dependencies
 
 
-def main_ex_lint(dependencies: list[Dependency]) -> None:
-    """Validate dependencies based on simple matching.
+def main_ex_lint_unused(
+    dependencies: list[Dependency], assets: list[Asset]
+) -> None:
+    """Find and report assets that are never referenced by anything.
 
-    We simply iterate through the dependencies and validate lint rules
-    defined above, so this will filter out the majority of "stageA object
-    referenced stageB asset" cases.
+    Removing unused assets is a quick way to clean up a project.
+    We can do this with a simple set difference: Total Assets
+    minus Used Assets.
+
+    This will not catch isolated reference loops (e.g., A references B,
+    B references A, but neither is used by the main game).
+
+    Also, some things that are indirectly referenced by the engine (like
+    with rooms and ``room_goto_next()``) might still get reported.
+
+    Take the output of this with a grain of salt.
+    """
+    # --- COG_START: MAIN_EX_LINT_UNUSED ---
+    all_assets = {asset.name: asset for asset in assets}
+
+    # populate used set from dependencies
+    used_asset_names: set[str] = set()
+    for dep in dependencies:
+        # ignore self-references
+        if dep.source_asset.name == dep.target_asset.name:
+            continue
+        used_asset_names.add(dep.target_asset.name)
+
+    orphan_names = set(all_assets.keys()) - used_asset_names
+
+    orphans_by_cluster: dict[str, list[Asset]] = {}
+    total_orphans = 0
+
+    for name in orphan_names:
+        asset = all_assets[name]
+
+        orphans_by_cluster.setdefault(asset.cluster, []).append(asset)
+        total_orphans += 1
+
+    if total_orphans == 0:
+        print('\nProject is somehow clean - no orphaned assets found')
+        return
+
+    print(
+        f'\nFound {total_orphans} orphaned assets across '
+        f'{len(orphans_by_cluster)} clusters:'
+    )
+
+    for cluster, orphans in sorted(orphans_by_cluster.items()):
+        print(f'\n=== {cluster} ===')
+
+        # sort
+        orphans.sort(key=lambda a: (a.asset_type.name, a.tree_path, a.name))
+
+        for asset in orphans:
+            print(
+                f'[{asset.asset_type.name: <10}] {"/".join(asset.tree_path)}'
+                f'/{asset.name}'
+            )
+    # --- COG_END: MAIN_EX_LINT_UNUSED ---
+
+
+def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
+    """Validate cluster boundaries.
+
+    Simple check of clusters on both ends of dependency edge will filter
+    out the majority of "stageA object referenced stageB asset" cases.
 
     However, this iteration (and following linters) have a few special rules:
 
@@ -810,8 +833,11 @@ def main_ex_lint(dependencies: list[Dependency]) -> None:
     3. References to rooms are severed. Since the only way to meaningfully
     "reference" a room is to go there, for all intents and purposes reference
     whatever references a room doesn't really depend on it.
+
+    Make sure to fill in the ``LINT_RULES`` and ``CONTEXT_RULES`` - they'll
+    be used by future linters.
     """
-    # --- COG_START: MAIN_EX_LINT_SIMPLE ---
+    # --- COG_START: MAIN_EX_LINT_CROSSREF ---
     violations: dict[
         str,
         dict[str, list[str]],
@@ -874,74 +900,11 @@ def main_ex_lint(dependencies: list[Dependency]) -> None:
             print(f'[{asset_name}]')
             for err in errors:
                 print(f'  |-- {err}')
-    # --- COG_END: MAIN_EX_LINT_SIMPLE ---
-
-
-def main_ex_lint_unused(
-    dependencies: list[Dependency], assets: list[Asset]
-) -> None:
-    """Find and report assets that are never referenced by anything.
-
-    Finding unused assets is a quick way to clean up a project and reduce
-    compile times. We can do this with a simple set difference: Total Assets
-    minus Used Assets.
-
-    This will not catch isolated reference loops (e.g., A references B,
-    B references A, but neither is used by the main game).
-
-    Also, some things that are referenced only by the engine (like
-    the first room) might still get reported.
-
-    Take the output of this with a grain of salt.
-    """
-    # --- COG_START: MAIN_EX_LINT_UNUSED ---
-    all_assets = {asset.name: asset for asset in assets}
-
-    # populate used set from dependencies
-    used_asset_names: set[str] = set()
-    for dep in dependencies:
-        # ignore self-references
-        if dep.source_asset.name == dep.target_asset.name:
-            continue
-        used_asset_names.add(dep.target_asset.name)
-
-    orphan_names = set(all_assets.keys()) - used_asset_names
-
-    orphans_by_cluster: dict[str, list[Asset]] = {}
-    total_orphans = 0
-
-    for name in orphan_names:
-        asset = all_assets[name]
-
-        orphans_by_cluster.setdefault(asset.cluster, []).append(asset)
-        total_orphans += 1
-
-    if total_orphans == 0:
-        print('\nProject is somehow clean - no orphaned assets found')
-        return
-
-    print(
-        f'\nFound {total_orphans} orphaned assets across '
-        f'{len(orphans_by_cluster)} clusters:'
-    )
-
-    for cluster, orphans in sorted(orphans_by_cluster.items()):
-        print(f'\n=== {cluster} ===')
-
-        # sort
-        orphans.sort(key=lambda a: (a.asset_type.name, a.tree_path, a.name))
-
-        for asset in orphans:
-            print(
-                f'[{asset.asset_type.name: <10}] {"/".join(asset.tree_path)}'
-                f'/{asset.name}'
-            )
-    # --- COG_END: MAIN_EX_LINT_UNUSED ---
+    # --- COG_END: MAIN_EX_LINT_CROSSREF ---
 
 
 def _run_tutorials() -> None:
     main_ex_start()
-    main_ex_start_externals()
     main_ex_clusters()
     main_ex_aliases()
 

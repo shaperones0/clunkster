@@ -1,12 +1,20 @@
 """Generate table of contents out of md headings."""
 
+import collections.abc as col
 import re
 from pathlib import Path
 
-import cog  # ty: ignore[unresolved-import]
+
+def str_to_anchor(text: str) -> str:
+    """Convert string to Markdown anchor.
+
+    :param text: Text to convert.
+    :return: Safe anchor.
+    """
+    return re.sub(r'\s+', '-', re.sub(r'[^\w\-\s]', '', text.lower()))
 
 
-def generate_toc(filepath: str = 'README.md') -> None:
+def generate_toc(filepath: str = 'README.md') -> col.Iterator[str]:
     """Generate table of contents out of md headings.
 
     :param filepath: File to read headings from.
@@ -16,7 +24,6 @@ def generate_toc(filepath: str = 'README.md') -> None:
 
     in_code_block = False
     in_cog_block = False
-    toc_lines = []
 
     for line in lines:
         stripped_line = line.strip()
@@ -44,7 +51,7 @@ def generate_toc(filepath: str = 'README.md') -> None:
             title = match.group(2)
 
             # bruuuuuh
-            if title.lower() == 'toc':
+            if title.lower() in ['toc', 'clunkster']:
                 continue
 
             level = len(level_chars)
@@ -54,8 +61,4 @@ def generate_toc(filepath: str = 'README.md') -> None:
             anchor = title.lower()
             anchor = re.sub(r'[^\w\-\s]', '', anchor)
             anchor = re.sub(r'\s+', '-', anchor)
-            toc_lines.append(f'{indent}* [{title}](#{anchor})')
-
-    # output to Cog
-    for toc_line in toc_lines:
-        cog.outl(toc_line)
+            yield f'{indent}* [{title}](#{anchor})'

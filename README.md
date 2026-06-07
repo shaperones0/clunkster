@@ -1,5 +1,15 @@
 # Clunkster
 
+<!--[[[cog
+import sys
+sys.path.append("scripts")
+
+from scripts.readme_example import ExampleHeader, main_manager, gen_stub_cls, gen_stub_var
+
+exs, rend = main_manager()
+]]]-->
+<!--[[[end]]]-->
+
 GameMaker 8.2 optimization tools.
 
 Most of the tools depend heavily on asset clustering (i.e., assigning each asset to an isolated group like "StageA", "StageB", "Common", etc.), but some use it only to group console output.
@@ -8,10 +18,14 @@ Given the architectural differences across GameMaker projects, Clunkster is orga
 
 Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see if these tools fit your project's needs.
 
+<!--[[[cog
+# dum pogapp cant do inline inserts
+cog.outl(f"""
 Non-destructive tools:
-- Linter: unused assets detector
+- Linter: `tree.yyd` validator
+- Linter: unused assets detector (see {rend.href('ex_lint_unused')})
 - Linter: heavy assets detector (RAM & disk size)
-- Linter: cross-cluster reference boundary validator
+- Linter: cross-cluster reference boundary validator (see {rend.href('ex_lint_crossref')})
 - (TODO) Linter: room indirect reference validator via dependency graph
 
 Lightly destructive tools:
@@ -22,89 +36,71 @@ Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
 - (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration-strategy-for-each-asset-type))
 
+""")
+]]]-->
 
-## TOC
+Non-destructive tools:
+- Linter: `tree.yyd` validator
+- Linter: unused assets detector (see [ex2.4](#example-24---lint-unused-assets))
+- Linter: heavy assets detector (RAM & disk size)
+- Linter: cross-cluster reference boundary validator (see [ex2.5](#example-25---lint-cross-cluster-references))
+- (TODO) Linter: room indirect reference validator via dependency graph
+
+Lightly destructive tools:
+- (TODO) Backgrounds minifier: strip tilesets of all unused space
+- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/)
+
+Super destructive tools:
+- (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
+- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
+
+
+<!--[[[end]]]-->
+
+
+# TOC
 
 <!--[[[cog
-import sys
-sys.path.append("scripts")
-
-from scripts import readme_snippets, readme_imports, readme_docstring
-import itertools as it
-
-snippets = readme_snippets.SnippetExtractor.from_file_path('main.py')
-imports = readme_imports.ImportsFilter.from_file_path('main.py')
-docs = readme_docstring.extract_file('main.py')
-
-# stubs
-def gen_stub_cls(*names):
-    lines = []
-    for name in names:
-        lines.append(f"class {name}: ...")
-    return "\n".join(lines)
-
-def gen_stub_var(*names):
-    lines = []
-    for name in names:
-        lines.append(f"{name} = ...")
-    return "\n".join(lines)
-
 from readme_toc import generate_toc
-generate_toc()
+cog.outl('\n'.join(generate_toc()))
 ]]]-->
-* [Clunkster](#clunkster)
-  * [Examples](#examples)
-    * [Example 1 - Finding assets](#example-1---finding-assets)
-    * [Example 2 - External assets (`data/`)](#example-2---external-assets-data)
-    * [Example 3 - Generating clusters](#example-3---generating-clusters)
-    * [Example 4 - Cluster aliasing](#example-4---cluster-aliasing)
-    * [Example 5 - Reference scanning](#example-5---reference-scanning)
-    * [Example 6 - Reference scanning (fancy)](#example-6---reference-scanning-fancy)
-    * [Example 7 - Reference scanning (multiprocessing)](#example-7---reference-scanning-multiprocessing)
-    * [Example 8 - Simple Linter (unused assets)](#example-8---simple-linter-unused-assets)
-    * [Example 9 - Simple Linter (cross-cluster references)](#example-9---simple-linter-cross-cluster-references)
-  * [Rationale](#rationale)
-    * [Linters](#linters)
+* [Examples](#examples)
+  * [1 - Reading project](#1---reading-project)
+    * [Example 1.1 - Finding assets](#example-11---finding-assets)
+    * [Example 1.2 - Generating clusters](#example-12---generating-clusters)
+    * [Example 1.3 - Cluster aliasing](#example-13---cluster-aliasing)
+  * [2 - References](#2---references)
+    * [Example 2.1 - Reference scanning](#example-21---reference-scanning)
+    * [Example 2.2 - Reference scanning (fancier)](#example-22---reference-scanning-fancier)
+    * [Example 2.3 - Reference scanning (multiprocessing)](#example-23---reference-scanning-multiprocessing)
+    * [Example 2.4 - Lint: unused assets](#example-24---lint-unused-assets)
+    * [Example 2.5 - Lint: cross-cluster references](#example-25---lint-cross-cluster-references)
+* [Rationale](#rationale)
+  * [Linters](#linters)
   * [Prerequisites](#prerequisites)
   * [Workflow](#workflow)
     * [Preparation](#preparation)
-  * [Dehydration strategy for each asset type](#dehydration-strategy-for-each-asset-type)
+* [Dehydration](#dehydration)
 <!--[[[end]]]-->
 
-## Examples
+# Examples
 
 The following examples represent actual workflows. Copy and modify as needed.
 
-### Example 1 - Finding assets
-
 <!--[[[cog
-snips_main = snippets.extract('MAIN_EX_START')
-snips_prepend = [
-    snippets.extract('CLS_ASSET_TYPE'),
-    snippets.extract('CLS_ASSET'),
-    snippets.extract('CLUSTERABLE_BUILTINS'),
-    snippets.extract('PROJECT')
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_start']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
+cog.outl(rend.render())
 ]]]-->
+## 1 - Reading project
+### Example 1.1 - Finding assets
 First, we want to check that builtin assets get scanned correctly.
+
+For this we define classes `AssetType`, which houses logic
+for navigating GameMaker's project structure, as well as `Asset`,
+which stores necessary information of the assets.
+
+Logic in `AssetType` includes external assets, and expects them to
+be present in specific directories. You might want to modify them, if
+yours are different.
 
 ```python
 import collections.abc as col
@@ -113,6 +109,10 @@ from enum import Enum, auto
 from pathlib import Path
 
 from clunkster.parse import tree as my_parse_tree
+
+# asset_name, tree_path (asset name not appended)
+TreeEntry = tuple[str, tuple[str, ...]]
+
 
 class AssetType(Enum):
     """GameMaker8.2 asset type."""
@@ -142,6 +142,10 @@ class AssetType(Enum):
             AssetType.SOUND,
         }
 
+    def exists(self, project_root: Path) -> bool:
+        """Check whether this asset type exists in the project."""
+        return (project_root / self.get_dir()).exists()
+
     def get_dir(self) -> str:
         """Get project's directory name for given asset type."""
         return {
@@ -160,12 +164,7 @@ class AssetType(Enum):
     def get_scannables(
         self, asset_name: str, project_root: Path
     ) -> col.Iterator[Path]:
-        """Get scannable files for given asset type.
-
-        :param asset_name: Name of the asset.
-        :param project_root: Project root dir.
-        :return: List of scannable files.
-        """
+        """Get scannable files for given asset."""
         asset_dir = project_root / self.get_dir()
         match self:
             case AssetType.SCRIPT:
@@ -182,6 +181,25 @@ class AssetType(Enum):
                 dir_room = asset_dir / asset_name
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
+
+    def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
+        """Iterate asset tree of given asset type.
+
+        :param project_root: Project's root directory.
+        :return: Iterator of (asset_name, tree_path). The ``tree_path``
+          contains path in asset's respective "tree" structure: ``tree.yyd``
+          for builtin assets and filesystem tree of ``data/`` for external
+          assets. The asset name is not appended to ``tree_path``.
+        """
+        asset_dir = project_root / self.get_dir()
+        if self.is_builtin():
+            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+            return my_parse_tree.parse(tree_text.splitlines())
+        return (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+            if file.is_file()
+        )
 
 @dataclass(frozen=True, slots=True)
 class Asset:
@@ -209,145 +227,32 @@ PROJECT = Path('path/to/the/project')
 assets: list[Asset] = []
 
 for asset_type in CLUSTERABLE_BUILTINS:
-    # get project directory for the given asset type
-    asset_dir = PROJECT / asset_type.get_dir()
-    if not asset_dir.exists():
+    # check if given asset type exist in the project
+    if not asset_type.exists(PROJECT):
         continue
 
-    # iterate through tree.yyd file of the asset type
-
-    # we use tree.yyd as source of truth for later examples,
-    #  however, undesired results happen if tree.yyd has duplicate assets,
-    #  which it technically can have
-    tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-
-    # parser for tree files is included (second argument is path to asset)
-    for asset_name, _path in my_parse_tree.parse(tree_text.splitlines()):
+    # iterate through tree.yyd file or direct fs structure
+    for asset_name, asset_path in asset_type.iter_tree(PROJECT):
         # we don't have clusters yet so we'll just set it to "Unknown"
-        # also skip the scanning part
+        scannables = asset_type.get_scannables(asset_name, PROJECT)
         assets.append(
             Asset(
                 asset_type=asset_type,
                 name=asset_name,
-                tree_path=_path,
+                tree_path=asset_path,
                 cluster='Unknown',
-                files_to_scan=tuple(
-                    asset_type.get_scannables(asset_name, PROJECT)
-                ),
+                files_to_scan=tuple(scannables),
             )
         )
 
 # you should investigate the resulting array for inconsistencies
 print(f'Discovered {len(assets)} total assets.')
 ```
-<!--[[[end]]]-->
-
-### Example 2 - External assets (`data/`)
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_START_EXTERNALS_GIST')
-snips_prepend = [
-    # [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
-    snippets.extract('CLUSTERABLE_EXTERNALS'),
-    # snippets.extract('PROJECT'),
-    # [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_start_externals']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    # snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
-Populate assets with externals.
-
-Some projects make use of external assets, such as for gm82snd.
-In case of gm82snd, I have hardcoded it to look for music in `data/music`
-and for sounds in `data/sounds`.
-
-```python
-CLUSTERABLE_EXTERNALS: tuple[AssetType, ...] = (
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
-)
-
-# ...
-
-# add external data
-for asset_type in CLUSTERABLE_EXTERNALS:
-    # you may want to manually map dir names if you don't use
-    #  data/sounds for sfx and data/music for bgm
-    asset_dir = PROJECT / asset_type.get_dir()
-    if not asset_dir.exists():
-        continue
-
-    # you may also want to set up a better glob filter here
-    for file in asset_dir.rglob('*'):
-        if not file.is_file():
-            continue
-
-        # gm82snd references sounds by their file stems as strings
-        asset_name = f'"{file.stem}"'
-        assets.append(
-            Asset(
-                asset_type=asset_type,
-                name=asset_name,
-                tree_path=file.relative_to(PROJECT).parts[:-1],
-                cluster='Unknown',
-                files_to_scan=tuple(
-                    asset_type.get_scannables(asset_name, PROJECT)
-                ),
-            )
-        )
-
-# again, investigate the resulting array for inconsistencies
-print(f'Discovered {len(assets)} total assets.')
-```
-<!--[[[end]]]-->
-
-### Example 3 - Generating clusters
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_CLUSTERS')
-snips_prepend = [
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
-    snippets.extract('CLUSTERABLE_ASSETS'),
-    snippets.extract('PROJECT')
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_clusters']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+### Example 1.2 - Generating clusters
 Autogenerate clusters for the assets.
 
-Now that assets discovering works, we may generate clusters.
+Now that assets discovering works, we may generate clusters. By default,
+those are assigned based on the first directory in trees.
 
 ```python
 import collections.abc as col
@@ -356,6 +261,7 @@ from pathlib import Path
 from clunkster.parse import tree as my_parse_tree
 
 class AssetType: ...
+
 class Asset: ...
 
 CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
@@ -436,61 +342,7 @@ for asset_type, clusters in asset_to_cluster.items():
 There's a chance of duplicates in result. Also, some of those
 "clusters" (like Backgrounds, or World, etc.) should be a part of
 Common cluster.
-<!--[[[end]]]-->
-
-### Example 4 - Cluster aliasing
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_ALIAS_GIST_INVERT') + \
-    snippets.extract('MAIN_EX_ALIAS_GIST_ALIAS')
-snips_prepend = [
-    snippets.extract('ALIAS'),
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_aliases']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-
-cog.outl("\nFull example:\n")
-
-snips_main = snippets.extract('MAIN_EX_ALIASES')
-snips_prepend = [
-    snippets.extract('CLS_ASSET_TYPE'),
-    snippets.extract('CLS_ASSET'),
-    snippets.extract('ALIAS'),
-    snippets.extract('CLUSTERABLE_ASSETS'),
-    snippets.extract('PROJECT')
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_aliases']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+### Example 1.3 - Cluster aliasing
 Manually fix inconsistencies in cluster map.
 
 After we did initial scan, you may encounter inconsistencies like different
@@ -553,6 +405,10 @@ from pathlib import Path
 
 from clunkster.parse import tree as my_parse_tree
 
+# asset_name, tree_path (asset name not appended)
+TreeEntry = tuple[str, tuple[str, ...]]
+
+
 class AssetType(Enum):
     """GameMaker8.2 asset type."""
 
@@ -581,6 +437,10 @@ class AssetType(Enum):
             AssetType.SOUND,
         }
 
+    def exists(self, project_root: Path) -> bool:
+        """Check whether this asset type exists in the project."""
+        return (project_root / self.get_dir()).exists()
+
     def get_dir(self) -> str:
         """Get project's directory name for given asset type."""
         return {
@@ -599,12 +459,7 @@ class AssetType(Enum):
     def get_scannables(
         self, asset_name: str, project_root: Path
     ) -> col.Iterator[Path]:
-        """Get scannable files for given asset type.
-
-        :param asset_name: Name of the asset.
-        :param project_root: Project root dir.
-        :return: List of scannable files.
-        """
+        """Get scannable files for given asset."""
         asset_dir = project_root / self.get_dir()
         match self:
             case AssetType.SCRIPT:
@@ -621,6 +476,25 @@ class AssetType(Enum):
                 dir_room = asset_dir / asset_name
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
+
+    def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
+        """Iterate asset tree of given asset type.
+
+        :param project_root: Project's root directory.
+        :return: Iterator of (asset_name, tree_path). The ``tree_path``
+          contains path in asset's respective "tree" structure: ``tree.yyd``
+          for builtin assets and filesystem tree of ``data/`` for external
+          assets. The asset name is not appended to ``tree_path``.
+        """
+        asset_dir = project_root / self.get_dir()
+        if self.is_builtin():
+            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
+            return my_parse_tree.parse(tree_text.splitlines())
+        return (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+            if file.is_file()
+        )
 
 @dataclass(frozen=True, slots=True)
 class Asset:
@@ -753,35 +627,8 @@ if extra_aliases:
         f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
     )
 ```
-<!--[[[end]]]-->
-
-### Example 5 - Reference scanning
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_SCAN_SYNC')
-snips_prepend = [
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
-    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_scan_sync']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+## 2 - References
+### Example 2.1 - Reference scanning
 Simple scanner.
 
 Before running dependency builder we need to set up scanning
@@ -801,6 +648,7 @@ from ahocorasick import Automaton
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
 class AssetType: ...
+
 class Asset: ...
 
 assets: list[Asset] = ...
@@ -835,35 +683,7 @@ for asset in assets:
 
 print(f'\nDone! Found {total_matches} total dependency references.')
 ```
-<!--[[[end]]]-->
-
-### Example 6 - Reference scanning (fancy)
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_SCAN_SYNC2')
-snips_prepend = [
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
-    snippets.extract('CLS_DEPENDENCY'),
-    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_scan_sync2']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+### Example 2.2 - Reference scanning (fancier)
 Simple scanner with some extra stuff.
 
 We can add a progress bar + robust struct for storing our dependencies.
@@ -878,6 +698,7 @@ from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
 class AssetType: ...
+
 class Asset: ...
 
 @dataclass(frozen=True, slots=True)
@@ -936,44 +757,12 @@ for asset, file_path in tqdm.tqdm(
 
 print(f'\nDone! Found {total_matches} total dependency references.')
 ```
-<!--[[[end]]]-->
-
-### Example 7 - Reference scanning (multiprocessing)
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_SCAN_MP')
-snips_prepend = [
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset"))],
-    snippets.extract('CLS_SCAN_JOB'),
-    snippets.extract('CLS_DEPENDENCY'),
-    snippets.extract('REG_WORKERS_EXPLAIN'),
-    snippets.extract('REG_WORKERS'),
-    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_scan_mp']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+### Example 2.3 - Reference scanning (multiprocessing)
 Multiprocessing scanner.
 
-Projects this tool is intended for can have thousands of scripts and
-metadata files. To speed up the scanning, we employ multiprocessing.
-We divide all the scanning tasks across a pool of worker processes.
+Multiprocessing can speed up scanning (but in practice it didn't - we
+left this sample moreso as a reference). To do this, we can divide
+the scanning tasks across a pool of worker processes.
 
 For this we must set up few additional methods - worker's "init" and
 worker "work".
@@ -991,6 +780,7 @@ from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
 class AssetType: ...
+
 class Asset: ...
 
 @dataclass(frozen=True, slots=True)
@@ -1075,6 +865,7 @@ with futures.ProcessPoolExecutor(
 ) as executor:
     submits = {executor.submit(_worker_scan, job): job for job in jobs}
 
+    # feed into mp
     for future in tqdm.tqdm(
         futures.as_completed(submits),
         total=len(jobs),
@@ -1082,6 +873,7 @@ with futures.ProcessPoolExecutor(
     ):
         result: ScanResult = future.result()
         total_matches += len(result.matches)
+        # convert results
         for match in result.matches:
             loc = match.location
             dependencies.append(
@@ -1109,55 +901,30 @@ for dep in dependencies[:3]:
         f'(Line {loc.loc_line}, Col {loc.loc_column})'
     )
 ```
-<!--[[[end]]]-->
-
-### Example 8 - Simple Linter (unused assets)
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_LINT_UNUSED')
-snips_prepend = [
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset", "Dependency"))],
-    [readme_snippets.Snippet.from_code(gen_stub_var("assets: list[Asset]", "dependencies: list[Dependency]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_lint_unused']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
+### Example 2.4 - Lint: unused assets
 Find and report assets that are never referenced by anything.
 
-Finding unused assets is a quick way to clean up a project and reduce
-compile times. We can do this with a simple set difference: Total Assets
+Removing unused assets is a quick way to clean up a project.
+We can do this with a simple set difference: Total Assets
 minus Used Assets.
 
 This will not catch isolated reference loops (e.g., A references B,
 B references A, but neither is used by the main game).
 
-Also, some things that are referenced only by the engine (like
-the first room) might still get reported.
+Also, some things that are indirectly referenced by the engine (like
+with rooms and `room_goto_next()`) might still get reported.
 
 Take the output of this with a grain of salt.
 
 ```python
 class AssetType: ...
+
 class Asset: ...
+
 class Dependency: ...
 
 assets: list[Asset] = ...
+
 dependencies: list[Dependency] = ...
 
 all_assets = {asset.name: asset for asset in assets}
@@ -1202,42 +969,11 @@ for cluster, orphans in sorted(orphans_by_cluster.items()):
             f'/{asset.name}'
         )
 ```
-<!--[[[end]]]-->
+### Example 2.5 - Lint: cross-cluster references
+Validate cluster boundaries.
 
-### Example 9 - Simple Linter (cross-cluster references)
-
-<!--[[[cog
-snips_main = snippets.extract('MAIN_EX_LINT_SIMPLE')
-snips_prepend = [
-    snippets.extract('LINT_RULES'),
-    snippets.extract('CONTEXT_RULES'),
-    [readme_snippets.Snippet.from_code(gen_stub_cls("AssetType", "Asset", "Dependency"))],
-    [readme_snippets.Snippet.from_code(gen_stub_var("dependencies: list[Dependency]"))]
-]
-snip_docs = readme_snippets.Snippet.from_md(
-    docs['main_ex_lint']
-)
-snip_imports = readme_snippets.Snippet.from_code(
-    imports.filter_used_unparse(
-        snips_main[0].content,
-        *(
-            snip[0].content for snip in snips_prepend if snip[0].type == readme_snippets.SnippetType.PYTHON
-        )
-    )
-)
-
-cog.outl(readme_snippets.snippets_render(
-    snip_docs,
-    snip_imports,
-    *it.chain.from_iterable(snips_prepend),
-    *snips_main
-))
-]]]-->
-Validate dependencies based on simple matching.
-
-We simply iterate through the dependencies and validate lint rules
-defined above, so this will filter out the majority of "stageA object
-referenced stageB asset" cases.
+Simple check of clusters on both ends of dependency edge will filter
+out the majority of "stageA object referenced stageB asset" cases.
 
 However, this iteration (and following linters) have a few special rules:
 
@@ -1262,6 +998,9 @@ guards must be defined in `CONTEXT_RULES`.
 "reference" a room is to go there, for all intents and purposes reference
 whatever references a room doesn't really depend on it.
 
+Make sure to fill in the `LINT_RULES` and `CONTEXT_RULES` - they'll
+be used by future linters.
+
 ```python
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
@@ -1273,11 +1012,14 @@ LINT_RULES: dict[str, set[str]] = {
 CONTEXT_RULES: dict[str, set[str]] = {
     'room_is_stageA': {'StageA'},
     'room_is_stageB': {'StageB'},
+    'room_is_final': {'StageX', 'StageY', 'StageZ'},
     # ...
 }
 
 class AssetType: ...
+
 class Asset: ...
+
 class Dependency: ...
 
 dependencies: list[Dependency] = ...
@@ -1347,7 +1089,7 @@ for cluster, asset_errs in sorted(violations.items()):
 ```
 <!--[[[end]]]-->
 
-## Rationale
+# Rationale
 
 GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having issues at even 2.5 GB of RAM consumption.
 
@@ -1365,7 +1107,7 @@ Prod builds are similar, but we add dynamic loading. The project is copied, only
 - sprites and backgrounds become 2x2 transparent
 - sounds get replaced with null.wav
 
-### Linters
+## Linters
 
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
@@ -1392,7 +1134,7 @@ From those dependencies, the tool can:
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
 
-Other than that, use the modern project format (`.gm82`) and Python 3.10+ ([`uv`](https://docs.astral.sh/uv/) recommended).
+Other than that, use the modern project format (`.gm82`) and Python 3.12+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
 ## Workflow
 
@@ -1431,55 +1173,63 @@ See example:
 - [8](#example-8---simple-linter-unused-assets) finding unused assets (simple ver)
 - [8](#example-9---simple-linter-cross-cluster-references) finding cross-cluster references
 
-## Dehydration strategy for each asset type
+# Dehydration
 
 Following terms are used:
-- dehydrate: the process of stripping the asset from the project.
-- store-dry: how the stripped asset is represented inside resuling build (stubs).
+- prepare: the process of stripping the asset from the project.
+- store-dry-prod: how the stripped asset is represented inside resulting prod build (invisible stubs).
+- store-dry-dev: how the stripped asset is represented inside resulting dev build (stubs that yell loudly when referenced).
 - store-wet: how the actual data is stored externally.
 - hydrate: the process of dynamically loading wet assets back into memory at runtime.
+- dehydrate: the process of unloading the assets from memory at runtime.
 
 ___
 
 **Backgrounds**: impactful, high priority.
-- dehydrate: TODO find a way to generate `.gmbck` files
-- store-dry: pink-black checkerboard with transparent padding
-- store-wet: `.gmbck` files
-- hydrate: use `background_replace_background` to load externally
+- prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmbck` files.
+- store-dry-prod: transparent 2x2.
+- store-dry-dev: pink-black checkerboard with transparent padding
+- store-wet: `.gmbck` files.
+- hydrate: use `background_replace_background` to load externally.
+- dehydrate: use `background_replace_background` to replace back with dry stub.
 ____
-**Fonts**: aren't numerous enough to be impactful, and difficult.
+**Fonts**: not numerous enough to be impactful, difficult.
 ____
-**Objects**: moderately impactful, risky (and difficult).
+**Objects**: slightly impactful, risky (and difficult).
 ____
-**Paths**: aren't impactful.
+**Paths**: not impactful.
 ____
 **Room**: impactful, risky.
-- dehydrate: 
+- prepare: 
   - read instances.txt, tiles and each object creation code, 
   - turn them into scripts that add them back in via `room_instance_add` (don't forget their respective globalvars) 
   - and `room_tile_add`, 
   - generate objects for each room instance creation code to be run on room start.
-- store-dry: blank room with a single stub object (to raise errors).
+- store-dry-prod: blank room that tries to load its assets? TODO idk.
+- store-dry-dev: blank room with a single stub object (to raise errors).
 - store-wet: aforementioned script and object.
 - hydrate: run the scripts, add the room start object as well.
+- dehydrate: `room_instance_clear`, `room_tile_clear`.
 ____
 **Scripts**: impossible to create dynamically.
 ____
 **Sprites**: impactful, high priority.
-- dehydrate: TODO find a way to generate `.gmspr` files
-- store-dry: pink-black checkerboard with transparent padding
-- store-wet: `.gmspr` files
-- hydrate: use `sprite_replace_sprite` to load externally
+- prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmspr` files
+- store-dry-prod: transparent 2x2 with same number of frames as original.
+- store-dry-dev: pink-black checkerboard with transparent padding.
+- store-wet: `.gmspr` files.
+- hydrate: use `sprite_replace_sprite` to load externally.
+- dehydrate: use `sprite_replace_sprite` to replace back with dry stub.
 ____
 **Sounds**: very impactful, TODO.
 ____
 **Data**: Sounds and Music: impactful, high priority.
-- dehydrate: 
-  - iterate through all sounds, 
-  - put sounds from same cluster-set into WASD packs, 
-  - generate a script that loads every existing sound as `null.wav` (or `buzz.wav`) via `sound_add_ext`,
-   generate a script that would load said WASD pack
-- store-dry: those live as `null.wav` files.
-- store-wet: WASD pack.
-- hydrate: run the WASD loader script.
-
+- prepare:
+  - put sounds from same cluster into their folders, 
+  - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
+  - generate a script that would load said WASD pack.
+- store-dry-dev: `buzz.wav` for sounds and `fiddlesticks.mp3` for music.
+- store-dry-prod: `null.wav` files.
+- store-wet: just files sitting in their folders.
+- hydrate: run the loader script.
+- dehydrate: replace back with stubs.

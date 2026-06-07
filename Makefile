@@ -32,6 +32,7 @@ test-cov: ## Run tests and print a terminal coverage report
 .PHONY: readme
 readme:	## Autogen in readme (examples and whatnot)
 	@cog -r README.md
+	@cog -r README.md
 
 .PHONY: check
 check: format lint test readme ## Run all local checks, fixes, and tests
