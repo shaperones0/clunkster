@@ -43,10 +43,18 @@ class ExampleHeader:
     idx_major: int
     idx_minor: int
 
-    def _header(self) -> str:
+    def header_full(self) -> str:
+        """Generate example's full title.
+
+        :return: Example's title.
+        """
         return f'Example {self.idx_major}.{self.idx_minor} - {self.header}'
 
-    def _header_mini(self) -> str:
+    def header_mini(self) -> str:
+        """Generate example's minified title.
+
+        :return: Example's minified title.
+        """
         return f'ex{self.idx_major}.{self.idx_minor}'
 
     def render_header(self) -> str:
@@ -54,7 +62,7 @@ class ExampleHeader:
 
         :return: Generated Markdown string.
         """
-        return f'### {self._header()}'
+        return f'### {self.header_full()}'
 
     def render_href(self, text: str | None = None) -> str:
         """Render a link to this example.
@@ -63,8 +71,8 @@ class ExampleHeader:
         :return:
         """
         if text is None:
-            text = self._header_mini()
-        return f'[{text}](#{str_to_anchor(self._header())})'
+            text = self.header_mini()
+        return f'[{text}](#{str_to_anchor(self.header_full())})'
 
 
 ExampleContent = tuple[Snippet, ...]
@@ -78,6 +86,7 @@ class Example:
     header_section: str
     header_title: str
     content: ExampleContent
+    source_of_stubs: tuple[str, ...]
 
 
 class ExampleManager:
@@ -100,9 +109,10 @@ class ExampleManager:
         self.imports = imports
         self.docs = docs
 
+        # stub's snippet name to replacement str
         self.stubs: dict[str, str] = {}
-
-        self.examples: dict[str, Example] = {}
+        # stub's snippet name to source example short name
+        self.stub_to_src_example: dict[str, str] = {}
 
     @classmethod
     def from_file_path(cls, file_path: str) -> Self:
@@ -125,6 +135,16 @@ class ExampleManager:
         """
         self.stubs[snippet_name] = stub
 
+    def stub_register_source(
+        self, snippet_name: str, source_example_name: str
+    ) -> None:
+        """Register stub's source example name.
+
+        :param snippet_name: Stub's snippet name.
+        :param source_example_name: Source example name.
+        """
+        self.stub_to_src_example[snippet_name] = source_example_name
+
     def _process_refs(
         self, refs: col.Iterable[str]
     ) -> col.Iterator[tuple[Snippet, ...]]:
@@ -132,7 +152,12 @@ class ExampleManager:
             if ref.isupper():
                 if ref[0] == '!':
                     # paste stub by name
-                    yield (Snippet.from_code(self.stubs[ref[1:]]),)
+                    snip_name = ref[1:]
+                    stub_code = self.stubs[snip_name]
+                    if snip_name in self.stub_to_src_example:
+                        ex_name = self.stub_to_src_example[snip_name]
+                        stub_code = f'# see {ex_name}\n{stub_code}'
+                    yield (Snippet.from_code(stub_code),)
 
                 else:
                     # paste snippet by name
@@ -223,11 +248,13 @@ class RenderableSectionTitle(Renderable):
 class RenderableHeader(Renderable):
     """Renderable example header."""
 
-    def __init__(self, header: ExampleHeader) -> None:
+    def __init__(self, name: str, header: ExampleHeader) -> None:
         """Create renderable header from example header.
 
-        :param header:
+        :param name: Example name.
+        :param header: Example header.
         """
+        self.name = name
         self.header = header
 
     def render(self) -> str:
@@ -262,15 +289,25 @@ class ExampleRenderer:
     def __init__(
         self,
         renderables: list[Renderable],
-        name2header: dict[str, ExampleHeader],
+        name2header_idx: dict[str, int],
     ) -> None:
         """Create an example renderer.
 
         :param renderables: Sequence of renderables.
-        :param name2header: Example name to its header index.
+        :param name2header_idx: Example name to its header index.
         """
         self.renderables = renderables
-        self.name2header = name2header
+        self.name2header_idx = name2header_idx
+
+    def _reindex(self) -> None:
+        name2header_idx: dict[str, int] = {}
+        for idx, renderable in enumerate(self.renderables):
+            if not isinstance(renderable, RenderableHeader):
+                continue
+            if renderable.name in name2header_idx:
+                raise ValueError(f'Duplicate header name {renderable.name}')
+            name2header_idx[renderable.name] = idx
+        self.name2header_idx = name2header_idx
 
     @classmethod
     def from_examples(cls, examples: list[Example]) -> Self:
@@ -284,7 +321,7 @@ class ExampleRenderer:
         sections: set[str] = set()
         title_count = 0
         last_section: str | None = None
-        name2header: dict[str, ExampleHeader] = {}
+        name2header_idx: dict[str, int] = {}
 
         for example in examples:
             cur_section = example.header_section
@@ -309,13 +346,38 @@ class ExampleRenderer:
                 idx_major=len(sections),
                 idx_minor=title_count,
             )
-            if example.name in name2header:
+            if example.name in name2header_idx:
                 raise ValueError(f'Duplicate example name {example.name}')
-            name2header[example.name] = header
-            renderables.append(RenderableHeader(header))
+            name2header_idx[example.name] = len(renderables)
+            renderables.append(RenderableHeader(example.name, header))
             renderables.append(RenderableContent(example.content))
 
-        return cls(renderables=renderables, name2header=name2header)
+        return cls(renderables=renderables, name2header_idx=name2header_idx)
+
+    def get_renderable_at[T: Renderable](
+        self, idx: int, cls_rend: type[T]
+    ) -> T:
+        """Get the renderable at given index.
+
+        :param idx: Index to get renderable at.
+        :param cls_rend: Preferred type of the renderable.
+        :return: Found renderable at given index.
+        :raises TypeError: Found renderable did not match requested type.
+        """
+        renderable = self.renderables[idx]
+        if not isinstance(renderable, cls_rend):
+            raise TypeError(f'Renderable at {idx} is not {cls_rend.__name__}')
+        return renderable
+
+    def get_example_header(self, example_name: str) -> RenderableHeader:
+        """Get example's header renderable.
+
+        :param example_name: Name of the example to look for.
+        :return: Example's renderable header.
+        """
+        return self.get_renderable_at(
+            self.name2header_idx[example_name], RenderableHeader
+        )
 
     def href(self, name: str, text: str | None = None) -> str:
         """Generate a Markdown link to specified example.
@@ -325,7 +387,17 @@ class ExampleRenderer:
           example's heading.
         :return: Rendered link.
         """
-        return self.name2header[name].render_href(text)
+        return self.get_example_header(name).header.render_href(text)
+
+    def insert_content(self, after_idx: int, content: ExampleContent) -> None:
+        """Insert new content after index.
+
+        Invalidates indexes.
+        :param after_idx: Index to insert new content after.
+        :param content: Content to insert.
+        """
+        self.renderables.insert(after_idx, RenderableContent(content))
+        self._reindex()
 
     def render(self) -> str:
         """Render the examples.
@@ -335,20 +407,29 @@ class ExampleRenderer:
         return '\n'.join(bit.render() for bit in self.renderables)
 
 
-def main_manager(
-    file_path: str = 'main.py',
-) -> tuple[ExampleManager, ExampleRenderer]:
-    """Generate example manager and renderer for our project.."""
-    exs = ExampleManager.from_file_path(file_path)
-    exs.stub_register('CLS_ASSET_TYPE', gen_stub_cls('AssetType'))
-    exs.stub_register('CLS_ASSET', gen_stub_cls('Asset'))
-    exs.stub_register('CLS_DEPENDENCY', gen_stub_cls('Dependency'))
-    exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
-    exs.stub_register(
-        'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')
-    )
+def examples_find_stubs(examples: list[Example]) -> dict[str, Example]:
+    """Parse example list into source for each stub.
 
-    examples: list[Example] = [
+    :param examples: Examples list.
+    :return: Dictionary of stub's snippet name to example where
+      this stub is taken from.
+    """
+    stubs: dict[str, Example] = {}
+    for example in examples:
+        for stub in example.source_of_stubs:
+            if stub in stubs:
+                raise ValueError(
+                    f'Multiple examples ({stubs[stub].name} and '
+                    f'{example.name}) marked themselves as sources of '
+                    f'stub {stub}'
+                )
+            stubs[stub] = example
+    return stubs
+
+
+def main_examples(exs: ExampleManager) -> list[Example]:
+    """Generate examples."""
+    return [
         Example(
             'ex_start',
             'Reading project',
@@ -363,6 +444,7 @@ def main_manager(
                     'MAIN_EX_START',
                 ],
             ),
+            source_of_stubs=('CLS_ASSET_TYPE', 'CLS_ASSET'),
         ),
         Example(
             'ex_clusters',
@@ -378,6 +460,7 @@ def main_manager(
                     'MAIN_EX_CLUSTERS',
                 ],
             ),
+            source_of_stubs=(),
         ),
         Example(
             'ex_aliases',
@@ -408,6 +491,7 @@ def main_manager(
                     ),
                 )
             ),
+            source_of_stubs=('VAR_ASSETS',),
         ),
         Example(
             'ex_scan_sync',
@@ -422,6 +506,7 @@ def main_manager(
                     'MAIN_EX_SCAN_SYNC',
                 ],
             ),
+            source_of_stubs=(),
         ),
         Example(
             'ex_scan_sync2',
@@ -437,6 +522,7 @@ def main_manager(
                     'MAIN_EX_SCAN_SYNC2',
                 ],
             ),
+            source_of_stubs=('CLS_DEPENDENCY', 'VAR_DEPS'),
         ),
         Example(
             'ex_scan_mp',
@@ -455,6 +541,7 @@ def main_manager(
                     'MAIN_EX_SCAN_MP',
                 ],
             ),
+            source_of_stubs=(),
         ),
         Example(
             'ex_lint_unused',
@@ -471,6 +558,7 @@ def main_manager(
                     'MAIN_EX_LINT_UNUSED',
                 ],
             ),
+            source_of_stubs=(),
         ),
         Example(
             'ex_lint_crossref',
@@ -488,9 +576,39 @@ def main_manager(
                     'MAIN_EX_LINT_CROSSREF',
                 ],
             ),
+            source_of_stubs=(
+                'LINT_RULES',
+                'CONTEXT_RULES',
+            ),
         ),
     ]
 
+
+def main_manager(
+    file_path: str = 'main.py',
+) -> tuple[ExampleManager, ExampleRenderer]:
+    """Generate example manager and renderer for our project."""
+    exs = ExampleManager.from_file_path(file_path)
+    exs.stub_register('CLS_ASSET_TYPE', gen_stub_cls('AssetType'))
+    exs.stub_register('CLS_ASSET', gen_stub_cls('Asset'))
+    exs.stub_register('CLS_DEPENDENCY', gen_stub_cls('Dependency'))
+    exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
+    exs.stub_register(
+        'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')
+    )
+
+    # define examples (first pass)
+    examples: list[Example] = main_examples(exs)
+    rend = ExampleRenderer.from_examples(examples)
+
+    # get stubs
+    stub_dict = examples_find_stubs(examples)
+    for stub_snip_name, stub_example in stub_dict.items():
+        header = rend.get_example_header(stub_example.name)
+        exs.stub_register_source(stub_snip_name, header.header.header_full())
+
+    # second pass, now with stubs
+    examples = main_examples(exs)
     rend = ExampleRenderer.from_examples(examples)
 
     return exs, rend

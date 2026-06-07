@@ -34,7 +34,7 @@ Lightly destructive tools:
 
 Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration-strategy-for-each-asset-type))
+- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
 
 """)
 ]]]-->
@@ -260,8 +260,10 @@ from pathlib import Path
 
 from clunkster.parse import tree as my_parse_tree
 
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
 CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
@@ -647,10 +649,13 @@ from ahocorasick import Automaton
 
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 automaton = Automaton()
@@ -697,8 +702,10 @@ from ahocorasick import Automaton
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
 @dataclass(frozen=True, slots=True)
@@ -710,6 +717,7 @@ class Dependency:
     target_asset: Asset
     contexts: tuple[str, ...]
 
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 automaton = Automaton()
@@ -779,8 +787,10 @@ from ahocorasick import Automaton
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
 @dataclass(frozen=True, slots=True)
@@ -842,6 +852,7 @@ def _worker_scan(job: ScanJob) -> ScanResult:
         job=job,
     )
 
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 # generate list of atomic jobs
@@ -917,14 +928,19 @@ with rooms and `room_goto_next()`) might still get reported.
 Take the output of this with a grain of salt.
 
 ```python
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
+# see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
+# see Example 2.2 - Reference scanning (fancier)
 dependencies: list[Dependency] = ...
 
 all_assets = {asset.name: asset for asset in assets}
@@ -1016,12 +1032,16 @@ CONTEXT_RULES: dict[str, set[str]] = {
     # ...
 }
 
+# see Example 1.1 - Finding assets
 class AssetType: ...
 
+# see Example 1.1 - Finding assets
 class Asset: ...
 
+# see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
+# see Example 2.2 - Reference scanning (fancier)
 dependencies: list[Dependency] = ...
 
 violations: dict[
@@ -1134,7 +1154,7 @@ From those dependencies, the tool can:
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
 
-Other than that, use the modern project format (`.gm82`) and Python 3.12+ ([`uv`](https://docs.astral.sh/uv/) recommended).
+Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
 ## Workflow
 
