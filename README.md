@@ -1162,14 +1162,16 @@ This is the workflow that I used for the project that this tool was initially ma
 
 ### Preparation
 
+<!--[[[cog
+# dum pogapp cant do inline inserts
+cog.outl(f"""
 Firstly, you should build the initial dependency scanning pipeline.
 
 This starts with parsing `tree.yyd` files in order to discover assets and run initial checks to determine, what needs to be fixed before generating clusters.  generate initial cluster map. Therefore, in this step your goal is to:
 - ensure that stage assets are grouped in consistently named folders across all asset types
 
 See examples: 
-- [1](#example-1---finding-assets) setting up asset discovery
-- [2](#example-2---external-assets-data) adding external assets (`data/`)
+- [{rend.href('ex_start')}] setting up asset discovery
 
 After that we may generate initial cluster map. In this step our goal is:
 - assign clusters based on `tree.yyd` data
@@ -1177,21 +1179,55 @@ After that we may generate initial cluster map. In this step our goal is:
 
 See examples:
 
-- [3](#example-3---generating-clusters) generating initial cluster map
-- [4](#example-4---cluster-aliasing) fixing duplicate clusters via aliases
+- [{rend.href('ex_clusters')}] generating initial cluster map
+- [{rend.href('ex_aliases')}] fixing duplicate clusters via aliases
 
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
 
 See examples:
-- [5](#example-5---reference-scanning) simple references generator 
-- [6](#example-6---reference-scanning-fancy) reference generator with better struct and progressbar :3
-- [7](#example-7---reference-scanning-multiprocessing) multiprocessing reference generator
+- [{rend.href('ex_scan_sync')}] simple references generator 
+- [{rend.href('ex_scan_sync2')}] reference generator with better struct and progressbar :3
+- [{rend.href('ex_scan_mp')}] multiprocessing reference generator
 
 Once that's done you may start with some initial cleaning. Basic linter can find most violations just by checking each dependency on presence of cross-cluster references.
 
 See example:
-- [8](#example-8---simple-linter-unused-assets) finding unused assets (simple ver)
-- [8](#example-9---simple-linter-cross-cluster-references) finding cross-cluster references
+- [{rend.href('ex_lint_unused')}] finding unused assets (simple ver)
+- [{rend.href('ex_lint_crossref')}] finding cross-cluster references
+""")
+]]]-->
+
+Firstly, you should build the initial dependency scanning pipeline.
+
+This starts with parsing `tree.yyd` files in order to discover assets and run initial checks to determine, what needs to be fixed before generating clusters.  generate initial cluster map. Therefore, in this step your goal is to:
+- ensure that stage assets are grouped in consistently named folders across all asset types
+
+See examples: 
+- [[ex1.1](#example-11---finding-assets)] setting up asset discovery
+
+After that we may generate initial cluster map. In this step our goal is:
+- assign clusters based on `tree.yyd` data
+- make aliases for folders that don't represent actual clusters (such as "Tiles" backgrounds or "Killers" objects)
+
+See examples:
+
+- [[ex1.2](#example-12---generating-clusters)] generating initial cluster map
+- [[ex1.3](#example-13---cluster-aliasing)] fixing duplicate clusters via aliases
+
+Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
+
+See examples:
+- [[ex2.1](#example-21---reference-scanning)] simple references generator 
+- [[ex2.2](#example-22---reference-scanning-fancier)] reference generator with better struct and progressbar :3
+- [[ex2.3](#example-23---reference-scanning-multiprocessing)] multiprocessing reference generator
+
+Once that's done you may start with some initial cleaning. Basic linter can find most violations just by checking each dependency on presence of cross-cluster references.
+
+See example:
+- [[ex2.4](#example-24---lint-unused-assets)] finding unused assets (simple ver)
+- [[ex2.5](#example-25---lint-cross-cluster-references)] finding cross-cluster references
+
+<!--[[[end]]]-->
 
 # Dehydration
 
