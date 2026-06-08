@@ -28,6 +28,10 @@ def scan(
      across the given text.
     :return: Dependency edges.
     """
+    if '//!clunkster: ignore' in text:
+        # don't process this file
+        return
+
     gml_index = my_parse_gml.GmlIndex.from_text(text)
     gml_line_map = my_analyze_location.SourceLineMap.from_text(text)
 

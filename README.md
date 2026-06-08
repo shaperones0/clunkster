@@ -765,6 +765,11 @@ In later steps we will artificially add some unreflected dependencies
 such manipulations should not be done on resulting dependency list,
 but rather later, by injecting edges inside graph build process.
 
+Also, for pure data registry scripts (like `sound_balance`), which,
+technically reference every asset, but don't instantiate them,
+we added a special directive: `//!clunkster: ignore`. Add it any
+GML scripts that should be skipped.
+
 This is a simple synchronous code, but in real projects scanning
 might take up 5-10 seconds.
 
@@ -1261,9 +1266,11 @@ a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
 `reachability_map:dict[str,set[str]]`
 
 ```python
+import sys
 from dataclasses import dataclass
 
 import rustworkx as rx
+import tqdm
 
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
@@ -1347,23 +1354,31 @@ def build_graph(
 # group rooms by their allowed clusters
 cluster_groups: dict[frozenset[str], list[str]] = {}
 
-print("Room's allowed clusters:")
 for asset_room in assets:
     if asset_room.asset_type != AssetType.ROOM:
         continue
     allowed_clusters = LINT_RULES.get(
         asset_room.cluster, {asset_room.cluster, 'Common'}
     )
-    print(f'{asset_room.name} -> {" ".join(sorted(allowed_clusters))}')
     cluster_groups.setdefault(frozenset(allowed_clusters), []).append(
         asset_room.name
     )
 
+print('Clusterset to rooms:')
+for cluster_set, rooms in cluster_groups.items():
+    print(*cluster_set)
+    for room in rooms:
+        print(' ', room)
+    print()
+
 room_graph_data: dict[str, RoomGraph] = {}
 
 # process clustersets
+print('Building graphs:')
+clusterset_names_len = max(
+    len(' '.join(cluster_set)) for cluster_set in cluster_groups
+)
 for cluster_set, rooms in cluster_groups.items():
-    print('Generating graph for clusterset:', *list(cluster_set))
     graph, name_to_index = build_graph(set(cluster_set))
 
     # resolve persistent root indices
@@ -1371,13 +1386,15 @@ for cluster_set, rooms in cluster_groups.items():
         name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
     ]
 
-    for room_name in rooms:
+    task_name = ' '.join(sorted(cluster_set)).rjust(clusterset_names_len)
+
+    for room_name in tqdm.tqdm(
+        rooms, desc=task_name, leave=True, file=sys.stdout
+    ):
         if room_name not in name_to_index:
             continue
 
         room_idx = name_to_index[room_name]
-
-        print(f'  Finding reachable assets for {room_name}...', end=' ')
 
         # get direct descendants
         reachable_indices = rx.descendants(graph, room_idx)
@@ -1388,8 +1405,6 @@ for cluster_set, rooms in cluster_groups.items():
 
             # add the thing itself
             reachable_indices.add(p_idx)
-
-        print(f'found {len(reachable_indices)} total')
 
         reachable_names = {graph[idx] for idx in reachable_indices}
         room_graph_data[room_name] = RoomGraph(
@@ -1622,11 +1637,12 @@ From those dependencies, the tool can:
    - DON'T use timelines
    - Minimize usage of persistent objects (they get tagged as referenced in every existing room)
 4. Follow good coding practices
-    - no dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
+    - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
       - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
       - ^ That rule includes assigning assets to constants
+    - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like ``sound_balance``), which only reference assets but don't instantiate them
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 

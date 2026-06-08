@@ -4,6 +4,7 @@ import collections
 import collections.abc as col
 import json
 import multiprocessing as mp
+import sys
 import time
 import warnings
 from concurrent import futures
@@ -703,6 +704,11 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
     such manipulations should not be done on resulting dependency list,
     but rather later, by injecting edges inside graph build process.
 
+    Also, for pure data registry scripts (like ``sound_balance``), which,
+    technically reference every asset, but don't instantiate them,
+    we added a special directive: ``//!clunkster: ignore``. Add it any
+    GML scripts that should be skipped.
+
     This is a simple synchronous code, but in real projects scanning
     might take up 5-10 seconds.
 
@@ -1106,23 +1112,31 @@ def main_ex_graph(
     # group rooms by their allowed clusters
     cluster_groups: dict[frozenset[str], list[str]] = {}
 
-    print("Room's allowed clusters:")
     for asset_room in assets:
         if asset_room.asset_type != AssetType.ROOM:
             continue
         allowed_clusters = LINT_RULES.get(
             asset_room.cluster, {asset_room.cluster, 'Common'}
         )
-        print(f'{asset_room.name} -> {" ".join(sorted(allowed_clusters))}')
         cluster_groups.setdefault(frozenset(allowed_clusters), []).append(
             asset_room.name
         )
 
+    print('Clusterset to rooms:')
+    for cluster_set, rooms in cluster_groups.items():
+        print(*cluster_set)
+        for room in rooms:
+            print(' ', room)
+        print()
+
     room_graph_data: dict[str, RoomGraph] = {}
 
     # process clustersets
+    print('Building graphs:')
+    clusterset_names_len = max(
+        len(' '.join(cluster_set)) for cluster_set in cluster_groups
+    )
     for cluster_set, rooms in cluster_groups.items():
-        print('Generating graph for clusterset:', *list(cluster_set))
         graph, name_to_index = build_graph(set(cluster_set))
 
         # resolve persistent root indices
@@ -1130,13 +1144,15 @@ def main_ex_graph(
             name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
         ]
 
-        for room_name in rooms:
+        task_name = ' '.join(sorted(cluster_set)).rjust(clusterset_names_len)
+
+        for room_name in tqdm.tqdm(
+            rooms, desc=task_name, leave=True, file=sys.stdout
+        ):
             if room_name not in name_to_index:
                 continue
 
             room_idx = name_to_index[room_name]
-
-            print(f'  Finding reachable assets for {room_name}...', end=' ')
 
             # get direct descendants
             reachable_indices = rx.descendants(graph, room_idx)
@@ -1147,8 +1163,6 @@ def main_ex_graph(
 
                 # add the thing itself
                 reachable_indices.add(p_idx)
-
-            print(f'found {len(reachable_indices)} total')
 
             reachable_names = {graph[idx] for idx in reachable_indices}
             room_graph_data[room_name] = RoomGraph(
@@ -1370,13 +1384,13 @@ def main() -> None:
 
         deps = main_ex_scan_sync2(assets)
 
-        main_ex_lint_unused(deps, assets)
-        # main_ex_lint_crossref(deps)
+        # main_ex_lint_unused(deps, assets)
+        main_ex_lint_crossref(deps)
 
-        room_data = main_ex_graph(assets, deps)
+        # room_data = main_ex_graph(assets, deps)
 
         # main_ex_lint_unused_graph(assets, room_data)
-        main_ex_lint_crossref_graph(assets, room_data)
+        # main_ex_lint_crossref_graph(assets, room_data)
 
 
 if __name__ == '__main__':
