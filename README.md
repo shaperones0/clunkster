@@ -76,6 +76,8 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 2.3 - Reference scanning (multiprocessing)](#example-23---reference-scanning-multiprocessing)
     * [Example 2.4 - Lint: unused assets](#example-24---lint-unused-assets)
     * [Example 2.5 - Lint: cross-cluster references](#example-25---lint-cross-cluster-references)
+  * [3 - Dependency graph](#3---dependency-graph)
+    * [Example 3.1 - Generate set of used assets in each room](#example-31---generate-set-of-used-assets-in-each-room)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -183,6 +185,14 @@ class AssetType(Enum):
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
 
+    def file_tree(self, project_root: Path) -> Path:
+        """Get tree.yyd for this asset type."""
+        return project_root / self.get_dir() / 'tree.yyd'
+
+    def file_index(self, project_root: Path) -> Path:
+        """Get index.yyd for this asset type."""
+        return project_root / self.get_dir() / 'index.yyd'
+
     def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
         """Iterate asset tree of given asset type.
 
@@ -261,9 +271,11 @@ Technically, before doing that you should also check that there are also
 no duplicate asset names via broom icon on IDE toolbar.
 
 ```python
+import collections
 import collections.abc as col
 from pathlib import Path
 
+from clunkster.parse import index as my_parse_index
 from clunkster.parse import tree as my_parse_tree
 
 # see Example 1.1 - Finding assets
@@ -284,7 +296,7 @@ CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
 
 PROJECT = Path('path/to/the/project')
 
-def lint_file(tree_lines: col.Iterable[str]) -> None:
+def lint_tree(tree_lines: col.Iterable[str]) -> None:
     seen_children: dict[str, set[str]] = {}
     total_duplicates = 0
 
@@ -304,6 +316,8 @@ def lint_file(tree_lines: col.Iterable[str]) -> None:
         else:
             seen_children[path_str].add(node.name)
 
+# check that there are no duplicates
+asset_names: set[str] = set()
 for asset_type in CLUSTERABLE_ASSETS:
     # check if given asset type exist in the project
     if not asset_type.exists(PROJECT):
@@ -312,10 +326,35 @@ for asset_type in CLUSTERABLE_ASSETS:
     if not asset_type.is_builtin():
         continue
 
+    # get assets from index, validate uniqueness
+    assets_from_index = list(
+        my_parse_index.parse_skimmed(
+            asset_type.file_index(PROJECT).read_text().splitlines()
+        )
+    )
+    assets_set = set(assets_from_index)
+    if len(assets_from_index) != len(assets_set):
+        dupes = [
+            item
+            for item, count in collections.Counter(
+                assets_from_index
+            ).items()
+            if count > 1
+        ]
+        raise ValueError(
+            f'Duplicate assets in one type: {" ".join(dupes)}'
+        )
+    inters = asset_names.intersection(assets_set)
+    if inters:
+        raise ValueError(
+            f'Duplicate assets across multiple types: {" ".join(inters)}'
+        )
+    asset_names.update(assets_set)
+
     # feed into the linter
     tree_file = PROJECT / asset_type.get_dir() / 'tree.yyd'
     print(f'Checking {tree_file} ...')
-    lint_file(tree_file.read_text(encoding='utf-8').splitlines())
+    lint_tree(tree_file.read_text(encoding='utf-8').splitlines())
 ```
 
 If you got no duplicates messages in the output then you're all good.
@@ -549,6 +588,14 @@ class AssetType(Enum):
                 dir_room = asset_dir / asset_name
                 yield from dir_room.glob('*.txt')
                 yield from dir_room.glob('*.gml')
+
+    def file_tree(self, project_root: Path) -> Path:
+        """Get tree.yyd for this asset type."""
+        return project_root / self.get_dir() / 'tree.yyd'
+
+    def file_index(self, project_root: Path) -> Path:
+        """Get index.yyd for this asset type."""
+        return project_root / self.get_dir() / 'index.yyd'
 
     def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
         """Iterate asset tree of given asset type.
@@ -1037,24 +1084,26 @@ for name in orphan_names:
 
 if total_orphans == 0:
     print('\nProject is somehow clean - no orphaned assets found')
-    return
+else:
+    print(
+        f'\nFound {total_orphans} orphaned assets across '
+        f'{len(orphans_by_cluster)} clusters:'
+    )
 
-print(
-    f'\nFound {total_orphans} orphaned assets across '
-    f'{len(orphans_by_cluster)} clusters:'
-)
+    for cluster, orphans in sorted(orphans_by_cluster.items()):
+        print(f'\n=== {cluster} ===')
 
-for cluster, orphans in sorted(orphans_by_cluster.items()):
-    print(f'\n=== {cluster} ===')
-
-    # sort
-    orphans.sort(key=lambda a: (a.asset_type.name, a.tree_path, a.name))
-
-    for asset in orphans:
-        print(
-            f'[{asset.asset_type.name: <10}] {"/".join(asset.tree_path)}'
-            f'/{asset.name}'
+        # sort
+        orphans.sort(
+            key=lambda a: (a.asset_type.name, a.tree_path, a.name)
         )
+
+        for asset in orphans:
+            print(
+                f'[{asset.asset_type.name: <10}] '
+                f'{"/".join(asset.tree_path)}'
+                f'/{asset.name}'
+            )
 ```
 ### Example 2.5 - Lint: cross-cluster references
 Validate cluster boundaries.
@@ -1163,20 +1212,137 @@ for dep in dependencies:
 # output linting report
 if total_violations == 0:
     print('\nClear!!!')
-    return
+else:
+    print(
+        f'\nFound {total_violations} dependency violations '
+        f'across {len(violations)} clusters:'
+    )
 
-print(
-    f'\nFound {total_violations} dependency violations '
-    f'across {len(violations)} clusters:'
-)
+    for cluster, asset_errs in sorted(violations.items()):
+        print(f'\n=== {cluster} ===')
 
-for cluster, asset_errs in sorted(violations.items()):
-    print(f'\n=== {cluster} ===')
+        for asset_name, errors in sorted(asset_errs.items()):
+            print(f'[{asset_name}]')
+            for err in errors:
+                print(f'  |-- {err}')
+```
+## 3 - Dependency graph
+### Example 3.1 - Generate set of used assets in each room
+Build dependency graph.
 
-    for asset_name, errors in sorted(asset_errs.items()):
-        print(f'[{asset_name}]')
-        for err in errors:
-            print(f'  |-- {err}')
+Now that we have all dependency edges we may now do more complicated
+tracing via building graphs (for which I use rustworkx). Our main
+application of this graph would be finding a set of used assets in
+each room, to feed into linters.
+
+There's one limitation, however. Our context guards depend on the current
+room being processed. This means that we would have to modify the edges
+to match each room. To do this cleanly, we group rooms by their cluster
+sets.
+
+```python
+import rustworkx as rx
+
+# see Example 2.5 - Lint: cross-cluster references
+LINT_RULES: dict[str, set[str]] = ...
+
+# see Example 2.5 - Lint: cross-cluster references
+CONTEXT_RULES: dict[str, set[str]] = ...
+
+# see Example 1.1 - Finding assets
+class AssetType: ...
+
+# see Example 1.1 - Finding assets
+class Asset: ...
+
+# see Example 2.2 - Reference scanning (fancier)
+class Dependency: ...
+
+# see Example 1.4 - Cluster aliasing
+assets: list[Asset] = ...
+
+# see Example 2.2 - Reference scanning (fancier)
+dependencies: list[Dependency] = ...
+
+def build_graph(
+    active_clusters: set[str],
+) -> tuple[rx.PyDiGraph, dict[str, int]]:
+    g = rx.PyDiGraph()
+
+    asset_name2index: dict[str, int] = {}
+
+    for asset in assets:
+        # add_node() returns the rx's assigned node id
+        asset_name2index[asset.name] = g.add_node(asset.name)
+
+    e = 0
+    for dep in dependencies:
+        source_idx = asset_name2index[dep.source_asset.name]
+        target_idx = asset_name2index[dep.target_asset.name]
+
+        # delete references to rooms
+        if dep.target_asset.asset_type == AssetType.ROOM:
+            continue
+
+        # context guards (nested guards intersect)
+        if dep.contexts:
+            edge_can_execute = True
+
+            for raw_ctx in dep.contexts:
+                # get granted clusters for guard
+
+                # room must satisfy this guard to proceed deeper into
+                #   the nested guards
+                granted_clusters = CONTEXT_RULES.get(raw_ctx)
+                if granted_clusters and not active_clusters.intersection(
+                    granted_clusters
+                ):
+                    edge_can_execute = False
+                    break
+
+            if not edge_can_execute:
+                continue
+
+        e += 1
+        g.add_edge(source_idx, target_idx, None)
+
+    return g, asset_name2index
+
+# group rooms by their allowed clusters
+cluster_groups: dict[frozenset[str], list[str]] = {}
+
+print("Room's allowed clusters:")
+for asset_room in assets:
+    if asset_room.asset_type != AssetType.ROOM:
+        continue
+    allowed_clusters = LINT_RULES.get(
+        asset_room.cluster, {asset_room.cluster, 'Common'}
+    )
+    print(f'{asset_room.name} -> {" ".join(sorted(allowed_clusters))}')
+    cluster_groups.setdefault(frozenset(allowed_clusters), []).append(
+        asset_room.name
+    )
+
+reachability_map: dict[str, set[str]] = {}
+
+# process clustersets
+for cluster_set, rooms in cluster_groups.items():
+    print('Generating graph for clusterset:', *list(cluster_set))
+    graph, name_to_index = build_graph(set(cluster_set))
+
+    for room_name in rooms:
+        if room_name not in name_to_index:
+            continue
+
+        room_idx = name_to_index[room_name]
+
+        print(f'  Finding reachable assets for {room_name}...', end=' ')
+        # rustworkx BFS
+        reachable_indices = rx.descendants(graph, room_idx)
+        print(f'found {len(reachable_indices)} total')
+
+        reachable_names = {graph[idx] for idx in reachable_indices}
+        reachability_map[room_name] = reachable_names
 ```
 <!--[[[end]]]-->
 

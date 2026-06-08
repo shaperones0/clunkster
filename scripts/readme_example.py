@@ -596,6 +596,25 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 'CONTEXT_RULES',
             ),
         ),
+        Example(
+            'ex_graph',
+            'Dependency graph',
+            'Generate set of used assets in each room',
+            content=exs.gen_freeform(
+                func_name='main_ex_graph',
+                refs=[
+                    '!LINT_RULES',
+                    '!CONTEXT_RULES',
+                    '!CLS_ASSET_TYPE',
+                    '!CLS_ASSET',
+                    '!CLS_DEPENDENCY',
+                    '!VAR_ASSETS',
+                    '!VAR_DEPS',
+                    'MAIN_EX_GRAPH',
+                ],
+            ),
+            source_of_stubs=('VAR_REACHABILITY',),
+        ),
     ]
 
 
@@ -610,6 +629,16 @@ def main_manager(
     exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
     exs.stub_register(
         'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')
+    )
+    exs.stub_register(
+        'LINT_RULES', gen_stub_var('LINT_RULES: dict[str, set[str]]')
+    )
+    exs.stub_register(
+        'CONTEXT_RULES', gen_stub_var('CONTEXT_RULES: dict[str, set[str]]')
+    )
+    exs.stub_register(
+        'VAR_REACHABILITY',
+        gen_stub_var('reachability_map: dict[str, set[str]]'),
     )
 
     # define examples (first pass)
