@@ -1199,7 +1199,14 @@ for dep in dependencies:
     # expand permissions based on script guards
     for ctx in dep.contexts:
         if ctx in CONTEXT_RULES:
-            allowed_targets.update(CONTEXT_RULES[ctx])
+            granted_primaries = CONTEXT_RULES[ctx]
+
+            # look up what the primary cluster knows
+            for primary in granted_primaries:
+                expanded_permissions = LINT_RULES.get(
+                    primary, {primary, 'Common'}
+                )
+                allowed_targets.update(expanded_permissions)
 
     # check for structural violations
     if target.cluster not in allowed_targets:
