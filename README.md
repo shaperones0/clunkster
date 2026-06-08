@@ -78,6 +78,7 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 2.5 - Lint: cross-cluster references](#example-25---lint-cross-cluster-references)
   * [3 - Dependency graph](#3---dependency-graph)
     * [Example 3.1 - Generate set of used assets in each room](#example-31---generate-set-of-used-assets-in-each-room)
+    * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -757,6 +758,12 @@ for the actual dependencies.
 We compile Aho-Corasick automaton to quickly scan every text
 (script or metadata file) in the project for asset references.
 
+Found asset references precisely reflect occurences in static code.
+In later steps we will artificially add some unreflected dependencies
+(such as persistent object existing potentially in every room). But
+such manipulations should not be done on resulting dependency list,
+but rather later, by injecting edges inside graph build process.
+
 This is a simple synchronous code, but in real projects scanning
 might take up 5-10 seconds.
 
@@ -1240,6 +1247,12 @@ room being processed. This means that we would have to modify the edges
 to match each room. To do this cleanly, we group rooms by their cluster
 sets.
 
+Also notice that World object (which is typically spawned only in
+the first room of the game, but persists for all rooms) might get
+only considered to exist in their spawn room. You should mark such
+ubiquitous assets as `EXTRA_ROOTS`, so they get artificially added into
+the reachability sets.
+
 ```python
 import rustworkx as rx
 
@@ -1248,6 +1261,11 @@ LINT_RULES: dict[str, set[str]] = ...
 
 # see Example 2.5 - Lint: cross-cluster references
 CONTEXT_RULES: dict[str, set[str]] = ...
+
+EXTRA_ROOTS: set[str] = {
+    'World'
+    # ...
+}
 
 # see Example 1.1 - Finding assets
 class AssetType: ...
@@ -1330,6 +1348,11 @@ for cluster_set, rooms in cluster_groups.items():
     print('Generating graph for clusterset:', *list(cluster_set))
     graph, name_to_index = build_graph(set(cluster_set))
 
+    # resolve persistent root indices
+    persistent_idx = [
+        name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
+    ]
+
     for room_name in rooms:
         if room_name not in name_to_index:
             continue
@@ -1337,12 +1360,100 @@ for cluster_set, rooms in cluster_groups.items():
         room_idx = name_to_index[room_name]
 
         print(f'  Finding reachable assets for {room_name}...', end=' ')
-        # rustworkx BFS
+
+        # get direct descendants
         reachable_indices = rx.descendants(graph, room_idx)
+        # inject persistent stuff
+        for p_idx in persistent_idx:
+            # add descendants of persistent stuff
+            reachable_indices.update(rx.descendants(graph, p_idx))
+
+            # add the thing itself
+            reachable_indices.add(p_idx)
+
         print(f'found {len(reachable_indices)} total')
 
         reachable_names = {graph[idx] for idx in reachable_indices}
         reachability_map[room_name] = reachable_names
+```
+### Example 3.2 - Lint: unreachable assets
+Identify unreachable assets.
+
+With our newly build reachability map we can indentify which assets are
+never referenced in any room. This would solve closed loops we've
+been skipping over in simpler linter.
+
+```python
+import collections
+
+# see Example 2.5 - Lint: cross-cluster references
+LINT_RULES: dict[str, set[str]] = ...
+
+# see Example 2.5 - Lint: cross-cluster references
+CONTEXT_RULES: dict[str, set[str]] = ...
+
+# see Example 3.1 - Generate set of used assets in each room
+EXTRA_ROOTS: set[str] = ...
+
+# see Example 1.1 - Finding assets
+class AssetType: ...
+
+# see Example 1.1 - Finding assets
+class Asset: ...
+
+# see Example 2.2 - Reference scanning (fancier)
+class Dependency: ...
+
+# see Example 1.4 - Cluster aliasing
+assets: list[Asset] = ...
+
+# see Example 2.2 - Reference scanning (fancier)
+dependencies: list[Dependency] = ...
+
+# see Example 3.1 - Generate set of used assets in each room
+reachability_map: dict[str, set[str]] = ...
+
+# master set
+all_used_names: set[str] = set()
+
+# add reachable descendants
+for reachable_set in reachability_map.values():
+    all_used_names.update(reachable_set)
+
+# we must explicitly add the Rooms themselves (edges to them
+#  were severed in the previous step)
+all_used_names.update(
+    asset.name for asset in assets if asset.asset_type == AssetType.ROOM
+)
+
+unused_assets: list[Asset] = [
+    asset for asset in assets if asset.name not in all_used_names
+]
+
+if not unused_assets:
+    print('\nOmg Clear?!!')
+else:
+    print(f'Found {len(unused_assets)} unreachable assets!')
+
+    # group by cluster
+    grouped_unused: dict[str, list[Asset]] = collections.defaultdict(list)
+    for asset in unused_assets:
+        grouped_unused[asset.cluster].append(asset)
+
+    for cluster, dead_assets in sorted(grouped_unused.items()):
+        print(f'=== {cluster} ===')
+
+        for asset in sorted(
+            dead_assets,
+            key=lambda a: (a.asset_type.name, a.tree_path, a.name),
+        ):
+            print(
+                f'[{asset.asset_type.name: <10}] '
+                f'{"/".join(asset.tree_path)}'
+                f'/{asset.name}'
+            )
+
+        print()
 ```
 <!--[[[end]]]-->
 
@@ -1385,11 +1496,14 @@ From those dependencies, the tool can:
    - Reference Common objects in Stage-specific, not the other way around
      - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
    - If an asset is shared between multiple stages, then it belongs in Common cluster
+   - DON'T use timelines
+   - Minimize usage of persistent objects (they get tagged as referenced in every existing room)
 4. Follow good coding practices
     - no dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
       - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
+      - ^ That rule includes assigning assets to constants
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 

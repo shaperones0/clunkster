@@ -225,6 +225,18 @@ CONTEXT_RULES: dict[str, set[str]] = {
     # ...
 }
 # --- COG_END: CONTEXT_RULES ---
+# --- COG_START: EXTRA_ROOTS_EXPLAIN ---
+# MD: Some things exist throughout the entire game, but reachability
+# MD: builder will only consider them existing only in the room they were
+# MD: spawned in. Which might severe connections defined in World objects.
+# MD: You should address such cases below.
+# --- COG_END: EXTRA_ROOTS_EXPLAIN ---
+# --- COG_START: EXTRA_ROOTS ---
+EXTRA_ROOTS: set[str] = {
+    'World'
+    # ...
+}
+# --- COG_END: EXTRA_ROOTS ---
 
 # --- COG_START: PROJECT ---
 PROJECT = Path('path/to/the/project')
@@ -672,6 +684,12 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
     We compile Aho-Corasick automaton to quickly scan every text
     (script or metadata file) in the project for asset references.
 
+    Found asset references precisely reflect occurences in static code.
+    In later steps we will artificially add some unreflected dependencies
+    (such as persistent object existing potentially in every room). But
+    such manipulations should not be done on resulting dependency list,
+    but rather later, by injecting edges inside graph build process.
+
     This is a simple synchronous code, but in real projects scanning
     might take up 5-10 seconds.
 
@@ -1013,6 +1031,12 @@ def main_ex_graph(
     room being processed. This means that we would have to modify the edges
     to match each room. To do this cleanly, we group rooms by their cluster
     sets.
+
+    Also notice that World object (which is typically spawned only in
+    the first room of the game, but persists for all rooms) might get
+    only considered to exist in their spawn room. You should mark such
+    ubiquitous assets as ``EXTRA_ROOTS``, so they get artificially added into
+    the reachability sets.
     """
     # --- COG_START: MAIN_EX_GRAPH ---
 
@@ -1082,6 +1106,11 @@ def main_ex_graph(
         print('Generating graph for clusterset:', *list(cluster_set))
         graph, name_to_index = build_graph(set(cluster_set))
 
+        # resolve persistent root indices
+        persistent_idx = [
+            name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
+        ]
+
         for room_name in rooms:
             if room_name not in name_to_index:
                 continue
@@ -1089,8 +1118,17 @@ def main_ex_graph(
             room_idx = name_to_index[room_name]
 
             print(f'  Finding reachable assets for {room_name}...', end=' ')
-            # rustworkx BFS
+
+            # get direct descendants
             reachable_indices = rx.descendants(graph, room_idx)
+            # inject persistent stuff
+            for p_idx in persistent_idx:
+                # add descendants of persistent stuff
+                reachable_indices.update(rx.descendants(graph, p_idx))
+
+                # add the thing itself
+                reachable_indices.add(p_idx)
+
             print(f'found {len(reachable_indices)} total')
 
             reachable_names = {graph[idx] for idx in reachable_indices}
@@ -1099,6 +1137,61 @@ def main_ex_graph(
     # --- COG_END: MAIN_EX_GRAPH ---
 
     return reachability_map
+
+
+def main_ex_lint_unused_graph(
+    assets: list[Asset], reachability_map: dict[str, set[str]]
+) -> None:
+    """Identify unreachable assets.
+
+    With our newly build reachability map we can indentify which assets are
+    never referenced in any room. This would solve closed loops we've
+    been skipping over in simpler linter.
+    """
+    # --- COG_START: MAIN_EX_LINT_UNUSED_GRAPH ---
+
+    # master set
+    all_used_names: set[str] = set()
+
+    # add reachable descendants
+    for reachable_set in reachability_map.values():
+        all_used_names.update(reachable_set)
+
+    # we must explicitly add the Rooms themselves (edges to them
+    #  were severed in the previous step)
+    all_used_names.update(
+        asset.name for asset in assets if asset.asset_type == AssetType.ROOM
+    )
+
+    unused_assets: list[Asset] = [
+        asset for asset in assets if asset.name not in all_used_names
+    ]
+
+    if not unused_assets:
+        print('\nOmg Clear?!!')
+    else:
+        print(f'Found {len(unused_assets)} unreachable assets!')
+
+        # group by cluster
+        grouped_unused: dict[str, list[Asset]] = collections.defaultdict(list)
+        for asset in unused_assets:
+            grouped_unused[asset.cluster].append(asset)
+
+        for cluster, dead_assets in sorted(grouped_unused.items()):
+            print(f'=== {cluster} ===')
+
+            for asset in sorted(
+                dead_assets,
+                key=lambda a: (a.asset_type.name, a.tree_path, a.name),
+            ):
+                print(
+                    f'[{asset.asset_type.name: <10}] '
+                    f'{"/".join(asset.tree_path)}'
+                    f'/{asset.name}'
+                )
+
+            print()
+    # --- COG_END: MAIN_EX_LINT_UNUSED_GRAPH ---
 
 
 def _run_tutorials() -> None:
@@ -1185,7 +1278,9 @@ def main() -> None:
         main_ex_lint_unused(deps, assets)
         # main_ex_lint_crossref(deps)
 
-        main_ex_graph(assets, deps)
+        reach = main_ex_graph(assets, deps)
+
+        main_ex_lint_unused_graph(assets, reach)
 
 
 if __name__ == '__main__':

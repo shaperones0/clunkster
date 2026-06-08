@@ -605,6 +605,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 refs=[
                     '!LINT_RULES',
                     '!CONTEXT_RULES',
+                    'EXTRA_ROOTS',
                     '!CLS_ASSET_TYPE',
                     '!CLS_ASSET',
                     '!CLS_DEPENDENCY',
@@ -613,7 +614,28 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                     'MAIN_EX_GRAPH',
                 ],
             ),
-            source_of_stubs=('VAR_REACHABILITY',),
+            source_of_stubs=('VAR_REACHABILITY', 'EXTRA_ROOTS'),
+        ),
+        Example(
+            'ex_lint_unused_graph',
+            'Dependency graph',
+            'Lint: unreachable assets',
+            content=exs.gen_freeform(
+                func_name='main_ex_lint_unused_graph',
+                refs=[
+                    '!LINT_RULES',
+                    '!CONTEXT_RULES',
+                    '!EXTRA_ROOTS',
+                    '!CLS_ASSET_TYPE',
+                    '!CLS_ASSET',
+                    '!CLS_DEPENDENCY',
+                    '!VAR_ASSETS',
+                    '!VAR_DEPS',
+                    '!VAR_REACHABILITY',
+                    'MAIN_EX_LINT_UNUSED_GRAPH',
+                ],
+            ),
+            source_of_stubs=(),
         ),
     ]
 
@@ -636,6 +658,7 @@ def main_manager(
     exs.stub_register(
         'CONTEXT_RULES', gen_stub_var('CONTEXT_RULES: dict[str, set[str]]')
     )
+    exs.stub_register('EXTRA_ROOTS', gen_stub_var('EXTRA_ROOTS: set[str]'))
     exs.stub_register(
         'VAR_REACHABILITY',
         gen_stub_var('reachability_map: dict[str, set[str]]'),
