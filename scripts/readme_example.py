@@ -609,12 +609,17 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                     '!CLS_ASSET_TYPE',
                     '!CLS_ASSET',
                     '!CLS_DEPENDENCY',
+                    'CLS_ROOM_GRAPH',
                     '!VAR_ASSETS',
                     '!VAR_DEPS',
                     'MAIN_EX_GRAPH',
                 ],
             ),
-            source_of_stubs=('VAR_REACHABILITY', 'EXTRA_ROOTS'),
+            source_of_stubs=(
+                'VAR_ROOM_DATA',
+                'EXTRA_ROOTS',
+                'CLS_ROOM_GRAPH',
+            ),
         ),
         Example(
             'ex_lint_unused_graph',
@@ -629,10 +634,33 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                     '!CLS_ASSET_TYPE',
                     '!CLS_ASSET',
                     '!CLS_DEPENDENCY',
+                    '!CLS_ROOM_GRAPH',
                     '!VAR_ASSETS',
                     '!VAR_DEPS',
-                    '!VAR_REACHABILITY',
+                    '!VAR_ROOM_DATA',
                     'MAIN_EX_LINT_UNUSED_GRAPH',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
+        Example(
+            'ex_lint_crossref_graph',
+            'Dependency graph',
+            'Lint: room cluster boundaries',
+            content=exs.gen_freeform(
+                func_name='main_ex_lint_crossref_graph',
+                refs=[
+                    '!LINT_RULES',
+                    '!CONTEXT_RULES',
+                    '!EXTRA_ROOTS',
+                    '!CLS_ASSET_TYPE',
+                    '!CLS_ASSET',
+                    '!CLS_DEPENDENCY',
+                    '!CLS_ROOM_GRAPH',
+                    '!VAR_ASSETS',
+                    '!VAR_DEPS',
+                    '!VAR_ROOM_DATA',
+                    'MAIN_EX_LINT_CROSSREF_GRAPH',
                 ],
             ),
             source_of_stubs=(),
@@ -648,9 +676,14 @@ def main_manager(
     exs.stub_register('CLS_ASSET_TYPE', gen_stub_cls('AssetType'))
     exs.stub_register('CLS_ASSET', gen_stub_cls('Asset'))
     exs.stub_register('CLS_DEPENDENCY', gen_stub_cls('Dependency'))
+    exs.stub_register('CLS_ROOM_GRAPH', gen_stub_cls('RoomGraph'))
     exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
     exs.stub_register(
         'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')
+    )
+    exs.stub_register(
+        'VAR_ROOM_DATA',
+        gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
     )
     exs.stub_register(
         'LINT_RULES', gen_stub_var('LINT_RULES: dict[str, set[str]]')
@@ -659,10 +692,6 @@ def main_manager(
         'CONTEXT_RULES', gen_stub_var('CONTEXT_RULES: dict[str, set[str]]')
     )
     exs.stub_register('EXTRA_ROOTS', gen_stub_var('EXTRA_ROOTS: set[str]'))
-    exs.stub_register(
-        'VAR_REACHABILITY',
-        gen_stub_var('reachability_map: dict[str, set[str]]'),
-    )
 
     # define examples (first pass)
     examples: list[Example] = main_examples(exs)

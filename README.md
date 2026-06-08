@@ -79,6 +79,7 @@ cog.outl('\n'.join(generate_toc()))
   * [3 - Dependency graph](#3---dependency-graph)
     * [Example 3.1 - Generate set of used assets in each room](#example-31---generate-set-of-used-assets-in-each-room)
     * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
+    * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -1253,7 +1254,15 @@ only considered to exist in their spawn room. You should mark such
 ubiquitous assets as `EXTRA_ROOTS`, so they get artificially added into
 the reachability sets.
 
+You might also notice that, along with reachability sets, we are saving
+graphs and data to translate graph output. This is only used for
+better output in some of the latter tools, so if such data ever becomes
+a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
+`reachability_map:dict[str,set[str]]`
+
 ```python
+from dataclasses import dataclass
+
 import rustworkx as rx
 
 # see Example 2.5 - Lint: cross-cluster references
@@ -1275,6 +1284,15 @@ class Asset: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
+
+@dataclass
+class RoomGraph:
+    """Bundle of room graph data."""
+
+    room_name: str
+    reachable_names: set[str]
+    graph: rx.PyDiGraph
+    name2index: dict[str, int]
 
 # see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
@@ -1341,7 +1359,7 @@ for asset_room in assets:
         asset_room.name
     )
 
-reachability_map: dict[str, set[str]] = {}
+room_graph_data: dict[str, RoomGraph] = {}
 
 # process clustersets
 for cluster_set, rooms in cluster_groups.items():
@@ -1374,7 +1392,12 @@ for cluster_set, rooms in cluster_groups.items():
         print(f'found {len(reachable_indices)} total')
 
         reachable_names = {graph[idx] for idx in reachable_indices}
-        reachability_map[room_name] = reachable_names
+        room_graph_data[room_name] = RoomGraph(
+            room_name=room_name,
+            reachable_names=reachable_names,
+            graph=graph,
+            name2index=name_to_index,
+        )
 ```
 ### Example 3.2 - Lint: unreachable assets
 Identify unreachable assets.
@@ -1404,6 +1427,9 @@ class Asset: ...
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
+# see Example 3.1 - Generate set of used assets in each room
+class RoomGraph: ...
+
 # see Example 1.4 - Cluster aliasing
 assets: list[Asset] = ...
 
@@ -1411,10 +1437,16 @@ assets: list[Asset] = ...
 dependencies: list[Dependency] = ...
 
 # see Example 3.1 - Generate set of used assets in each room
-reachability_map: dict[str, set[str]] = ...
+room_graph_data: dict[str, RoomGraph] = ...
 
 # master set
 all_used_names: set[str] = set()
+
+# extract reachability map
+reachability_map = {
+    room_name: data.reachable_names
+    for room_name, data in room_graph_data.items()
+}
 
 # add reachable descendants
 for reachable_set in reachability_map.values():
@@ -1454,6 +1486,97 @@ else:
             )
 
         print()
+```
+### Example 3.3 - Lint: room cluster boundaries
+Validate room and their dependencies clustering boundaries.
+
+Final step of linting process before the project would be qualified for
+destructive (and actually useful) tools in validating cluster boundaries
+on rooms as a whole.
+
+Note that this tool is intended to be used only after resolved every
+issue raised by simpler crossref linter.
+
+```python
+import rustworkx as rx
+
+# see Example 2.5 - Lint: cross-cluster references
+LINT_RULES: dict[str, set[str]] = ...
+
+# see Example 2.5 - Lint: cross-cluster references
+CONTEXT_RULES: dict[str, set[str]] = ...
+
+# see Example 3.1 - Generate set of used assets in each room
+EXTRA_ROOTS: set[str] = ...
+
+# see Example 1.1 - Finding assets
+class AssetType: ...
+
+# see Example 1.1 - Finding assets
+class Asset: ...
+
+# see Example 2.2 - Reference scanning (fancier)
+class Dependency: ...
+
+# see Example 3.1 - Generate set of used assets in each room
+class RoomGraph: ...
+
+# see Example 1.4 - Cluster aliasing
+assets: list[Asset] = ...
+
+# see Example 2.2 - Reference scanning (fancier)
+dependencies: list[Dependency] = ...
+
+# see Example 3.1 - Generate set of used assets in each room
+room_graph_data: dict[str, RoomGraph] = ...
+
+# asset clusters lookup
+asset_to_cluster: dict[str, str] = {
+    asset.name: asset.cluster for asset in assets
+}
+total_violations = 0
+
+for rg in room_graph_data.values():
+    room_cluster = asset_to_cluster.get(rg.room_name)
+    if not room_cluster:
+        continue
+
+    allowed_clusters = LINT_RULES.get(
+        room_cluster, {room_cluster, 'Common'}
+    )
+
+    illegal_assets: list[str] = []
+    for reached_name in rg.reachable_names:
+        reached_cluster = asset_to_cluster.get(reached_name)
+        if reached_cluster and reached_cluster not in allowed_clusters:
+            illegal_assets.append(reached_name)
+
+    if not illegal_assets:
+        continue
+
+    print(f'Boundary Violation in Room: {rg.room_name}')
+    print(f'-- Allowed Clusters: {" ".join(allowed_clusters)}')
+
+    room_idx = rg.name2index[rg.room_name]
+    illegal_assets.sort(key=lambda name: asset_to_cluster.get(name, ''))
+
+    for illegal_name in illegal_assets:
+        target_idx = rg.name2index[illegal_name]
+        target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
+        total_violations += 1
+
+        paths = rx.dijkstra_shortest_paths(rg.graph, room_idx, target_idx)
+
+        if target_idx in paths:
+            path_names = [rg.graph[idx] for idx in paths[target_idx]]
+            traceback_str = ' -> '.join(path_names)
+
+            print(f'  [{target_cluster}] {illegal_name}')
+            print(f'    Traceback: {traceback_str}')
+        else:
+            print(f'  [{target_cluster}] {illegal_name} (Path unknown)')
+
+    print()
 ```
 <!--[[[end]]]-->
 

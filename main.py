@@ -295,6 +295,19 @@ class Dependency:
 # --- COG_END: CLS_DEPENDENCY ---
 
 
+# --- COG_START: CLS_ROOM_GRAPH ---
+@dataclass
+class RoomGraph:
+    """Bundle of room graph data."""
+
+    room_name: str
+    reachable_names: set[str]
+    graph: rx.PyDiGraph
+    name2index: dict[str, int]
+
+
+# --- COG_END: CLS_ROOM_GRAPH ---
+
 # --- COG_START: REG_WORKERS_EXPLAIN ---
 # we can't send the compiled Aho-Corasick automaton across process boundaries
 #  safely; instead, we use a global variable inside the worker process and
@@ -1019,7 +1032,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
 def main_ex_graph(
     assets: list[Asset], dependencies: list[Dependency]
-) -> dict[str, set[str]]:
+) -> dict[str, RoomGraph]:
     """Build dependency graph.
 
     Now that we have all dependency edges we may now do more complicated
@@ -1037,6 +1050,12 @@ def main_ex_graph(
     only considered to exist in their spawn room. You should mark such
     ubiquitous assets as ``EXTRA_ROOTS``, so they get artificially added into
     the reachability sets.
+
+    You might also notice that, along with reachability sets, we are saving
+    graphs and data to translate graph output. This is only used for
+    better output in some of the latter tools, so if such data ever becomes
+    a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
+    ``reachability_map:dict[str,set[str]]``
     """
     # --- COG_START: MAIN_EX_GRAPH ---
 
@@ -1099,7 +1118,7 @@ def main_ex_graph(
             asset_room.name
         )
 
-    reachability_map: dict[str, set[str]] = {}
+    room_graph_data: dict[str, RoomGraph] = {}
 
     # process clustersets
     for cluster_set, rooms in cluster_groups.items():
@@ -1132,15 +1151,20 @@ def main_ex_graph(
             print(f'found {len(reachable_indices)} total')
 
             reachable_names = {graph[idx] for idx in reachable_indices}
-            reachability_map[room_name] = reachable_names
+            room_graph_data[room_name] = RoomGraph(
+                room_name=room_name,
+                reachable_names=reachable_names,
+                graph=graph,
+                name2index=name_to_index,
+            )
 
     # --- COG_END: MAIN_EX_GRAPH ---
 
-    return reachability_map
+    return room_graph_data
 
 
 def main_ex_lint_unused_graph(
-    assets: list[Asset], reachability_map: dict[str, set[str]]
+    assets: list[Asset], room_graph_data: dict[str, RoomGraph]
 ) -> None:
     """Identify unreachable assets.
 
@@ -1152,6 +1176,12 @@ def main_ex_lint_unused_graph(
 
     # master set
     all_used_names: set[str] = set()
+
+    # extract reachability map
+    reachability_map = {
+        room_name: data.reachable_names
+        for room_name, data in room_graph_data.items()
+    }
 
     # add reachable descendants
     for reachable_set in reachability_map.values():
@@ -1192,6 +1222,71 @@ def main_ex_lint_unused_graph(
 
             print()
     # --- COG_END: MAIN_EX_LINT_UNUSED_GRAPH ---
+
+
+def main_ex_lint_crossref_graph(
+    assets: list[Asset],
+    room_graph_data: dict[str, RoomGraph],
+) -> None:
+    """Validate room and their dependencies clustering boundaries.
+
+    Final step of linting process before the project would be qualified for
+    destructive (and actually useful) tools in validating cluster boundaries
+    on rooms as a whole.
+
+    Note that this tool is intended to be used only after resolved every
+    issue raised by simpler crossref linter.
+    """
+    # --- COG_START: MAIN_EX_LINT_CROSSREF_GRAPH ---
+
+    # asset clusters lookup
+    asset_to_cluster: dict[str, str] = {
+        asset.name: asset.cluster for asset in assets
+    }
+    total_violations = 0
+
+    for rg in room_graph_data.values():
+        room_cluster = asset_to_cluster.get(rg.room_name)
+        if not room_cluster:
+            continue
+
+        allowed_clusters = LINT_RULES.get(
+            room_cluster, {room_cluster, 'Common'}
+        )
+
+        illegal_assets: list[str] = []
+        for reached_name in rg.reachable_names:
+            reached_cluster = asset_to_cluster.get(reached_name)
+            if reached_cluster and reached_cluster not in allowed_clusters:
+                illegal_assets.append(reached_name)
+
+        if not illegal_assets:
+            continue
+
+        print(f'Boundary Violation in Room: {rg.room_name}')
+        print(f'-- Allowed Clusters: {" ".join(allowed_clusters)}')
+
+        room_idx = rg.name2index[rg.room_name]
+        illegal_assets.sort(key=lambda name: asset_to_cluster.get(name, ''))
+
+        for illegal_name in illegal_assets:
+            target_idx = rg.name2index[illegal_name]
+            target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
+            total_violations += 1
+
+            paths = rx.dijkstra_shortest_paths(rg.graph, room_idx, target_idx)
+
+            if target_idx in paths:
+                path_names = [rg.graph[idx] for idx in paths[target_idx]]
+                traceback_str = ' -> '.join(path_names)
+
+                print(f'  [{target_cluster}] {illegal_name}')
+                print(f'    Traceback: {traceback_str}')
+            else:
+                print(f'  [{target_cluster}] {illegal_name} (Path unknown)')
+
+        print()
+    # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
 
 def _run_tutorials() -> None:
@@ -1278,9 +1373,10 @@ def main() -> None:
         main_ex_lint_unused(deps, assets)
         # main_ex_lint_crossref(deps)
 
-        reach = main_ex_graph(assets, deps)
+        room_data = main_ex_graph(assets, deps)
 
-        main_ex_lint_unused_graph(assets, reach)
+        # main_ex_lint_unused_graph(assets, room_data)
+        main_ex_lint_crossref_graph(assets, room_data)
 
 
 if __name__ == '__main__':
