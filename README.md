@@ -23,10 +23,10 @@ Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to s
 cog.outl(f"""
 Non-destructive tools:
 - Linter: `tree.yyd` validator
-- Linter: unused assets detector (see {rend.href('ex_lint_unused')})
-- Linter: heavy assets detector (RAM & disk size)
+- Linter: unused assets detector (see {rend.href('ex_lint_unused')} and {rend.href('ex_lint_unused_graph')})
+- (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see {rend.href('ex_lint_crossref')})
-- (TODO) Linter: room indirect reference validator via dependency graph
+- Linter: room indirect reference validator via dependency graph (see {rend.href('ex_lint_crossref_graph')})
 
 Lightly destructive tools:
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
@@ -41,10 +41,10 @@ Super destructive tools:
 
 Non-destructive tools:
 - Linter: `tree.yyd` validator
-- Linter: unused assets detector (see [ex2.4](#example-24---lint-unused-assets))
-- Linter: heavy assets detector (RAM & disk size)
+- Linter: unused assets detector (see [ex2.4](#example-24---lint-unused-assets) and [ex3.2](#example-32---lint-unreachable-assets))
+- (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see [ex2.5](#example-25---lint-cross-cluster-references))
-- (TODO) Linter: room indirect reference validator via dependency graph
+- Linter: room indirect reference validator via dependency graph (see [ex3.3](#example-33---lint-room-cluster-boundaries))
 
 Lightly destructive tools:
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
@@ -83,6 +83,12 @@ cog.outl('\n'.join(generate_toc()))
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
+    * [[HowTo] Prerequisites - Project & Asset organization](#howto-prerequisites---project-asset-organization)
+    * [[HowTo] Prerequisites - Eradicating dynamic asset referencing](#howto-prerequisites---eradicating-dynamic-asset-referencing)
+    * [[HowTo] Prerequisites - Building dependency flow](#howto-prerequisites---building-dependency-flow)
+    * [[HowTo] Prerequisites - Timelines...](#howto-prerequisites---timelines)
+    * [[HowTo] Prerequisites - State contamination via Globals and Persistence](#howto-prerequisites---state-contamination-via-globals-and-persistence)
+    * [[HowTo] Prerequisites - Proper use of the Ignore Pragma](#howto-prerequisites---proper-use-of-the-ignore-pragma)
   * [Workflow](#workflow)
     * [Preparation](#preparation)
 * [Dehydration](#dehydration)
@@ -1690,8 +1696,15 @@ Following sections elaborate on prerequisites, reasons behind them, antipatterns
 
 ### [HowTo] Prerequisites - Project & Asset organization
 
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see Example 1.3), merging those based on a provided config (see Example 1.4). Therefore, some amount of project keeping is required.
+<!--[[[cog
+cog.outl(f"""
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see [{rend.href('ex_clusters')}]), merging those based on a provided config (see [{rend.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
+""")
+]]]-->
 
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see [[ex1.3](#example-13---generating-clusters)]), merging those based on a provided config (see [[ex1.4](#example-14---cluster-aliasing)]). Therefore, some amount of project keeping is required.
+
+<!--[[[end]]]-->
 ❌ Bad:
 
 Sprites:
@@ -1808,9 +1821,15 @@ if place_meeting(x, y, SpikeIce) {
     player_take_damage()
 }
 ```
+<!--[[[cog
+cog.outl(f"""
+Now the Player directly references `SpikeIce`. The {rend.href("ex_lint_crossref", "analyzer")} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
+""")
+]]]-->
 
 Now the Player directly references `SpikeIce`. The [analyzer](#example-25---lint-cross-cluster-references) will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
 
+<!--[[[end]]]-->
 This can be solved in a few ways.
 
 **Version 1 - Moving the logic from Common to Stage-specific**

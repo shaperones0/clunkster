@@ -1,4 +1,5 @@
 temp*.py
+temp*.txt
 input/
 
 # Byte-compiled / optimized / DLL files
