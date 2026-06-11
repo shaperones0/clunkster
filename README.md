@@ -1690,7 +1690,7 @@ Following sections elaborate on prerequisites, reasons behind them, antipatterns
 
 ### [HowTo] Prerequisites - Project & Asset organization
 
-Since our project largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest to implement is to parse `tree.yyd` files and take the name of the root directory as a cluster name (see Example 1.3), and then merging those names into clusters based on a provided config (see Example 1.4). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see Example 1.3), merging those based on a provided config (see Example 1.4). Therefore, some amount of project keeping is required.
 
 ❌ Bad:
 
@@ -1714,7 +1714,7 @@ Backgrounds:
     |bgDarkness_2000x200_semitransparent_black_with_spotlight_in_center
 ```
 
-While technically the tool doesn't require you to name things properly, no duplicates must exist in the project. Secondly, since folder structure now has structural value to our clusterization, you should dedicate some effort to cleaning up the project posthaste.
+While the tool doesn't require you to name things properly, no duplicates can exist in the project. Secondly, since the folder structure now has structural value to our clusterization, you should dedicate some effort to cleaning up the project posthaste.
 
 ✅ Good:
 
@@ -1739,15 +1739,15 @@ Backgrounds:
 tCommon
 ```
 
-While appropriate naming of the assets is not required, I recommend cleaning those up now. Would also be a good idea to optimize assets now (unless you are running into "unrunable game" situation like I did when I started making this tool).
+Even though appropriate naming of the assets isn't required, I recommend cleaning them up now. It would also be a good idea to do optimization passes before starting integrating Clunkster (unless you are running into an "unrunable game" situation like I did when I started making this tool).
 
-In some cases it might also help to prepend asset names with its stage name for reference, but, whenever you'll ever have to move things around (and you _will_), renaming assets takes some effort.
+In some cases, it might help to prepend asset names with their stage name for easy reference. However, whenever you'll ever have to move things around (and you _will_), renaming assets takes some effort.
 
-> Tip: When renaming assets use IDE's search utility to find all occurences of the asset name in any code.
+> Tip: When renaming assets, use the IDE's search utility to find all occurrences of the asset name in any code.
 
 ### [HowTo] Prerequisites - Eradicating dynamic asset referencing
 
-I have seen this one used far more often than I'd like to admit. Let me paraphrase the [Prerequisites](#prerequisites) on anti-patterns.
+I have seen these ones used far more often than I'd like to admit. Let's look at anti-patterns from the [Prerequisites](#prerequisites) list.
 
 ❌ Bad: Doing maths on asset IDs.
 
@@ -1756,7 +1756,7 @@ I have seen this one used far more often than I'd like to admit. Let me paraphra
 draw_sprite(spr_player_base + current_animation, image_index, x, y)
 ```
 
-Other than that, this logic relies on Game Maker's internal resource order. While it was made much predictable in Game Maker 8.2's new save format, it is still fairly hidden and shouldn't be used in general.
+This logic relies on Game Maker's internal resource order. While the order was made much more predictable in Game Maker 8.2's new save format, it is still fairly hidden and should not be used in general.
 
 ❌ Bad: String execution.
 
@@ -1765,7 +1765,7 @@ Other than that, this logic relies on Game Maker's internal resource order. Whil
 execute_string(str_cat("instance_create(x, y, obj_boss_", current_level,")"))
 ```
 
-`execute_string` requires Game Maker to parse it and build AST, which is slow. Any dynamic code execution should generally be limited to only functions like `variable_*`, and those should never reference assets.
+`execute_string` requires Game Maker to parse it and build an AST at runtime, which is slow. Any dynamic code execution should generally be limited to functions like `variable_*`, and those should never reference assets.
 
 Let's refactor those pesky examples.
 
@@ -1782,11 +1782,11 @@ switch current_level {
 ✅ Good: ... or arrays
 ```gml
 var _amb;
-_amb[0]="sfx_ambience0"
-_amb[1]="sfx_ambience1"
-_amb[2]="sfx_ambience2"
-_amb[3]="sfx_ambience3"
-_amb[4]="sfx_ambience4"
+_amb[0] = "sfx_ambience0"
+_amb[1] = "sfx_ambience1"
+_amb[2] = "sfx_ambience2"
+_amb[3] = "sfx_ambience3"
+_amb[4] = "sfx_ambience4"
 
 sound_loop(_amb[irandom(4)])
 ```
@@ -1794,11 +1794,11 @@ sound_loop(_amb[irandom(4)])
 
 ### [HowTo] Prerequisites - Building dependency flow
 
-If you've decided to use this tool before the project would reach a critical mass - this section is for you.
+If you've decided to use this tool before the project has reached critical mass - this section is for you.
 
-Healthy dependency graph of your project flows in one direction: Stage-specific assets may reference Common assets but Common assets can't hardcode references to Stage-specific assets. Therefore, any sort of ubiquitous object (like the Player or World) should remain agnostic to stages they occupy (exceptions apply). Let's look at an example.
+A healthy dependency graph flows in one direction: Stage-specific assets may reference Common assets, but Common assets cannot hardcode references to Stage-specific assets. Therefore, any sort of ubiquitous object (like the Player or World) should remain agnostic to the stages they occupy. Let's look at an example.
 
-The Ice Stage of the game contains a new special spikes, that have the ability to fall from the ceiling. For this, you created a new object: `SpikeIce`. And now you have to make player take damage when they touch it. Sounds easy!
+The Ice Stage of the game contains new special spikes that fall from the ceiling. You created a new object: `SpikeIce`. Now you have to make the Player take damage when they touch it. Sounds easy!
 
 ❌ Bad:
 
@@ -1809,13 +1809,13 @@ if place_meeting(x, y, SpikeIce) {
 }
 ```
 
-Now Player directly references `SpikeIce`, and [analyzer](#example-25---lint-cross-cluster-references) will flag this, since now Player, technically, requires it (and, therefore, all it's referenced assets down the line, such as its sprite) to be loaded.
+Now the Player directly references `SpikeIce`. The [analyzer](#example-25---lint-cross-cluster-references) will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
 
-This can be solved in few ways.
+This can be solved in a few ways.
 
 **Version 1 - Moving the logic from Common to Stage-specific**
 
-Just invert the logic - make the spikes damage player, instead of player being damaged by spikes:
+Just invert the logic - make the spikes damage the player, instead of the player checking for spikes:
 
 ```gml
 ///IceSpike.Step
@@ -1824,11 +1824,11 @@ if place_meeting(x, y, Player) {
 }
 ```
 
-This works (and is the best solution in many cases), but I bet this game has some other damage sources, how about we...
+This works (and is the best solution in many cases), but I bet this game has some other damage sources. How about we...
 
-**Version 2 - Turn explicit reference into implicit**
+**Version 2 - Turn explicit reference into implicit ones**
 
-... introduce a new Common object `ParentHazard`, and simply make the original Player logic poll for hazards, instead of specifically spikes:
+... introduce a new Common object `ParentHazard`, and simply make the original Player logic poll for hazards, instead of specific spikes:
 
 ```gml
 ///Player.Step
@@ -1837,11 +1837,11 @@ if place_meeting(x, y, ParentHazard) {
 }
 ```
 
-This is also a perfectly valid solution in many cases.
+This is also a valid solution in many cases.
 
 ___
 
-Now let's think of something less trivial. Player now gains the ability to use spells, and Ice Stage adds ice magic when picking up certain powerup, implemented like this:
+Now let's think of something less trivial. The Player now gains the ability to use spells, and the Ice Stage adds ice magic when picking up a certain powerup, implemented like this:
 
 ❌ Bad:
 
@@ -1863,7 +1863,7 @@ You can already see the Common to Stage-specific reference. We can fix it in a f
 
 **Version 1 - Moving the logic from Common to Stage-specific**
 
-Make picking up a spell spawn an Ice Stage -bound object `SpellIcicle`, which would house the logic for shooting it.
+Make picking up a spell spawn an Ice Stage-bound object `SpellIcicle`, which houses the logic for shooting it.
 
 ```gml
 ///SpellIcicle.KeyPress_50
@@ -1873,11 +1873,13 @@ with Player {
 }
 ```
 
-Now Player doesn't know about `ProjectileIcicle`. This solution works in cases of small isolated gimmicks, but if you want to combine logics of several Stage-specific things, keeping perfect dependency flow might be impossible. For such cases, we introduce...
+Now the Player doesn't know about `ProjectileIcicle`. This solution works well for small, isolated gimmicks. However, if you want to combine the logic of several Stage-specific things, keeping a perfect dependency flow might be impossible. For such cases, we introduce...
 
 **Version 2 - Context-aware logic**
 
-Imagine now we want to assign spells to different keys and make sure Player can't use icicle while having shield up or a new multistage spell Blizzard (existing in a cluster `CommonNorth`, which is accessed by both Ice Stage and Tundra Stage) is active. To punish spell abuse, you decided to add logic for Player freezing to death when spamming cold spells. This logic can be put as an abstract "temperature" variable of Player (if, for example, interaction between cold and potential hot spells is desired), or it can be put into a controller object. Such as `ControllerSpellsNorth`:
+Imagine now we want to assign spells to different keys and make sure the Player can't use an icicle while having a shield up or a new multistage spell "Blizzard" (existing in a cluster `CommonNorth`, which is accessed by both Ice Stage and Tundra Stage) is active. To punish spell abuse, you decide to add logic for Player freezing to death when spamming cold spells.
+
+This logic can be implemented as an abstract "temperature" variable on the Player, or it can be put into a controller object. Such as `ControllerSpellsNorth`:
 
 ```gml
 ///ControllerSpellsNorth.Create
@@ -1916,9 +1918,9 @@ with Player {
 }
 ```
 
-Few things to digest from here:
-1) `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth` - after all, when `CommonNorth` cluster is loaded, everything from it becomes available.
-2) New function `room_is_ice` - is not just an ordinary "location check script" - it can be used as "Context Guard" in Clunkster's analyzer, and assign it a target cluster this context guards behind itself; the `IceStage` in our case:
+A few things to digest from here:
+1) `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth`. After all, when the `CommonNorth` cluster is loaded, everything from it becomes available.
+2) The new function `room_is_ice` - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this context guards behind itself (the `IceStage` in our case):
 ```python
 CONTEXT_RULES: dict[str, set[str]] = {
     # guard for ice stage -specific things
@@ -1939,28 +1941,28 @@ CONTEXT_RULES: dict[str, set[str]] = {
 ```
 Now everything protected by this guard can freely reference any `IceStage` asset.
 
-3) Since anything from `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we should also define this behavior in different config:
+3) Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
 ```python
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
 
     'IceStage': {
-        'Common',       # explictly include the common cluster
-        'CommonNorth',  # include the common cluster
+        'Common',       # explicitly include the common cluster
+        'CommonNorth',  # include the regional common cluster
         'IceStage'      # include anything from itself
     },
 }
 ```
 Now everything in `CommonNorth` can be freely accessed by `IceStage`.
 
-> Tip: attentive ones among you likely have noticed that same trick can be put into a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
+> Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
 
-### [HowTo] Prerequisites - timelines...
+### [HowTo] Prerequisites - Timelines...
 
 ... nobody uses timelines, right?
 
-Convert to switch statements.
+Convert them to `switch` statements.
 
 ```gml
 ///Obj.Create
@@ -1981,9 +1983,9 @@ case 100:
 
 ### [HowTo] Prerequisites - State contamination via Globals and Persistence
 
-Now that we've handled the easy cases let's start on some that are less obvious (and far harder to trace, since they won't get flagged in linters).
+Now that we've handled the easy cases, let's start on some that are less obvious (and far harder to trace, since they won't get flagged in linters).
 
-Global variables and persistent objects can easily cross cluster boundaries, making them vectors of dependency leakage.
+Global variables and persistent objects can cross cluster boundaries, making them vectors for dependency leakage.
 
 ❌ Bad: Passing a specific asset through a global variable or constant.
 
@@ -1991,25 +1993,25 @@ Global variables and persistent objects can easily cross cluster boundaries, mak
 global.next_cutscene_actor = StageB_NpcFairy
 ```
 
-If Player enters Stage A, this reference will linger, and analyzer won't be able to catch it. If, in Stage A, Player instantiates this reference:
+If the Player enters Stage A, this reference will linger, and the analyzer won't be able to catch it. If the Player instantiates this reference in Stage A:
 
 ```gml
 instance_create(x, y, global.next_cutscene_actor)
 ```
 
-then that could potentially crash the game, or produce a stub-asset behavior, had the Stage B been unloaded.
+... it could potentially crash the game, or produce a broken stub-asset behavior if the Stage B has been unloaded.
 
 ❌ Bad: Overusing Persistence
 
-Persistent objects will act similarly to global variables. If you do something like:
+Persistent objects act similarly to global variables. If you do something like:
 ```gml
 with WeatherBlizzard {
     ControllerWeather.current_weather = id
 }
 ```
-and then `WeatherBlizzard` home cluster of `CommonNorth` gets unloaded, you might get the same result as last time.
+and then `WeatherBlizzard`'s home cluster of `CommonNorth` gets unloaded, you might get the same result as the previous example.
 
-✅ Good: Pass abstract strings or enums and let stage-specific director object spawn the correct asset locally.
+✅ Good: Pass abstract strings or enums and let a stage-specific director object spawn the correct asset locally.
 
 ```gml
 ///StageB_NpcFairySpawner.Step
@@ -2026,7 +2028,7 @@ EXTRA_ROOTS: set[str] = {
     # ...
 }
 ```
-As a side note, dependencies of each of them will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
+As a side note, dependencies of each persistent object will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
 
 ### [HowTo] Prerequisites - Proper use of the Ignore Pragma
 
@@ -2081,6 +2083,7 @@ with Player  {
 music_def_begin("musTitle",0.8)
 music_def_room(rTitle,mus_autoplay)
 music_def_room(rOptions,mus_fadeout)
+music_def_room(rFinal_Respite,mus_autoplay)
 music_def_end()
 
 ///World.RoomStart
@@ -2093,8 +2096,12 @@ if not is_undefined(_l_auto) {
     for (_i=0;_i<_s;_i+=1) {
         _snd=ds_list_find_value(_l_auto,_i)
 
-        // BAD!!! The reference that was hidden via ignore is
-        // now being passed into the instantiating function.
+        // BAD!!! The reference that was hidden from the linter
+        // is now being passed into the an instantiating function.
+        // Since Clunkster has no idea that rFinal_Respite needed
+        // "musTitle", it might put it into a cluster that
+        // rFinal_Respite has no access too, playing you an
+        // unloaded stub asset.
         // Woe be upon you.
         music_play(_snd)
     }
