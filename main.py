@@ -1290,23 +1290,55 @@ def main_ex_lint_crossref_graph(
         room_idx = rg.name2index[rg.room_name]
         illegal_assets.sort(key=lambda name: asset_to_cluster.get(name, ''))
 
+        # pre-resolve active persistent root ids
+        active_persistent_roots = [
+            (p_name, rg.name2index[p_name])
+            for p_name in EXTRA_ROOTS
+            if p_name in rg.name2index
+        ]
+
         for illegal_name in illegal_assets:
             target_idx = rg.name2index[illegal_name]
             target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
             total_violations += 1
 
-            paths = rx.dijkstra_shortest_paths(rg.graph, room_idx, target_idx)
+            print(f'  [{target_cluster}] {illegal_name}')
+            path_found = False
 
-            if target_idx in paths:
-                path_names = [rg.graph[idx] for idx in paths[target_idx]]
-                traceback_str = ' -> '.join(path_names)
+            # trace 1 - structural contamination from the room
+            room_paths = rx.dijkstra_shortest_paths(
+                rg.graph, room_idx, target_idx
+            )
+            if target_idx in room_paths:
+                path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
+                print(
+                    f'    Traceback via Room Root: {" -> ".join(path_names)}'
+                )
+                path_found = True
 
-                print(f'  [{target_cluster}] {illegal_name}')
-                print(f'    Traceback: {traceback_str}')
-            else:
-                print(f'  [{target_cluster}] {illegal_name} (Path unknown)')
+            # trace 2 - implicit contamination via global controllers
+            for p_name, p_idx in active_persistent_roots:
+                p_paths = rx.dijkstra_shortest_paths(
+                    rg.graph, p_idx, target_idx
+                )
+                if target_idx in p_paths:
+                    path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
+                    print(
+                        f'    Traceback via Persistent Root ({p_name}): '
+                        f'{" -> ".join(path_names)}'
+                    )
+                    path_found = True
+                    break
 
-        print()
+            if not path_found:
+                print(
+                    '    Traceback: Path unknown (Check structural edge '
+                    'configurations)'
+                )
+
+        if total_violations > 1000:  # noqa: PLR2004
+            print('\nLinter exceeded 1000 violations, bailing out')
+            break
     # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
 
@@ -1394,10 +1426,10 @@ def main() -> None:
         # main_ex_lint_unused(deps, assets)
         main_ex_lint_crossref(deps)
 
-        # room_data = main_ex_graph(assets, deps)
+        room_data = main_ex_graph(assets, deps)
 
         # main_ex_lint_unused_graph(assets, room_data)
-        # main_ex_lint_crossref_graph(assets, room_data)
+        main_ex_lint_crossref_graph(assets, room_data)
 
 
 if __name__ == '__main__':
