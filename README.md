@@ -1674,6 +1674,7 @@ From those dependencies, the tool can:
      - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() { ... }`)
    - If an asset is shared between multiple stages, then it belongs in Common cluster
    - DON'T use timelines
+   - DON'T use the dastardly "Treat uninitialized variables as 0 (BAD!!!)" option
    - Minimize usage of persistent objects (they get tagged as referenced in every existing room)
 4. Follow good coding practices
     - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
@@ -1684,6 +1685,422 @@ From those dependencies, the tool can:
     - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like ``sound_balance``), which only reference assets but don't instantiate them
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
+
+Following sections elaborate on prerequisites, reasons behind them, antipatterns, and how to properly fix them.
+
+### [HowTo] Prerequisites - Project & Asset organization
+
+Since our project largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest to implement is to parse `tree.yyd` files and take the name of the root directory as a cluster name (see Example 1.3), and then merging those names into clusters based on a provided config (see Example 1.4). Therefore, some amount of project keeping is required.
+
+❌ Bad:
+
+Sprites:
+```
++Enemies
+    |sprite83
+    |enemy
+    |enemy_burn
+    |spr_stageA_specific_enemy_that_is_not_encountered_anywhere_else
++StageA
+    |a_sprite_that_is_used_to_be_stageA_specific_but_is_in_fact_used_everywhere
++StageFinalBoss_2_Fix_Final
+    |enemy
+```
+Backgrounds:
+```
++Stage3
+    |bgStage1
+    |tileset_that_is_used_everywhere_but_its_in_this_folder_for_reason
+    |bgDarkness_2000x200_semitransparent_black_with_spotlight_in_center
+```
+
+While technically the tool doesn't require you to name things properly, no duplicates must exist in the project. Secondly, since folder structure now has structural value to our clusterization, you should dedicate some effort to cleaning up the project posthaste.
+
+✅ Good:
+
+Sprites:
+```
++Enemies
+    |sprEnemySpawner
+    |sprEnemy
+    |sprEnemyBurn
+    |sprEnemyPoisoned
++StageA
+    |sprFireball
++StageFinal
+    |sprEnemyBuffed
+```
+Backgrounds:
+```
++Stage1
+    |bStage1
++Stage3
+    |bStage3
+tCommon
+```
+
+While appropriate naming of the assets is not required, I recommend cleaning those up now. Would also be a good idea to optimize assets now (unless you are running into "unrunable game" situation like I did when I started making this tool).
+
+In some cases it might also help to prepend asset names with its stage name for reference, but, whenever you'll ever have to move things around (and you _will_), renaming assets takes some effort.
+
+> Tip: When renaming assets use IDE's search utility to find all occurences of the asset name in any code.
+
+### [HowTo] Prerequisites - Eradicating dynamic asset referencing
+
+I have seen this one used far more often than I'd like to admit. Let me paraphrase the [Prerequisites](#prerequisites) on anti-patterns.
+
+❌ Bad: Doing maths on asset IDs.
+
+```gml
+// BAD: Analyzer only sees 'spr_player_base', misses the rest
+draw_sprite(spr_player_base + current_animation, image_index, x, y)
+```
+
+Other than that, this logic relies on Game Maker's internal resource order. While it was made much predictable in Game Maker 8.2's new save format, it is still fairly hidden and shouldn't be used in general.
+
+❌ Bad: String execution.
+
+```gml
+// BAD: Analyzer cannot trace the boss asset
+execute_string(str_cat("instance_create(x, y, obj_boss_", current_level,")"))
+```
+
+`execute_string` requires Game Maker to parse it and build AST, which is slow. Any dynamic code execution should generally be limited to only functions like `variable_*`, and those should never reference assets.
+
+Let's refactor those pesky examples.
+
+✅ Good: Use explicit references...
+
+```gml
+// GOOD: All assets are explicitly declared and mapped
+switch current_level {
+    case "forest": instance_create(x, y, obj_boss_forest) break
+    case "volcano": instance_create(x, y, obj_boss_volcano) break
+}
+```
+
+✅ Good: ... or arrays
+```gml
+var _amb;
+_amb[0]="sfx_ambience0"
+_amb[1]="sfx_ambience1"
+_amb[2]="sfx_ambience2"
+_amb[3]="sfx_ambience3"
+_amb[4]="sfx_ambience4"
+
+sound_loop(_amb[irandom(4)])
+```
+
+
+### [HowTo] Prerequisites - Building dependency flow
+
+If you've decided to use this tool before the project would reach a critical mass - this section is for you.
+
+Healthy dependency graph of your project flows in one direction: Stage-specific assets may reference Common assets but Common assets can't hardcode references to Stage-specific assets. Therefore, any sort of ubiquitous object (like the Player or World) should remain agnostic to stages they occupy (exceptions apply). Let's look at an example.
+
+The Ice Stage of the game contains a new special spikes, that have the ability to fall from the ceiling. For this, you created a new object: `SpikeIce`. And now you have to make player take damage when they touch it. Sounds easy!
+
+❌ Bad:
+
+```gml
+///Player.Step
+if place_meeting(x, y, SpikeIce) {
+    player_take_damage()
+}
+```
+
+Now Player directly references `SpikeIce`, and [analyzer](#example-25---lint-cross-cluster-references) will flag this, since now Player, technically, requires it (and, therefore, all it's referenced assets down the line, such as its sprite) to be loaded.
+
+This can be solved in few ways.
+
+**Version 1 - Moving the logic from Common to Stage-specific**
+
+Just invert the logic - make the spikes damage player, instead of player being damaged by spikes:
+
+```gml
+///IceSpike.Step
+if place_meeting(x, y, Player) {
+    player_take_damage()
+}
+```
+
+This works (and is the best solution in many cases), but I bet this game has some other damage sources, how about we...
+
+**Version 2 - Turn explicit reference into implicit**
+
+... introduce a new Common object `ParentHazard`, and simply make the original Player logic poll for hazards, instead of specifically spikes:
+
+```gml
+///Player.Step
+if place_meeting(x, y, ParentHazard) {
+    player_take_damage()
+}
+```
+
+This is also a perfectly valid solution in many cases.
+
+___
+
+Now let's think of something less trivial. Player now gains the ability to use spells, and Ice Stage adds ice magic when picking up certain powerup, implemented like this:
+
+❌ Bad:
+
+```gml
+///Player.KeyPress_50
+
+if global.Powerups[powerup_shield] {
+    // Common spell
+    instance_create(x, y, ProjectileShield)
+}
+
+if global.Powerups[powerup_spell_ice] {
+    // Ice Stage spell
+    instance_create_moving(x, y, ProjectileIcicle, 1, 270, 0.2)
+}
+```
+
+You can already see the Common to Stage-specific reference. We can fix it in a few ways.
+
+**Version 1 - Moving the logic from Common to Stage-specific**
+
+Make picking up a spell spawn an Ice Stage -bound object `SpellIcicle`, which would house the logic for shooting it.
+
+```gml
+///SpellIcicle.KeyPress_50
+with Player {
+    //handle the case when player doesn't exist (dead)
+    instance_create_moving(x, y, ProjectileIcicle, 1, 270, 0.2)
+}
+```
+
+Now Player doesn't know about `ProjectileIcicle`. This solution works in cases of small isolated gimmicks, but if you want to combine logics of several Stage-specific things, keeping perfect dependency flow might be impossible. For such cases, we introduce...
+
+**Version 2 - Context-aware logic**
+
+Imagine now we want to assign spells to different keys and make sure Player can't use icicle while having shield up or a new multistage spell Blizzard (existing in a cluster `CommonNorth`, which is accessed by both Ice Stage and Tundra Stage) is active. To punish spell abuse, you decided to add logic for Player freezing to death when spamming cold spells. This logic can be put as an abstract "temperature" variable of Player (if, for example, interaction between cold and potential hot spells is desired), or it can be put into a controller object. Such as `ControllerSpellsNorth`:
+
+```gml
+///ControllerSpellsNorth.Create
+freezing = 0
+
+///ControllerSpellsNorth.Step
+//unfreeze over time
+freezing = approach(freezing, 0, 0.05)
+
+///SpellIcicle.KeyPress_50
+if room_is_ice() {
+    with Player {
+        //spawn the icicle projectile
+        instance_create_moving(x, y, ProjectileIcicle, 1, 270, 0.2)
+
+        //lower the chill
+        other.freezing -= 10
+
+        //check if frozen
+        if other.freezing < -30 {
+            player_kill(killcause_freeze)
+        }
+    }
+}
+
+///SpellIcicle.KeyPress_51
+with Player {
+    //spawn the blizzard projectile
+    instance_create(x, y, ProjectileBlizzard)
+
+    other.freezing -= 20
+
+    if other.freezing < -30 {
+        player_kill(killcause_freeze)
+    }
+}
+```
+
+Few things to digest from here:
+1) `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth` - after all, when `CommonNorth` cluster is loaded, everything from it becomes available.
+2) New function `room_is_ice` - is not just an ordinary "location check script" - it can be used as "Context Guard" in Clunkster's analyzer, and assign it a target cluster this context guards behind itself; the `IceStage` in our case:
+```python
+CONTEXT_RULES: dict[str, set[str]] = {
+    # guard for ice stage -specific things
+    'room_is_ice': {
+        'IceStage'
+
+        # notice that we don't put any other more
+        # "common" stages in here
+    },
+
+    # guard for things that are allowed in CommonNorth,
+    # but don't require any more specific logic
+    # (e.g. from IceStage)
+    'room_is_north': {
+        'CommonNorth'
+    }
+}
+```
+Now everything protected by this guard can freely reference any `IceStage` asset.
+
+3) Since anything from `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we should also define this behavior in different config:
+```python
+LINT_RULES: dict[str, set[str]] = {
+    # common assets cannot borrow from Stage specific folders
+    'Common': {'Common'},
+
+    'IceStage': {
+        'Common',       # explictly include the common cluster
+        'CommonNorth',  # include the common cluster
+        'IceStage'      # include anything from itself
+    },
+}
+```
+Now everything in `CommonNorth` can be freely accessed by `IceStage`.
+
+> Tip: attentive ones among you likely have noticed that same trick can be put into a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
+
+### [HowTo] Prerequisites - timelines...
+
+... nobody uses timelines, right?
+
+Convert to switch statements.
+
+```gml
+///Obj.Create
+time=0
+
+///Obj.Step
+time+=1
+
+switch time {
+case 20:
+    ... //code on Step 20
+    break
+case 100:
+    ... //code on Step 100
+    break
+}
+```
+
+### [HowTo] Prerequisites - State contamination via Globals and Persistence
+
+Now that we've handled the easy cases let's start on some that are less obvious (and far harder to trace, since they won't get flagged in linters).
+
+Global variables and persistent objects can easily cross cluster boundaries, making them vectors of dependency leakage.
+
+❌ Bad: Passing a specific asset through a global variable or constant.
+
+```gml
+global.next_cutscene_actor = StageB_NpcFairy
+```
+
+If Player enters Stage A, this reference will linger, and analyzer won't be able to catch it. If, in Stage A, Player instantiates this reference:
+
+```gml
+instance_create(x, y, global.next_cutscene_actor)
+```
+
+then that could potentially crash the game, or produce a stub-asset behavior, had the Stage B been unloaded.
+
+❌ Bad: Overusing Persistence
+
+Persistent objects will act similarly to global variables. If you do something like:
+```gml
+with WeatherBlizzard {
+    ControllerWeather.current_weather = id
+}
+```
+and then `WeatherBlizzard` home cluster of `CommonNorth` gets unloaded, you might get the same result as last time.
+
+✅ Good: Pass abstract strings or enums and let stage-specific director object spawn the correct asset locally.
+
+```gml
+///StageB_NpcFairySpawner.Step
+if global.next_cutscene_actor == "fairy" {
+    instance_create(x, y, StageB_NpcFairy)
+    global.next_cutscene_actor = ""
+}
+```
+
+✅ Good: Don't forget to register all persistent objects in `EXTRA_ROOTS`:
+```python
+EXTRA_ROOTS: set[str] = {
+    'World'
+    # ...
+}
+```
+As a side note, dependencies of each of them will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
+
+### [HowTo] Prerequisites - Proper use of the Ignore Pragma
+
+We provide a pragma for ignoring files during dependency scans: `//!clunkster: ignore`. I don't think I need to explain why it should be used very sparingly.
+
+You should only use the pragma on pure data registries that define metadata without instantiating objects.
+
+❌ Bad: Skipping Your Homework
+
+```gml
+///Player.Collision_ForestLog
+
+//eeehhh i need to convert collision event into an End Step event
+// + rip all that boolean logic, hide every call behind a
+// guard or something ehhhh
+
+//i dont feel like doin it :3
+//!clunkster: ignore
+
+with Player  {
+    save_set_persistent("deaths", save_get("deaths") + 1)
+    if global.player_skin == "knight" instance_create(x, y, Knight_BloodEmitter)
+    else if instance_exists(mario_kart) instance_create(mario_kart.x, mario_kart.y+24, BloodEmitter)
+    else instance_create(x, y, BloodEmitter)
+    if (global.darkStage) {
+        dark_gib_sound(1)
+    }
+    else {
+        sound_play("player_death")
+
+        // Dance specific
+        if is_in_game() && !global.paused {
+            if room != rDanceStage {
+                camera_update()
+            } else {
+                dance_camera_update()
+            }
+        }
+    }
+    instance_create(0, 0, GameOver)
+    instance_destroy()
+}
+```
+
+❌ Bad: Putting instantiating references into _registries_ (= making them impure)
+
+```gml
+///music_register()
+//Register EVERY music in here
+//!clunkster: ignore
+
+music_def_begin("musTitle",0.8)
+music_def_room(rTitle,mus_autoplay)
+music_def_room(rOptions,mus_fadeout)
+music_def_end()
+
+///World.RoomStart
+
+//autostart music
+_l_auto=dsmap(global._mus_room_auto,room)
+if not is_undefined(_l_auto) {
+    _s=ds_list_size(_l_auto)
+
+    for (_i=0;_i<_s;_i+=1) {
+        _snd=ds_list_find_value(_l_auto,_i)
+
+        // BAD!!! The reference that was hidden via ignore is
+        // now being passed into the instantiating function.
+        // Woe be upon you.
+        music_play(_snd)
+    }
+}
+```
+
 
 ## Workflow
 
@@ -1699,7 +2116,7 @@ Firstly, you should build the initial dependency scanning pipeline.
 This starts with parsing `tree.yyd` files in order to discover assets and run initial checks to determine, what needs to be fixed before generating clusters.  generate initial cluster map. Therefore, in this step your goal is to:
 - ensure that stage assets are grouped in consistently named folders across all asset types
 
-See examples: 
+See examples:
 - [{rend.href('ex_start')}] setting up asset discovery
 
 After that we may generate initial cluster map. In this step our goal is:
@@ -1714,7 +2131,7 @@ See examples:
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
 
 See examples:
-- [{rend.href('ex_scan_sync')}] simple references generator 
+- [{rend.href('ex_scan_sync')}] simple references generator
 - [{rend.href('ex_scan_sync2')}] reference generator with better struct and progressbar :3
 - [{rend.href('ex_scan_mp')}] multiprocessing reference generator
 
@@ -1731,7 +2148,7 @@ Firstly, you should build the initial dependency scanning pipeline.
 This starts with parsing `tree.yyd` files in order to discover assets and run initial checks to determine, what needs to be fixed before generating clusters.  generate initial cluster map. Therefore, in this step your goal is to:
 - ensure that stage assets are grouped in consistently named folders across all asset types
 
-See examples: 
+See examples:
 - [[ex1.1](#example-11---finding-assets)] setting up asset discovery
 
 After that we may generate initial cluster map. In this step our goal is:
@@ -1746,7 +2163,7 @@ See examples:
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
 
 See examples:
-- [[ex2.1](#example-21---reference-scanning)] simple references generator 
+- [[ex2.1](#example-21---reference-scanning)] simple references generator
 - [[ex2.2](#example-22---reference-scanning-fancier)] reference generator with better struct and progressbar :3
 - [[ex2.3](#example-23---reference-scanning-multiprocessing)] multiprocessing reference generator
 
@@ -1785,10 +2202,10 @@ ____
 **Paths**: not impactful.
 ____
 **Room**: impactful, risky.
-- prepare: 
-  - read instances.txt, tiles and each object creation code, 
-  - turn them into scripts that add them back in via `room_instance_add` (don't forget their respective globalvars) 
-  - and `room_tile_add`, 
+- prepare:
+  - read instances.txt, tiles and each object creation code,
+  - turn them into scripts that add them back in via `room_instance_add` (don't forget their respective globalvars)
+  - and `room_tile_add`,
   - generate objects for each room instance creation code to be run on room start.
 - store-dry-prod: blank room that tries to load its assets? TODO idk.
 - store-dry-dev: blank room with a single stub object (to raise errors).
@@ -1810,7 +2227,7 @@ ____
 ____
 **Data**: Sounds and Music: impactful, high priority.
 - prepare:
-  - put sounds from same cluster into their folders, 
+  - put sounds from same cluster into their folders,
   - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
   - generate a script that would load said WASD pack.
 - store-dry-dev: `buzz.wav` for sounds and `fiddlesticks.mp3` for music.
