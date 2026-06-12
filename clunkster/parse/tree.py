@@ -15,6 +15,9 @@ class TreeNode:
     parent_path: tuple[str, ...]
 
 
+TreeEntry = tuple[str, tuple[str, ...]]
+
+
 def nodes(lines: col.Iterable[str]) -> col.Iterator[TreeNode]:
     """Iterate through ``tree.yyd``, yield structural data.
 
@@ -61,7 +64,7 @@ def nodes(lines: col.Iterable[str]) -> col.Iterator[TreeNode]:
 
 def parse(
     tree_lines: col.Iterable[str],
-) -> col.Iterator[tuple[str, tuple[str, ...]]]:
+) -> col.Iterator[TreeEntry]:
     """Parse tree.yyd files and yield asset names and their paths.
 
     Paths are tuples of folder names; actual asset name is not appended.
