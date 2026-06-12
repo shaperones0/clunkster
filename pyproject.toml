@@ -10,6 +10,8 @@ dependencies = []
 dev = [
     'cogapp>=3.6.0',
     'deptry>=0.25.1',
+    "gmcodec",
+    "pillow>=12.2.0",
     "pyahocorasick>=2.3.1",
     'pytest>=9.0.3',
     'ruff>=0.15.14',
@@ -126,5 +128,8 @@ DEP002 = [
 DEP001 = [
     'cog'
 ]
+
+[tool.uv.sources]
+gmcodec = { git = "https://github.com/shaperones0/gmcodec.git" }
 [tool.deptry]
 extend_exclude = [ "main.py" ]

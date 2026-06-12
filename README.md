@@ -79,8 +79,9 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 3.1 - Generate set of used assets in each room](#example-31---generate-set-of-used-assets-in-each-room)
     * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
-  * [4 - Project Juicer](#4---project-juicer)
+  * [4 - Project Juicer v1](#4---project-juicer-v1)
     * [Example 4.1 - Juicer: copy the project into build directory](#example-41---juicer-copy-the-project-into-build-directory)
+    * [Example 4.2 - Juicer: generate wet assets](#example-42---juicer-generate-wet-assets)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -1387,7 +1388,7 @@ Once you've cleared this one, you may call the game qualified
 for using the dangerous toys down the line.
 
 Congrats on defeating the tutorial boss.
-## 4 - Project Juicer
+## 4 - Project Juicer v1
 ### Example 4.1 - Juicer: copy the project into build directory
 Copy project's folder into build dir.
 
@@ -1424,19 +1425,25 @@ from clunkster.asset import Asset
 class ConfJuicer:
     """Configuration for Project Juicer."""
 
+    # True to use prod build configuration, False for dev build configuration
     is_prod: bool
+    # project output dir
     dir_out: Path
+    # path to output external assets to, relative to dir_out
+    rel_dir_wet: Path
+    # dry asset source dir
     dir_dry: Path
 
 
 JUICER = ConfJuicer(
     # start with dev builds
     is_prod=False,
-    # output dir, for example "_build" folder next to the project
+    # use "_build" folder next to the project
     dir_out=Path('path/to/project/_build'),
-    # dry asset dir; if you downloaded Clunkster from source, then
+    # if you downloaded Clunkster from source, then
     #  such is available in repository's /data/dry folder
     dir_dry=Path(__file__).parent / 'data' / 'dry',
+    rel_dir_wet=Path('data') / 'chunks',
 )
 
 # see Example 1.1 - Finding assets
@@ -1452,7 +1459,7 @@ PROJECT = Path('path/to/the/project')
 if JUICER.dir_out.exists():
     # check that JUICER's out dir is part of the project just to be safe
     # remove this check if necessary
-    assert PROJECT in JUICER.dir_out.parents
+    # assert PROJECT in JUICER.dir_out.parents
     shutil.rmtree(JUICER.dir_out)
 
 # exclude Common assets from ignoring audio copy
@@ -1508,10 +1515,219 @@ for asset in assets:
             shutil.copyfile(stub_img, img)
     elif isinstance(asset, my_asset.Background):
         meta = asset.get_background_metadata(JUICER.dir_out)
-        if meta.exists:
-            shutil.copyfile(
-                stub_img, asset.get_background_image(JUICER.dir_out)
-            )
+        if not meta.exists:
+            raise ValueError('Empty backgrounds are not allowed')
+        shutil.copyfile(
+            stub_img, asset.get_background_image(JUICER.dir_out)
+        )
+```
+### Example 4.2 - Juicer: generate wet assets
+Copying works, time to extract wet assets.
+
+For this process we'll convert sprites and backgrounds into
+`.gmspr` and `.gmbck` files for easier loading on game maker side,
+music and sounds will be compressed. Refer to [Dehydration](#dehydration)
+for more info.
+
+Encoding images into the Game Maker's formats was done via my awesome
+library [gmcodec](https://github.com/shaperones0/gmcodec).
+
+Compressing audio was done via FFmpeg. Normally I'd postpone any
+optimization passes until the pipeline is done, but the audio compression
+one was too easy to insert for me to miss out on it.
+
+As an unfortunate side effect, the process now takes around a minute
+to finish... We'll address that once we are done with v1 of the pipeline.
+Until then - suffer.
+
+```python
+import collections.abc as col
+import shutil
+import subprocess
+from pathlib import Path
+
+import tqdm
+from gmcodec import core as gmc_core
+from gmcodec import file as gmc_file
+from gmcodec import model as gmc_model
+from gmcodec import validate as gmc_validate
+from PIL import Image
+
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
+
+def filter_type[TFilter](
+    f_type: type[TFilter], items: col.Iterable[object]
+) -> col.Iterator[TFilter]:
+    """Filter given iterable based on type.
+
+    :param f_type: Type to filter for.
+    :param items: The iterable to filter.
+    :return: Iterator of items of type ``f_type``.
+    """
+    return (item for item in items if isinstance(item, f_type))
+
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+# see Example 1.1 - Finding assets
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
+
+def dehydrate_sprite(sprite: my_asset.Sprite, out_dir: Path) -> None:
+    # read original metadata
+    meta = sprite.get_sprite_metadata(PROJECT)
+
+    frames_bgra: list[bytes] = []
+    width, height = 0, 0
+
+    for img_path in sprite.get_sprite_images(PROJECT, meta.frames):
+        with Image.open(img_path) as img:
+            img = img.convert('RGBA')
+            if width == 0:
+                width, height = img.size
+            frames_bgra.append(img.tobytes('raw', 'BGRA'))
+
+    assert meta.frames == len(frames_bgra)
+
+    # map metadata
+    gm_meta = gmc_model.GmsprMeta.default()
+    # gm_meta.version = 800
+    gm_meta.width = width
+    gm_meta.height = height
+    gm_meta.subimage_count = len(frames_bgra)
+    gm_meta.origin_x = meta.origin_x
+    gm_meta.origin_y = meta.origin_y
+
+    gm_meta.mask_kind = meta.collision_shape
+    gm_meta.mask_tolerance = meta.alpha_tolerance
+    gm_meta.separate_masks = meta.per_frame_colliders
+    gm_meta.bbox_kind = meta.bbox_type
+    gm_meta.bbox_left = meta.bbox_left
+    gm_meta.bbox_right = meta.bbox_right
+    gm_meta.bbox_bottom = meta.bbox_bottom
+    gm_meta.bbox_top = meta.bbox_top
+
+    gmc_validate.gmspr_validate(gm_meta, frames_bgra)
+    payload = gmc_core.gmspr_build_payload(gm_meta, frames_bgra)
+
+    out_file = out_dir / f'{sprite.name}.gmspr'
+    out_file.write_bytes(gmc_file.file_pack(payload))
+
+def dehydrate_background(bg: my_asset.Background, out_dir: Path) -> None:
+    # read the original metadata
+    meta = bg.get_background_metadata(PROJECT)
+
+    # meta.exists == 0 was already filtered out
+    img_path = bg.get_background_image(PROJECT)
+    with Image.open(img_path) as img:
+        img = img.convert('RGBA')
+        width, height = img.size
+        pixel_data = img.tobytes('raw', 'BGRA')
+
+    gm_meta = gmc_model.GmbckMeta.default()
+    # gm_meta.version = ...
+    gm_meta.use_as_tile = meta.tileset
+    gm_meta.tile_width = meta.tile_width
+    gm_meta.tile_height = meta.tile_height
+    gm_meta.tile_h_offset = meta.tile_hoffset
+    gm_meta.tile_v_offset = meta.tile_voffset
+    gm_meta.tile_h_sep = meta.tile_hsep
+    gm_meta.tile_v_sep = meta.tile_vsep
+    # gm_meta.image_version = ...
+    gm_meta.width = width
+    gm_meta.height = height
+
+    gmc_validate.gmbck_validate(gm_meta, pixel_data)
+    payload = gmc_core.gmbck_build_payload(gm_meta, pixel_data)
+
+    out_file = out_dir / f'{bg.name}.gmbck'
+    out_file.write_bytes(gmc_file.file_pack(payload))
+
+def dehydrate_audio(audio: my_asset.AssetExt, out_dir: Path) -> None:
+    # remember when we added those " to names yeah
+    clean_name = audio.name[1:-1]
+
+    if (
+        isinstance(audio, AssetExtSfx)
+        and audio.file.suffix.lower() == '.wav'
+    ):
+        # FMOD kind 0 (RAM): compress to MS ADPCM 22050Hz
+        out_file = out_dir / f'{clean_name}.wav'
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                'ffmpeg',
+                '-i',
+                str(audio.file),
+                '-y',
+                '-c:a',
+                'adpcm_ms',
+                '-ar',
+                '22050',
+                str(out_file),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        # FMOD kind 1/3 (Stream): compress to low-bitrate Ogg Vorbis
+        out_file = out_dir / f'{clean_name}.ogg'
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                'ffmpeg',
+                '-i',
+                str(audio.file),
+                '-y',
+                '-map_metadata',
+                '-1',
+                '-c:a',
+                'libvorbis',
+                '-q:a',
+                '2',
+                str(out_file),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
+if dir_wet.exists():
+    shutil.rmtree(dir_wet)
+
+print('Generating wet assets (compression & encoding)...')
+
+for asset in tqdm.tqdm(
+    list(filter_type(my_asset.Sprite, assets)),
+    desc='Encoding sprites...',
+):
+    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
+    dir_out.mkdir(parents=True, exist_ok=True)
+    dehydrate_sprite(asset, dir_out)
+
+for asset in tqdm.tqdm(
+    list(filter_type(my_asset.Background, assets)),
+    desc='Encoding backgrounds...',
+):
+    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
+    dir_out.mkdir(parents=True, exist_ok=True)
+    dehydrate_background(asset, dir_out)
+
+for asset in tqdm.tqdm(
+    list(filter_type(AssetExtSfx, assets))
+    + list(filter_type(AssetExtBgm, assets)),
+    desc='Compressing audio...',
+):
+    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
+    dir_out.mkdir(parents=True, exist_ok=True)
+    dehydrate_audio(asset, dir_out)
 ```
 <!--[[[end]]]-->
 

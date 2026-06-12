@@ -657,7 +657,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
         ),
         Example(
             'ex_juicer_copy',
-            'Project Juicer',
+            'Project Juicer v1',
             'Juicer: copy the project into build directory',
             content=exs.gen_freeform(
                 func_name='main_juicer_copy',
@@ -670,6 +670,23 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 ],
             ),
             source_of_stubs=('CLS_JUICER_CONFIG',),
+        ),
+        Example(
+            'ex_juicer_gen_wet',
+            'Project Juicer v1',
+            'Juicer: generate wet assets',
+            content=exs.gen_freeform(
+                func_name='main_juicer_gen_wet',
+                refs=[
+                    'DEF_TYPE_FILTER',
+                    '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!VAR_ASSETS',
+                    'PROJECT',
+                    'MAIN_EX_JUICER_GEN_WET',
+                ],
+            ),
+            source_of_stubs=(),
         ),
     ]
 

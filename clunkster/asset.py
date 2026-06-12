@@ -55,6 +55,11 @@ class Asset(ABC):
         """Get internal name of this asset."""
 
     @classmethod
+    def type_name(cls) -> str:
+        """Type name getter."""
+        return cls._type_name()
+
+    @classmethod
     @abstractmethod
     def type_is_used(cls, project_root: pl.Path) -> bool:
         """Check whether this asset type is used in the project or not."""
@@ -101,7 +106,7 @@ class Asset(ABC):
     @classmethod
     def type_to_str_linter(cls) -> str:
         """Descriptive asset repr to be used in linters."""
-        return f'[{cls._type_name():^10}]: '
+        return f'[{cls._type_name():^10}]'
 
     def to_str_linter(self) -> str:
         """Descriptive asset type repr to be used in linters."""
@@ -122,6 +127,11 @@ class AssetBuiltin(Asset, ABC):
     @abstractmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         """Get directory of this asset type relative to project root."""
+
+    @classmethod
+    def type_get_dir_rel(cls) -> pl.Path:
+        """Type's relative directory getter."""
+        return cls._type_get_dir_rel()
 
     @classmethod
     def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
@@ -230,6 +240,11 @@ class AssetExt(Asset, ABC):
     @abstractmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         """Get directory of this asset type relative to project root."""
+
+    @classmethod
+    def type_get_dir_rel(cls) -> pl.Path:
+        """Type's relative directory getter."""
+        return cls._type_get_dir_rel()
 
     @classmethod
     def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
