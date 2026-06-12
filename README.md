@@ -2130,19 +2130,9 @@ ____
 ____
 **Paths**: not impactful.
 ____
-**Room**: impactful, risky.
-- prepare:
-  - read instances.txt, tiles and each object creation code,
-  - turn them into scripts that add them back in via `room_instance_add` (don't forget their respective globalvars)
-  - and `room_tile_add`,
-  - generate objects for each room instance creation code to be run on room start.
-- store-dry-prod: blank room that tries to load its assets? TODO idk.
-- store-dry-dev: blank room with a single stub object (to raise errors).
-- store-wet: aforementioned script and object.
-- hydrate: run the scripts, add the room start object as well.
-- dehydrate: `room_instance_clear`, `room_tile_clear`.
+**Room**: not impactful, risky.
 ____
-**Scripts**: impossible to create dynamically.
+**Scripts**: impossible to create dynamically without big rewrites.
 ____
 **Sprites**: impactful, high priority.
 - prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmspr` files
