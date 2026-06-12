@@ -835,7 +835,7 @@ else:
 
         # sort
         orphans.sort(
-            key=lambda a: (a.asset_type.name, a.tree_path, a.name)
+            key=lambda a: (a.__class__.__name__, a.get_tree_path(), a.name)
         )
 
         for asset in orphans:
@@ -1234,7 +1234,11 @@ else:
 
         for asset in sorted(
             dead_assets,
-            key=lambda a: (a.asset_type.name, a.tree_path, a.name),
+            key=lambda a: (
+                a.__class__.__name__,
+                a.get_tree_path(),
+                a.name,
+            ),
         ):
             print(asset.to_str_linter())
 
