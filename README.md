@@ -1766,6 +1766,8 @@ default:
 
 Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool that might come in handy later.
 
+> Note: Clunkster is very sensetive to exact way you format the context guards. Only `if guard() { ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
+
 ### [HowTo] Prerequisites - Timelines...
 
 ... nobody uses timelines, right?
