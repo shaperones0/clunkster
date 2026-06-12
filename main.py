@@ -16,12 +16,8 @@ import tqdm
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
 
 from clunkster import asset as my_asset
-from clunkster.analyze import (
-    location as my_analyze_location,
-)
-from clunkster.analyze import (
-    scan_dep as my_analyze_scan_dep,
-)
+from clunkster.analyze import location as my_analyze_location
+from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
 
