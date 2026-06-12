@@ -1251,8 +1251,11 @@ Final step of linting process before the project would be qualified for
 destructive (and actually useful) tools in validating cluster boundaries
 on rooms as a whole.
 
-Note that this tool is intended to be used only after resolved every
+Note 1: this tool is intended to be used only after resolved every
 issue raised by simpler crossref linter.
+
+Note 2: this tool will output a lot of violations for each offending
+dependency edge, so I recommend re-running the tool after each fix.
 
 ```python
 import rustworkx as rx
@@ -1367,6 +1370,9 @@ for rg in room_graph_data.values():
         print('\nLinter exceeded 1000 violations, bailing out')
         break
 ```
+
+Once you've cleared this one, you may call the game qualified
+for using the dangerous toys down the line.
 <!--[[[end]]]-->
 
 # Rationale

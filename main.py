@@ -1027,8 +1027,11 @@ def main_ex_lint_crossref_graph(
     destructive (and actually useful) tools in validating cluster boundaries
     on rooms as a whole.
 
-    Note that this tool is intended to be used only after resolved every
+    Note 1: this tool is intended to be used only after resolved every
     issue raised by simpler crossref linter.
+
+    Note 2: this tool will output a lot of violations for each offending
+    dependency edge, so I recommend re-running the tool after each fix.
     """
     # --- COG_START: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
@@ -1111,6 +1114,8 @@ def main_ex_lint_crossref_graph(
         if total_violations > 1000:  # noqa: PLR2004
             print('\nLinter exceeded 1000 violations, bailing out')
             break
+    # MD: Once you've cleared this one, you may call the game qualified
+    # MD: for using the dangerous toys down the line.
     # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
 
