@@ -655,6 +655,22 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             ),
             source_of_stubs=(),
         ),
+        Example(
+            'ex_juicer_copy',
+            'Project Juicer',
+            'Juicer: copy the project into build directory',
+            content=exs.gen_freeform(
+                func_name='main_juicer_copy',
+                refs=[
+                    'CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!VAR_ASSETS',
+                    'PROJECT',
+                    'MAIN_EX_JUICER_COPY',
+                ],
+            ),
+            source_of_stubs=('CLS_JUICER_CONFIG',),
+        ),
     ]
 
 
@@ -669,6 +685,12 @@ def main_manager(
     )
     exs.stub_register('CLS_DEPENDENCY', gen_stub_cls('Dependency'))
     exs.stub_register('CLS_ROOM_GRAPH', gen_stub_cls('RoomGraph'))
+    exs.stub_register(
+        'CLS_JUICER_CONFIG',
+        '\n'.join(
+            (gen_stub_cls('ConfJuicer'), gen_stub_var('JUICER: ConfJuicer'))
+        ),
+    )
     exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
     exs.stub_register(
         'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')

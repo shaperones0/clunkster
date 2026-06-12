@@ -7,7 +7,39 @@ from dataclasses import dataclass
 from typing import Self
 
 from clunkster.parse import index as my_parse_index
+from clunkster.parse import kv as my_parse_kv
 from clunkster.parse import tree as my_parse_tree
+
+
+@dataclass(frozen=True, slots=True)
+class SpriteMetadata:
+    """GameMaker Sprite's metadata from ``sprite.txt``."""
+
+    frames: int
+    origin_x: int
+    origin_y: int
+    collision_shape: int
+    alpha_tolerance: int
+    per_frame_colliders: int
+    bbox_type: int
+    bbox_left: int
+    bbox_top: int
+    bbox_right: int
+    bbox_bottom: int
+
+
+@dataclass(frozen=True, slots=True)
+class BackgroundMetadata:
+    """GameMaker Background's metadata from ``<background_name>.txt``."""
+
+    exists: int
+    tileset: int
+    tile_width: int
+    tile_height: int
+    tile_hoffset: int
+    tile_voffset: int
+    tile_hsep: int
+    tile_vsep: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +223,7 @@ class AssetBuiltin(Asset, ABC):
 class AssetExt(Asset, ABC):
     """Abstract external asset."""
 
+    file: pl.Path
     dir_path: tuple[str, ...]
 
     @classmethod
@@ -215,7 +248,7 @@ class AssetExt(Asset, ABC):
     @classmethod
     def _iter_dirs(
         cls, project_root: pl.Path
-    ) -> col.Iterator[my_parse_tree.TreeEntry]:
+    ) -> col.Iterator[tuple[pl.Path, my_parse_tree.TreeEntry]]:
         """Iterate external asset's directory structure.
 
         :param project_root: Project's root directory.
@@ -224,7 +257,7 @@ class AssetExt(Asset, ABC):
         """
         asset_dir = cls.type_get_dir(project_root)
         return (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            (file, (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1]))
             for file in asset_dir.rglob('*')
             if file.is_file()
         )
@@ -240,7 +273,7 @@ class AssetExt(Asset, ABC):
         """
         return (
             (asset_name, path[0] if path else 'Common')
-            for asset_name, path in cls._iter_dirs(project_root)
+            for _, (asset_name, path) in cls._iter_dirs(project_root)
         )
 
     @classmethod
@@ -248,17 +281,18 @@ class AssetExt(Asset, ABC):
         """Discover assets of this type."""
         return (
             cls(
-                name=name,
+                name=asset_name,
                 cluster=path[0] if path else 'Common',
                 dir_path=path,
+                file=file,
             )
-            for name, path in cls._iter_dirs(project_root)
+            for file, (asset_name, path) in cls._iter_dirs(project_root)
         )
 
     @classmethod
     def type_iter_names(cls, project_root: pl.Path) -> col.Iterator[str]:
         """Iterate raw asset names of this type."""
-        return (name for name, _ in cls._iter_dirs(project_root))
+        return (name for _, (name, _) in cls._iter_dirs(project_root))
 
     def get_tree_path(self) -> tuple[str, ...]:
         """Get this asset's tree path for use in sorting or output."""
@@ -285,6 +319,20 @@ class Background(AssetBuiltin):
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('backgrounds')
+
+    def get_background_metadata(
+        self, project_root: pl.Path
+    ) -> BackgroundMetadata:
+        """Get background's metadata."""
+        file = type(self).type_get_dir(project_root) / f'{self.name}.txt'
+        with file.open('r', encoding='utf-8') as f:
+            return my_parse_kv.parse_dataclass(BackgroundMetadata, f)
+
+    def get_background_image(self, project_root: pl.Path) -> pl.Path:
+        """Get background's image."""
+        file = type(self).type_get_dir(project_root) / f'{self.name}.png'
+        assert file.is_file()
+        return file
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,3 +461,25 @@ class Sprite(AssetBuiltin):
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('sprites')
+
+    def get_sprite_folder(self, project_root: pl.Path) -> pl.Path:
+        """Get sprite's folder with .pngs and .txt metadata."""
+        folder = type(self).type_get_dir(project_root) / self.name
+        assert folder.is_dir()
+        return folder
+
+    def get_sprite_metadata(self, project_root: pl.Path) -> SpriteMetadata:
+        """Get sprite's metadata."""
+        file = self.get_sprite_folder(project_root) / 'sprite.txt'
+        with file.open('r', encoding='utf-8') as f:
+            return my_parse_kv.parse_dataclass(SpriteMetadata, f)
+
+    def get_sprite_images(
+        self, project_root: pl.Path, frames: int
+    ) -> col.Iterator[pl.Path]:
+        """Get sprite's images."""
+        folder = self.get_sprite_folder(project_root)
+        for i in range(frames):
+            img = folder / f'{i}.png'
+            assert img.is_file()
+            yield img

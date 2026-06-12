@@ -79,6 +79,8 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 3.1 - Generate set of used assets in each room](#example-31---generate-set-of-used-assets-in-each-room)
     * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
+  * [4 - Project Juicer](#4---project-juicer)
+    * [Example 4.1 - Juicer: copy the project into build directory](#example-41---juicer-copy-the-project-into-build-directory)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -969,6 +971,14 @@ else:
             for err in errors:
                 print(f'  |-- {err}')
 ```
+
+Unlike the unused asset linter (which should be viewed more as a
+"suggester"), the crossref linters are *required* to be happy,
+before you may start with the actually useful tools.
+
+From the following examples, the only useful ones until you
+clear out the dependency linter, are about trimming
+more unused assets via dependency graph.
 ## 3 - Dependency graph
 ### Example 3.1 - Generate set of used assets in each room
 Build dependency graph.
@@ -1255,7 +1265,8 @@ Note 1: this tool is intended to be used only after resolved every
 issue raised by simpler crossref linter.
 
 Note 2: this tool will output a lot of violations for each offending
-dependency edge, so I recommend re-running the tool after each fix.
+dependency edge, therefore some attention is required in order to pinpoint
+the exact offenders. Also, I recommend re-running the tool after each fix.
 
 ```python
 import rustworkx as rx
@@ -1314,6 +1325,7 @@ for rg in room_graph_data.values():
     if not illegal_assets:
         continue
 
+    ok = False
     print(f'Boundary Violation in Room: {rg.room_name}')
     print(f'-- Allowed Clusters: {" ".join(allowed_clusters)}')
 
@@ -1373,6 +1385,134 @@ for rg in room_graph_data.values():
 
 Once you've cleared this one, you may call the game qualified
 for using the dangerous toys down the line.
+
+Congrats on defeating the tutorial boss.
+## 4 - Project Juicer
+### Example 4.1 - Juicer: copy the project into build directory
+Copy project's folder into build dir.
+
+Once you get all the cross-cluster linters happy, we can start optimizing
+the project. We will start with Project Juicer, and our first step
+is to copy the project into a build directory, and replace every asset
+from it with dry stubs, save for ones that are in Common cluster.
+
+The dry stubs that I used for my project are provided in repo's
+`data/dry` folder.
+
+I should note that we will only be "juicing" backgrounds, sprites and
+external audio (from gm82snd). Other assets don't impact RAM enough
+to worry about them.
+
+Once you run this tool, check that: your project gets successfully coped,
+projects opens in Game Maker, and all the non-Common assets get replaced
+with stubs. If all of these checks out, then you can do the next step.
+
+Btw, the project will open, but it won't run, because we deleted all the
+audio. When you run the game, it will very soon crash due to unknown sound.
+This issue will be solved at the end of the Juicer pipeline... for now
+you'll have to live with it.
+
+```python
+import dataclasses
+import shutil
+from pathlib import Path
+
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ConfJuicer:
+    """Configuration for Project Juicer."""
+
+    is_prod: bool
+    dir_out: Path
+    dir_dry: Path
+
+
+JUICER = ConfJuicer(
+    # start with dev builds
+    is_prod=False,
+    # output dir, for example "_build" folder next to the project
+    dir_out=Path('path/to/project/_build'),
+    # dry asset dir; if you downloaded Clunkster from source, then
+    #  such is available in repository's /data/dry folder
+    dir_dry=Path(__file__).parent / 'data' / 'dry',
+)
+
+# see Example 1.1 - Finding assets
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
+
+# clear build folder
+if JUICER.dir_out.exists():
+    # check that JUICER's out dir is part of the project just to be safe
+    # remove this check if necessary
+    assert PROJECT in JUICER.dir_out.parents
+    shutil.rmtree(JUICER.dir_out)
+
+# exclude Common assets from ignoring audio copy
+paths_unignore: set[Path] = set()
+for asset in assets:
+    if asset.cluster != 'Common':
+        continue
+    if not isinstance(asset, (AssetExtSfx, AssetExtBgm)):
+        continue
+    paths_unignore.add(asset.file)
+
+sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
+bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
+
+def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
+    """Callback for copytree to skip copying audio, except Common."""
+    path = Path(dir_path)
+
+    if path.is_relative_to(sfx_dir) or path.is_relative_to(bgm_dir):
+        ignored_items = []
+
+        for content in dir_contents:
+            content_path = path / content
+
+            # ignore files outside unignore whitelist
+            if (
+                content_path.is_file()
+                and content_path not in paths_unignore
+            ):
+                ignored_items.append(content)
+
+        return ignored_items
+
+    # ignore nothing
+    return []
+
+print('Copying project...')
+shutil.copytree(PROJECT, JUICER.dir_out, ignore=_ignore_audio)
+
+stub_img = JUICER.dir_dry / (
+    'img_prod.png' if JUICER.is_prod else 'img_dev.png'
+)
+
+print('Injecting dry stubs...')
+# inject dry stubs
+for asset in assets:
+    if asset.cluster == 'Common':
+        continue
+
+    if isinstance(asset, my_asset.Sprite):
+        meta = asset.get_sprite_metadata(JUICER.dir_out)
+        for img in asset.get_sprite_images(JUICER.dir_out, meta.frames):
+            shutil.copyfile(stub_img, img)
+    elif isinstance(asset, my_asset.Background):
+        meta = asset.get_background_metadata(JUICER.dir_out)
+        if meta.exists:
+            shutil.copyfile(
+                stub_img, asset.get_background_image(JUICER.dir_out)
+            )
+```
 <!--[[[end]]]-->
 
 # Rationale

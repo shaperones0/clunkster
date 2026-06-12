@@ -5,6 +5,7 @@ import collections.abc as col
 import dataclasses
 import json
 import multiprocessing as mp
+import shutil
 import sys
 import time
 import warnings
@@ -198,8 +199,6 @@ class Dependency:
 
 
 # --- COG_END: CLS_DEPENDENCY ---
-
-
 # --- COG_START: CLS_ROOM_GRAPH ---
 @dataclasses.dataclass
 class RoomGraph:
@@ -212,6 +211,27 @@ class RoomGraph:
 
 
 # --- COG_END: CLS_ROOM_GRAPH ---
+# --- COG_START: CLS_JUICER_CONFIG ---
+@dataclasses.dataclass(frozen=True, slots=True)
+class ConfJuicer:
+    """Configuration for Project Juicer."""
+
+    is_prod: bool
+    dir_out: Path
+    dir_dry: Path
+
+
+JUICER = ConfJuicer(
+    # start with dev builds
+    is_prod=False,
+    # output dir, for example "_build" folder next to the project
+    dir_out=Path('path/to/project/_build'),
+    # dry asset dir; if you downloaded Clunkster from source, then
+    #  such is available in repository's /data/dry folder
+    dir_dry=Path(__file__).parent / 'data' / 'dry',
+)
+# --- COG_END: CLS_JUICER_CONFIG ---
+
 
 # --- COG_START: REG_WORKERS_EXPLAIN ---
 # we can't send the compiled Aho-Corasick automaton across process boundaries
@@ -814,6 +834,13 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
                 print(f'[{asset_name}]')
                 for err in errors:
                     print(f'  |-- {err}')
+    # MD: Unlike the unused asset linter (which should be viewed more as a
+    # MD: "suggester"), the crossref linters are *required* to be happy,
+    # MD: before you may start with the actually useful tools.
+    # MD:
+    # MD: From the following examples, the only useful ones until you
+    # MD: clear out the dependency linter, are about trimming
+    # MD: more unused assets via dependency graph.
     # --- COG_END: MAIN_EX_LINT_CROSSREF ---
 
 
@@ -1020,7 +1047,7 @@ def main_ex_lint_unused_graph(
 def main_ex_lint_crossref_graph(
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
-) -> None:
+) -> bool:
     """Validate room and their dependencies clustering boundaries.
 
     Final step of linting process before the project would be qualified for
@@ -1031,8 +1058,10 @@ def main_ex_lint_crossref_graph(
     issue raised by simpler crossref linter.
 
     Note 2: this tool will output a lot of violations for each offending
-    dependency edge, so I recommend re-running the tool after each fix.
+    dependency edge, therefore some attention is required in order to pinpoint
+    the exact offenders. Also, I recommend re-running the tool after each fix.
     """
+    ok = True
     # --- COG_START: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
     # asset clusters lookup
@@ -1059,6 +1088,7 @@ def main_ex_lint_crossref_graph(
         if not illegal_assets:
             continue
 
+        ok = False
         print(f'Boundary Violation in Room: {rg.room_name}')
         print(f'-- Allowed Clusters: {" ".join(allowed_clusters)}')
 
@@ -1116,7 +1146,102 @@ def main_ex_lint_crossref_graph(
             break
     # MD: Once you've cleared this one, you may call the game qualified
     # MD: for using the dangerous toys down the line.
+    # MD:
+    # MD: Congrats on defeating the tutorial boss.
     # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
+    return ok
+
+
+def main_juicer_copy(assets: list[Asset]) -> None:
+    """Copy project's folder into build dir.
+
+    Once you get all the cross-cluster linters happy, we can start optimizing
+    the project. We will start with Project Juicer, and our first step
+    is to copy the project into a build directory, and replace every asset
+    from it with dry stubs, save for ones that are in Common cluster.
+
+    The dry stubs that I used for my project are provided in repo's
+    ``data/dry`` folder.
+
+    I should note that we will only be "juicing" backgrounds, sprites and
+    external audio (from gm82snd). Other assets don't impact RAM enough
+    to worry about them.
+
+    Once you run this tool, check that: your project gets successfully coped,
+    projects opens in Game Maker, and all the non-Common assets get replaced
+    with stubs. If all of these checks out, then you can do the next step.
+
+    Btw, the project will open, but it won't run, because we deleted all the
+    audio. When you run the game, it will very soon crash due to unknown sound.
+    This issue will be solved at the end of the Juicer pipeline... for now
+    you'll have to live with it.
+    """
+    # --- COG_START: MAIN_EX_JUICER_COPY ---
+    # clear build folder
+    if JUICER.dir_out.exists():
+        # check that JUICER's out dir is part of the project just to be safe
+        # remove this check if necessary
+        assert PROJECT in JUICER.dir_out.parents
+        shutil.rmtree(JUICER.dir_out)
+
+    # exclude Common assets from ignoring audio copy
+    paths_unignore: set[Path] = set()
+    for asset in assets:
+        if asset.cluster != 'Common':
+            continue
+        if not isinstance(asset, (AssetExtSfx, AssetExtBgm)):
+            continue
+        paths_unignore.add(asset.file)
+
+    sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
+    bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
+
+    def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
+        """Callback for copytree to skip copying audio, except Common."""
+        path = Path(dir_path)
+
+        if path.is_relative_to(sfx_dir) or path.is_relative_to(bgm_dir):
+            ignored_items = []
+
+            for content in dir_contents:
+                content_path = path / content
+
+                # ignore files outside unignore whitelist
+                if (
+                    content_path.is_file()
+                    and content_path not in paths_unignore
+                ):
+                    ignored_items.append(content)
+
+            return ignored_items
+
+        # ignore nothing
+        return []
+
+    print('Copying project...')
+    shutil.copytree(PROJECT, JUICER.dir_out, ignore=_ignore_audio)
+
+    stub_img = JUICER.dir_dry / (
+        'img_prod.png' if JUICER.is_prod else 'img_dev.png'
+    )
+
+    print('Injecting dry stubs...')
+    # inject dry stubs
+    for asset in assets:
+        if asset.cluster == 'Common':
+            continue
+
+        if isinstance(asset, my_asset.Sprite):
+            meta = asset.get_sprite_metadata(JUICER.dir_out)
+            for img in asset.get_sprite_images(JUICER.dir_out, meta.frames):
+                shutil.copyfile(stub_img, img)
+        elif isinstance(asset, my_asset.Background):
+            meta = asset.get_background_metadata(JUICER.dir_out)
+            if meta.exists:
+                shutil.copyfile(
+                    stub_img, asset.get_background_image(JUICER.dir_out)
+                )
+    # --- COG_END: MAIN_EX_JUICER_COPY ---
 
 
 def _run_tutorials() -> None:
@@ -1135,13 +1260,13 @@ def test_tutorials() -> None:
         return  # skip if dummy project isn't set up yet
     PROJECT = dummy_proj
 
-    # TODO dummy config and dummy aliases
+    # TODO dummy project and config
 
     _run_tutorials()
 
 
 def _load_private(config_dir: Path) -> None:
-    global PROJECT, ALIAS, LINT_RULES, CONTEXT_RULES
+    global PROJECT, ALIAS, LINT_RULES, CONTEXT_RULES, JUICER
 
     _file_private_config = config_dir / 'config.json'
     if not _file_private_config.exists():
@@ -1149,10 +1274,12 @@ def _load_private(config_dir: Path) -> None:
             f'Config file not found: {_file_private_config}'
         )
 
-    _private_config = json.loads(
-        _file_private_config.read_text(encoding='utf-8')
+    PROJECT = config_dir.parent / 'source'
+    JUICER = ConfJuicer(
+        is_prod=True,
+        dir_out=config_dir.parent / '_build',
+        dir_dry=JUICER.dir_dry,  # og dir
     )
-    PROJECT = Path(_private_config['project'])
 
     _file_private_alias = config_dir / 'alias.json'
     ALIAS = json.loads(_file_private_alias.read_text(encoding='utf-8'))
@@ -1205,7 +1332,12 @@ def main() -> None:
         room_data = main_ex_graph(assets, deps)
 
         # main_ex_lint_unused_graph(assets, room_data)
-        main_ex_lint_crossref_graph(assets, room_data)
+        ok = main_ex_lint_crossref_graph(assets, room_data)
+        if not ok:
+            print('Linting errors found - bailing out')
+            return
+
+        main_juicer_copy(assets)
 
 
 if __name__ == '__main__':
