@@ -1681,7 +1681,7 @@ From those dependencies, the tool can:
    - If an asset is shared between multiple stages, then it belongs in Common cluster
    - DON'T use timelines
    - DON'T use the dastardly "Treat uninitialized variables as 0 (BAD!!!)" option
-   - Minimize usage of persistent objects (they get tagged as referenced in every existing room)
+   - Minimize the number of persistent objects (they'll get tagged as referenced in every room)
 4. Follow good coding practices
     - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
       - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
