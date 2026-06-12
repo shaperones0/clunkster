@@ -1733,34 +1733,54 @@ While the tool doesn't require you to name things properly, no duplicates can ex
 
 Sprites:
 ```
-+Enemies
++sprEnemies
     |sprEnemySpawner
     |sprEnemy
     |sprEnemyBurn
     |sprEnemyPoisoned
-+StageA
++sprStageA
     |sprFireball
-+StageFinal
++sprStageFinal
     |sprEnemyBuffed
 ```
 Backgrounds:
 ```
-+Stage1
-    |bStage1
-+Stage3
-    |bStage3
++bgStageA
+    |bStageA
++bgStageC
+    |bStageC
 tCommon
 ```
 
-Even though appropriate naming of the assets isn't required, I recommend cleaning them up now. It would also be a good idea to do optimization passes before starting integrating Clunkster (unless you are running into an "unrunable game" situation like I did when I started making this tool).
+With this well organized asset tree you can write an `ALIAS` config so they get correctly assigned to their clusters:
 
-In some cases, it might help to prepend asset names with their stage name for easy reference. However, whenever you'll ever have to move things around (and you _will_), renaming assets takes some effort.
+```python
+ALIAS: dict[str, list[str]] = {
+    'StageA': [
+        'sprStageA',
+        'bgStageA'
+    ],
+    'StageC': [
+        'bgStageC'
+    ],
+    'Common': [
+        'sprEnemies',
+        # tCommon was automatically assigned Common cluster,
+        # since its in the root of the tree
+    ],
+    # ...
+}
+```
+
+Even though appropriate naming of the assets isn't required, I recommend cleaning them up now. It would also be a good idea to do optimization passes before starting integrating Clunkster (unless you have an "unrunable game" situation like I had when I started making this tool).
+
+In some cases, it might help to prepend asset names with their stage name for easy reference. However, whenever you'll have to move things around (and you _will_), renaming assets would take some effort.
 
 > Tip: When renaming assets, use the IDE's search utility to find all occurrences of the asset name in any code.
 
 ### [HowTo] Prerequisites - Eradicating dynamic asset referencing
 
-I have seen these ones used far more often than I'd like to admit. Let's look at anti-patterns from the [Prerequisites](#prerequisites) list.
+I have seen these ones quite often. Let's look at anti-patterns from the [Prerequisites](#prerequisites) list.
 
 ❌ Bad: Doing maths on asset IDs.
 
@@ -1971,11 +1991,45 @@ LINT_RULES: dict[str, set[str]] = {
         'CommonNorth',  # include the regional common cluster
         'IceStage'      # include anything from itself
     },
+
+    # this will make any Ice Stage room load all 3 of those clusters
 }
 ```
 Now everything in `CommonNorth` can be freely accessed by `IceStage`.
 
 > Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
+
+Here's the sample implementation of those context guards.
+
+```gml
+///room_is_ice([room])
+//Check whether the given room is from Ice Stage
+
+var _room;
+if argument_count == 0 {
+    if global._clunkster_reg_mode return 1
+
+    //optionally, if you are applying this tool onto an existing project,
+    //you might want to temporarily bypass the guard, until you fix
+    //all the initial bugs
+    //return 1 //TEMP
+
+    _room = room
+}
+else {
+    _room = argument[0]
+}
+
+switch _room {
+case rIceIntro:
+case rIceBarrage:
+    return 1
+default:
+    return 0
+}
+```
+
+Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool that might come in handy later.
 
 ### [HowTo] Prerequisites - Timelines...
 
@@ -2018,7 +2072,7 @@ If the Player enters Stage A, this reference will linger, and the analyzer won't
 instance_create(x, y, global.next_cutscene_actor)
 ```
 
-... it could potentially crash the game, or produce a broken stub-asset behavior if the Stage B has been unloaded.
+... it could potentially produce a broken stub-asset behavior if the Stage B has been unloaded.
 
 ❌ Bad: Overusing Persistence
 
@@ -2047,22 +2101,20 @@ EXTRA_ROOTS: set[str] = {
     # ...
 }
 ```
-As a side note, dependencies of each persistent object will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
+As a side note, all dependencies of each Extra Root will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
 
 ### [HowTo] Prerequisites - Proper use of the Ignore Pragma
 
-We provide a pragma for ignoring files during dependency scans: `//!clunkster: ignore`. I don't think I need to explain why it should be used very sparingly.
-
-You should only use the pragma on pure data registries that define metadata without instantiating objects.
+We provide a pragma for ignoring files during dependency scans: `//!clunkster: ignore`. You should only use it on pure data registries that define metadata without instantiating objects.
 
 ❌ Bad: Skipping Your Homework
 
 ```gml
 ///Player.Collision_ForestLog
 
-//eeehhh i need to convert collision event into an End Step event
-// + rip all that boolean logic, hide every call behind a
-// guard or something ehhhh
+//eeehhh i need to convert collision with stage-specific object event
+// into an End Step event + rip all that boolean logic, hide every
+// call behind a guard or something ehhhh
 
 //i dont feel like doin it :3
 //!clunkster: ignore
@@ -2099,10 +2151,10 @@ with Player  {
 //Register EVERY music in here
 //!clunkster: ignore
 
-music_def_begin("musTitle",0.8)
-music_def_room(rTitle,mus_autoplay)
-music_def_room(rOptions,mus_fadeout)
-music_def_room(rFinal_Respite,mus_autoplay)
+music_def_begin("musStageTutorial",0.8)
+    music_def_room(rTutorial,mus_autoplay)
+    music_def_room(rTutorialBoss,mus_fadeout)
+    music_def_room(rFinal_Respite,mus_autoplay)
 music_def_end()
 
 ///World.RoomStart
@@ -2127,6 +2179,122 @@ if not is_undefined(_l_auto) {
 }
 ```
 
+✅ Good: Make registries only define pure data and non-instantiating references.
+
+```gml
+///music_register()
+//Register EVERY music in here
+//!clunkster: ignore
+
+music_def_begin("musTitle")
+    music_def_volume(0.8)
+    music_def_og_samplerate(44100)
+    music_def_loop(31*44100 + 19422, 70*44100 + 28955)
+
+    //instead of defining autoplay logic in registry,
+    // autoplay logic can be moved into a different file
+    // without the ignore pragma
+
+    //but we can still keep logic like "make sure the track is
+    // stopped when we enter any room other than this".
+    // sound_stop(...) is not an instantiating function,
+    // and will work just fine if this specific sound
+    // was replaced with a stub "null.wav"
+    music_def_room_allowed(rTitle, rOptions, rFinal_Respite)
+music_def_end()
+```
+
+✅ Good: Guard instantiating registry logic.
+
+```gml
+///music_register()
+//Register EVERY music in here
+
+// notice: the ignore is gone
+
+if room_is_tutorial_or_final() {
+    //anything shared between tutorial and final stage
+
+    music_def_begin("musStageTutorial",0.8)
+        music_def_room(rTutorial,mus_autoplay)
+        music_def_room(rTutorialBoss,mus_fadeout)
+        music_def_room(rFinal_Respite,mus_autoplay)
+
+        //validate that all of the rooms actually belong to the cluster
+        assert(room_is_tutorial_or_final(rTutorial))
+        assert(room_is_tutorial_or_final(rTutorialBoss))
+        assert(room_is_tutorial_or_final(rFinal_Respite))
+    music_def_end()
+}
+```
+
+And, since this registry, ideally, runs only on game start, in order to not loose data that we deliberately hidden behind guard, we can introduce a little ethical hack (that doesn't ruin our cluster-boundary model).
+
+Remember the `global._clunkster_reg_mode` from before? Here's out plan:
+
+New script `clunkster_init`:
+
+```gml
+///clunkster_init()
+global._clunkster_reg_mode = 0
+
+//any other initialization logic might be
+// autogenerated by Clunkster and added here
+```
+
+New script `clunkster_registry_begin`:
+
+```gml
+///clunkster_registry_begin()
+global._clunkster_reg_mode = 1
+```
+
+New script `clunkster_registry_end`:
+
+```gml
+///clunkster_registry_end()
+global._clunkster_reg_mode = 0
+```
+
+And here's how we will call the registries in Game Start:
+
+```gml
+clunkster_registry_begin()
+    sound_register()
+    music_register()
+clunkster_registry_end()
+```
+
+And guards should intelligently silence themselves if used as context guards in registry mode, but still do proper validation if they were given an actual room:
+
+```gml
+///room_is_tutorial_or_final([room])
+//Check whether the given room is from Tutorial or Final Stage
+
+var _room;
+if argument_count == 0 {
+    if global._clunkster_reg_mode return 1
+
+    //optionally, if you are applying this tool onto an existing project,
+    //you might want to temporarily bypass the guard, until you fix
+    //all the initial bugs
+    //return 1 //TEMP
+
+    _room = room
+}
+else {
+    _room = argument[0]
+}
+
+switch _room {
+case rTutorial:
+case rTutorialBoss:
+case rFinal_Respite:
+    return 1
+default:
+    return 0
+}
+```
 
 ## Workflow
 
