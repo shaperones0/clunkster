@@ -68,8 +68,7 @@ cog.outl('\n'.join(generate_toc()))
   * [1 - Reading project](#1---reading-project)
     * [Example 1.1 - Finding assets](#example-11---finding-assets)
     * [Example 1.2 - Lint: `tree.yyd` files](#example-12---lint-treeyyd-files)
-    * [Example 1.3 - Generating clusters](#example-13---generating-clusters)
-    * [Example 1.4 - Cluster aliasing](#example-14---cluster-aliasing)
+    * [Example 1.3 - Cluster aliasing](#example-13---cluster-aliasing)
   * [2 - References](#2---references)
     * [Example 2.1 - Reference scanning](#example-21---reference-scanning)
     * [Example 2.2 - Reference scanning (fancier)](#example-22---reference-scanning-fancier)
@@ -103,144 +102,62 @@ cog.outl(rend.render())
 ]]]-->
 ## 1 - Reading project
 ### Example 1.1 - Finding assets
-First, we want to check that builtin assets get scanned correctly.
+Let's start with some simple scanning.
 
-For this we define classes `AssetType`, which houses logic
-for navigating GameMaker's project structure, as well as `Asset`,
-which stores necessary information of the assets.
-
-Logic in `AssetType` includes external assets, and expects them to
-be present in specific directories. You might want to modify them, if
-yours are different.
+We want to check that assets get detected correctly.
+Logic in provided `clunkster.asset` module already handles most of
+the discovery of both builtin and external assets, as well as automatic
+cluster assignment. However, it's likely that you'll want assets from
+folders `sprStageA` and `bgStageA` to end up in a unified cluster
+`StageA`. This will be done a bit later.
 
 ```python
-import collections.abc as col
-from dataclasses import dataclass
-from enum import Enum, auto
+import dataclasses
 from pathlib import Path
 
-from clunkster.parse import tree as my_parse_tree
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
 
-# asset_name, tree_path (asset name not appended)
-TreeEntry = tuple[str, tuple[str, ...]]
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtBgm(my_asset.AssetExt):
+    """External background music asset."""
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_BGM'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'music'
 
 
-class AssetType(Enum):
-    """GameMaker8.2 asset type."""
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtSfx(my_asset.AssetExt):
+    """External sound effect asset."""
 
-    BACKGROUND = auto()
-    FONT = auto()
-    OBJECT = auto()
-    PATH = auto()
-    ROOM = auto()
-    SCRIPT = auto()
-    SPRITE = auto()
-    SOUND = auto()
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_SFX'
 
-    DATA_SFX = auto()
-    DATA_MUSIC = auto()
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'sounds'
 
-    def is_builtin(self) -> bool:
-        """Check whether this asset type is builtin or not."""
-        return self in {
-            AssetType.BACKGROUND,
-            AssetType.FONT,
-            AssetType.OBJECT,
-            AssetType.PATH,
-            AssetType.ROOM,
-            AssetType.SCRIPT,
-            AssetType.SPRITE,
-            AssetType.SOUND,
-        }
+CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
+    my_asset.Sprite,
+    my_asset.Background,
+    my_asset.Sound,
+    my_asset.Path,
+    my_asset.Script,
+    my_asset.Font,
+    my_asset.Object,
+    my_asset.Room,
+)
 
-    def exists(self, project_root: Path) -> bool:
-        """Check whether this asset type exists in the project."""
-        return (project_root / self.get_dir()).exists()
-
-    def get_dir(self) -> str:
-        """Get project's directory name for given asset type."""
-        return {
-            AssetType.BACKGROUND: 'backgrounds',
-            AssetType.FONT: 'fonts',
-            AssetType.OBJECT: 'objects',
-            AssetType.PATH: 'paths',
-            AssetType.ROOM: 'rooms',
-            AssetType.SCRIPT: 'scripts',
-            AssetType.SPRITE: 'sprites',
-            AssetType.SOUND: 'sounds',
-            AssetType.DATA_SFX: 'data/sounds',
-            AssetType.DATA_MUSIC: 'data/music',
-        }[self]
-
-    def get_scannables(
-        self, asset_name: str, project_root: Path
-    ) -> col.Iterator[Path]:
-        """Get scannable files for given asset."""
-        asset_dir = project_root / self.get_dir()
-        match self:
-            case AssetType.SCRIPT:
-                file_gml = asset_dir / f'{asset_name}.gml'
-                yield file_gml  # guaranteed to exist
-
-            case AssetType.OBJECT:
-                file_meta = asset_dir / f'{asset_name}.txt'
-                file_gml = asset_dir / f'{asset_name}.gml'
-                yield file_meta
-                yield file_gml  # both guaranteed to exist
-
-            case AssetType.ROOM:
-                dir_room = asset_dir / asset_name
-                yield from dir_room.glob('*.txt')
-                yield from dir_room.glob('*.gml')
-
-    def file_tree(self, project_root: Path) -> Path:
-        """Get tree.yyd for this asset type."""
-        return project_root / self.get_dir() / 'tree.yyd'
-
-    def file_index(self, project_root: Path) -> Path:
-        """Get index.yyd for this asset type."""
-        return project_root / self.get_dir() / 'index.yyd'
-
-    def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
-        """Iterate asset tree of given asset type.
-
-        :param project_root: Project's root directory.
-        :return: Iterator of (asset_name, tree_path). The ``tree_path``
-          contains path in asset's respective "tree" structure: ``tree.yyd``
-          for builtin assets and filesystem tree of ``data/`` for external
-          assets. The asset name is not appended to ``tree_path``.
-        """
-        asset_dir = project_root / self.get_dir()
-        if self.is_builtin():
-            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-            return my_parse_tree.parse(tree_text.splitlines())
-        return (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
-
-@dataclass(frozen=True, slots=True)
-class Asset:
-    """Simple asset definition."""
-
-    asset_type: AssetType
-    name: str
-    tree_path: tuple[str, ...]
-    cluster: str
-    files_to_scan: tuple[Path, ...]
-
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
+CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
+    *CLUSTERABLE_BUILTINS,
+    AssetExtBgm,
+    AssetExtSfx,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -249,28 +166,16 @@ assets: list[Asset] = []
 
 for asset_type in CLUSTERABLE_ASSETS:
     # check if given asset type exist in the project
-    if not asset_type.exists(PROJECT):
+    if not asset_type.type_is_used(PROJECT):
         continue
 
-    # iterate through tree.yyd file or direct fs structure
-    for asset_name, asset_path in asset_type.iter_tree(PROJECT):
-        # we don't have clusters yet so we'll just set it to "Unknown"
-        scannables = asset_type.get_scannables(asset_name, PROJECT)
-        assets.append(
-            Asset(
-                asset_type=asset_type,
-                name=asset_name,
-                tree_path=asset_path,
-                cluster='Unknown',
-                files_to_scan=tuple(scannables),
-            )
-        )
+    assets.extend(asset_type.type_iter(PROJECT))
 
 # you should investigate the resulting array for inconsistencies
 print(f'Discovered {len(assets)} total assets.')
 ```
 ### Example 1.2 - Lint: `tree.yyd` files
-Check integrity of `tree.yyd` files.
+Now we must check integrity of `tree.yyd` files and asset names.
 
 Asset discovery and clusterization is based on scanning `tree.yyd`
 files, so we have to ensure that they have no duplicate folders.
@@ -278,28 +183,36 @@ files, so we have to ensure that they have no duplicate folders.
 Technically, before doing that you should also check that there are also
 no duplicate asset names via broom icon on IDE toolbar.
 
+This code is quite large, however, most of it won't be relevant in later
+steps.
+
 ```python
 import collections
 import collections.abc as col
 from pathlib import Path
 
-from clunkster.parse import index as my_parse_index
+from clunkster import asset as my_asset
 from clunkster.parse import tree as my_parse_tree
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
+CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
+    my_asset.Sprite,
+    my_asset.Background,
+    my_asset.Sound,
+    my_asset.Path,
+    my_asset.Script,
+    my_asset.Font,
+    my_asset.Object,
+    my_asset.Room,
+)
+
+CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
+    *CLUSTERABLE_BUILTINS,
+    AssetExtBgm,
+    AssetExtSfx,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -328,18 +241,11 @@ def lint_tree(tree_lines: col.Iterable[str]) -> None:
 asset_names: set[str] = set()
 for asset_type in CLUSTERABLE_ASSETS:
     # check if given asset type exist in the project
-    if not asset_type.exists(PROJECT):
-        continue
-    # tree.yyd exists only for builtin assets
-    if not asset_type.is_builtin():
+    if not asset_type.type_is_used(PROJECT):
         continue
 
-    # get assets from index, validate uniqueness
-    assets_from_index = list(
-        my_parse_index.parse_skimmed(
-            asset_type.file_index(PROJECT).read_text().splitlines()
-        )
-    )
+    # populate namespace
+    assets_from_index = list(asset_type.type_iter_names(PROJECT))
     assets_set = set(assets_from_index)
     if len(assets_from_index) != len(assets_set):
         dupes = [
@@ -359,110 +265,19 @@ for asset_type in CLUSTERABLE_ASSETS:
         )
     asset_names.update(assets_set)
 
-    # feed into the linter
-    tree_file = PROJECT / asset_type.get_dir() / 'tree.yyd'
+    # check tree.yyd for builtin assets
+    if not issubclass(asset_type, my_asset.AssetBuiltin):
+        continue
+
+    # get assets from index, validate uniqueness
+
+    tree_file = asset_type.type_file_tree(PROJECT)
     print(f'Checking {tree_file} ...')
     lint_tree(tree_file.read_text(encoding='utf-8').splitlines())
 ```
 
 If you got no duplicates messages in the output then you're all good.
-### Example 1.3 - Generating clusters
-Autogenerate clusters for the assets.
-
-Now that assets discovering works, we may generate clusters. By default,
-those are assigned based on the first directory in trees.
-
-```python
-import collections.abc as col
-from pathlib import Path
-
-from clunkster.parse import tree as my_parse_tree
-
-# see Example 1.1 - Finding assets
-class AssetType: ...
-
-# see Example 1.1 - Finding assets
-class Asset: ...
-
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
-)
-
-PROJECT = Path('path/to/the/project')
-
-assets: list[Asset] = []
-
-# cluster -> its assets
-cluster_map: dict[str, list[str]] = {}
-# asset type -> found clusters (useful for initial cleanup)
-asset_to_cluster: dict[AssetType, list[str]] = {}
-for asset_type in CLUSTERABLE_ASSETS:
-    # we merge logic for both builtins and externals into one loop
-    asset_dir = PROJECT / asset_type.get_dir()
-    if not asset_dir.exists():
-        continue
-
-    # fill in set of clusters associated with this asset type
-    cluster_set: set[str] = set()
-    # create asset iterator (asset_name, folder path)
-    if asset_type.is_builtin():
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        asset_iter = my_parse_tree.parse(tree_text.splitlines())
-    else:
-        asset_iter = (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
-
-    # iterate them assets
-    for asset_name, path in asset_iter:
-        # use base folder as cluster name
-        cluster_name = path[0] if path else 'Common'
-        cluster_set.add(cluster_name)
-        cluster_map.setdefault(cluster_name, []).append(asset_name)
-
-        assets.append(
-            Asset(
-                asset_type=asset_type,
-                name=asset_name,
-                tree_path=path,
-                cluster=cluster_name,
-                files_to_scan=tuple(
-                    asset_type.get_scannables(asset_name, PROJECT)
-                ),
-            )
-        )
-    asset_to_cluster[asset_type] = list(cluster_set)
-
-# print the asset type to cluster table
-# (helps to find duplicates)
-clusters_all = sorted(
-    {name for clusters in asset_to_cluster.values() for name in clusters}
-)
-print('All clusters:', *clusters_all)
-for asset_type, clusters in asset_to_cluster.items():
-    cluster_set = set(clusters)
-    row = [
-        col if col in cluster_set else ' ' * len(col)
-        for col in clusters_all
-    ]
-    print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
-```
-
-There's a chance of duplicates in result. Also, some of those
-"clusters" (like Backgrounds, or World, etc.) should be a part of
-Common cluster.
-### Example 1.4 - Cluster aliasing
+### Example 1.3 - Cluster aliasing
 Manually fix inconsistencies in cluster map.
 
 After we did initial scan, you may encounter inconsistencies like different
@@ -506,133 +321,20 @@ for name, clusters in ALIAS.items():
 Then we apply aliasing in the asset iteration loop.
 
 ```python
-cluster_name = path[0] if path else 'Common'
-# replace clusters with aliases
-if cluster_name in cluster_to_name:
-    cluster_name = cluster_to_name[cluster_name]
+alias = cluster_to_name.get(asset.cluster)
+if alias is not None:
+    asset = dataclasses.replace(asset, cluster=alias)
 ```
-
-Keep using the table thing until all aliases are gone.
 
 Full example:
 
 ```python
-import collections.abc as col
+import dataclasses
 import warnings
-from dataclasses import dataclass
-from enum import Enum, auto
 from pathlib import Path
 
-from clunkster.parse import tree as my_parse_tree
-
-# asset_name, tree_path (asset name not appended)
-TreeEntry = tuple[str, tuple[str, ...]]
-
-
-class AssetType(Enum):
-    """GameMaker8.2 asset type."""
-
-    BACKGROUND = auto()
-    FONT = auto()
-    OBJECT = auto()
-    PATH = auto()
-    ROOM = auto()
-    SCRIPT = auto()
-    SPRITE = auto()
-    SOUND = auto()
-
-    DATA_SFX = auto()
-    DATA_MUSIC = auto()
-
-    def is_builtin(self) -> bool:
-        """Check whether this asset type is builtin or not."""
-        return self in {
-            AssetType.BACKGROUND,
-            AssetType.FONT,
-            AssetType.OBJECT,
-            AssetType.PATH,
-            AssetType.ROOM,
-            AssetType.SCRIPT,
-            AssetType.SPRITE,
-            AssetType.SOUND,
-        }
-
-    def exists(self, project_root: Path) -> bool:
-        """Check whether this asset type exists in the project."""
-        return (project_root / self.get_dir()).exists()
-
-    def get_dir(self) -> str:
-        """Get project's directory name for given asset type."""
-        return {
-            AssetType.BACKGROUND: 'backgrounds',
-            AssetType.FONT: 'fonts',
-            AssetType.OBJECT: 'objects',
-            AssetType.PATH: 'paths',
-            AssetType.ROOM: 'rooms',
-            AssetType.SCRIPT: 'scripts',
-            AssetType.SPRITE: 'sprites',
-            AssetType.SOUND: 'sounds',
-            AssetType.DATA_SFX: 'data/sounds',
-            AssetType.DATA_MUSIC: 'data/music',
-        }[self]
-
-    def get_scannables(
-        self, asset_name: str, project_root: Path
-    ) -> col.Iterator[Path]:
-        """Get scannable files for given asset."""
-        asset_dir = project_root / self.get_dir()
-        match self:
-            case AssetType.SCRIPT:
-                file_gml = asset_dir / f'{asset_name}.gml'
-                yield file_gml  # guaranteed to exist
-
-            case AssetType.OBJECT:
-                file_meta = asset_dir / f'{asset_name}.txt'
-                file_gml = asset_dir / f'{asset_name}.gml'
-                yield file_meta
-                yield file_gml  # both guaranteed to exist
-
-            case AssetType.ROOM:
-                dir_room = asset_dir / asset_name
-                yield from dir_room.glob('*.txt')
-                yield from dir_room.glob('*.gml')
-
-    def file_tree(self, project_root: Path) -> Path:
-        """Get tree.yyd for this asset type."""
-        return project_root / self.get_dir() / 'tree.yyd'
-
-    def file_index(self, project_root: Path) -> Path:
-        """Get index.yyd for this asset type."""
-        return project_root / self.get_dir() / 'index.yyd'
-
-    def iter_tree(self, project_root: Path) -> col.Iterator[TreeEntry]:
-        """Iterate asset tree of given asset type.
-
-        :param project_root: Project's root directory.
-        :return: Iterator of (asset_name, tree_path). The ``tree_path``
-          contains path in asset's respective "tree" structure: ``tree.yyd``
-          for builtin assets and filesystem tree of ``data/`` for external
-          assets. The asset name is not appended to ``tree_path``.
-        """
-        asset_dir = project_root / self.get_dir()
-        if self.is_builtin():
-            tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-            return my_parse_tree.parse(tree_text.splitlines())
-        return (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
-
-@dataclass(frozen=True, slots=True)
-class Asset:
-    """Simple asset definition."""
-
-    asset_type: AssetType
-    name: str
-    tree_path: tuple[str, ...]
-    cluster: str
-    files_to_scan: tuple[Path, ...]
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
 
 ALIAS: dict[str, list[str]] = {
     'StageA': [
@@ -655,17 +357,46 @@ ALIAS: dict[str, list[str]] = {
     # ...
 }
 
-CLUSTERABLE_ASSETS: tuple[AssetType, ...] = (
-    AssetType.SPRITE,
-    AssetType.BACKGROUND,
-    AssetType.SOUND,
-    AssetType.PATH,
-    AssetType.SCRIPT,
-    AssetType.FONT,
-    AssetType.OBJECT,
-    AssetType.ROOM,
-    AssetType.DATA_SFX,
-    AssetType.DATA_MUSIC,
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtBgm(my_asset.AssetExt):
+    """External background music asset."""
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_BGM'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'music'
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtSfx(my_asset.AssetExt):
+    """External sound effect asset."""
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_SFX'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'sounds'
+
+CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
+    my_asset.Sprite,
+    my_asset.Background,
+    my_asset.Sound,
+    my_asset.Path,
+    my_asset.Script,
+    my_asset.Font,
+    my_asset.Object,
+    my_asset.Room,
+)
+
+CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
+    *CLUSTERABLE_BUILTINS,
+    AssetExtBgm,
+    AssetExtSfx,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -686,50 +417,30 @@ for name, clusters in ALIAS.items():
         existing_aliases.add(name)
 
 cluster_map: dict[str, list[str]] = {}
-asset_to_cluster: dict[AssetType, list[str]] = {}
+asset_to_cluster: dict[type[Asset], list[str]] = {}
 used_aliases: set[str] = set()
 asset_name_set: set[str] = set()  # clean asset name issues
 for asset_type in CLUSTERABLE_ASSETS:
-    asset_dir = PROJECT / asset_type.get_dir()
-    if not asset_dir.exists():
+    if not asset_type.type_is_used(PROJECT):
         continue
 
     cluster_set: set[str] = set()
-    if asset_type.is_builtin():
-        tree_text = (asset_dir / 'tree.yyd').read_text(encoding='utf-8')
-        asset_iter = my_parse_tree.parse(tree_text.splitlines())
-    else:
-        asset_iter = (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
+    for asset in asset_type.type_iter(PROJECT):
+        alias = cluster_to_name.get(asset.cluster)
+        used_aliases.add(asset.cluster)
+        if alias is not None:
+            asset = dataclasses.replace(asset, cluster=alias)
+            used_aliases.add(alias)
 
-    for asset_name, path in asset_iter:
-        cluster_name = path[0] if path else 'Common'
-        used_aliases.add(cluster_name)
-        if cluster_name in cluster_to_name:
-            cluster_name = cluster_to_name[cluster_name]
-        used_aliases.add(cluster_name)
+        cluster_set.add(asset.cluster)
+        cluster_map.setdefault(asset.cluster, []).append(asset.name)
 
-        cluster_set.add(cluster_name)
-        cluster_map.setdefault(cluster_name, []).append(asset_name)
+        if asset.name in asset_name_set:
+            raise ValueError(f'Duplicate asset name {asset.name}')
+        asset_name_set.add(asset.name)
 
-        if asset_name in asset_name_set:
-            raise ValueError(f'Duplicate asset name {asset_name}')
-        asset_name_set.add(asset_name)
+        assets.append(asset)
 
-        assets.append(
-            Asset(
-                asset_type=asset_type,
-                name=asset_name,
-                tree_path=path,
-                cluster=cluster_name,
-                files_to_scan=tuple(
-                    asset_type.get_scannables(asset_name, PROJECT)
-                ),
-            )
-        )
     asset_to_cluster[asset_type] = list(cluster_set)
 
 clusters_all = sorted(
@@ -739,10 +450,10 @@ print('All clusters:', *clusters_all)
 for asset_type, clusters in asset_to_cluster.items():
     cluster_set = set(clusters)
     row = [
-        col if col in cluster_set else ' ' * len(col)
-        for col in clusters_all
+        clm if clm in cluster_set else ' ' * len(clm)
+        for clm in clusters_all
     ]
-    print(f'{asset_type.get_dir(): >12}:', '|'.join(row))
+    print(f'{asset_type.type_to_str_linter()}:', '|'.join(row))
 
 unused_aliases = existing_aliases - used_aliases
 extra_aliases = used_aliases - existing_aliases
@@ -755,6 +466,8 @@ if extra_aliases:
         f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
     )
 ```
+
+Keep using the table thing until all aliases are gone.
 ## 2 - References
 ### Example 2.1 - Reference scanning
 Simple scanner.
@@ -782,18 +495,21 @@ might take up 5-10 seconds.
 Multiprocessing version is available in later examples.
 
 ```python
+from pathlib import Path
+
 from ahocorasick import Automaton
 
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
+from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
-# see Example 1.1 - Finding assets
-class Asset: ...
-
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
 
 automaton = Automaton()
 for asset in assets:
@@ -802,7 +518,7 @@ automaton.make_automaton()
 
 total_matches = 0
 for asset in assets:
-    for file_path in asset.files_to_scan:
+    for file_path in asset.get_scannables(PROJECT):
         text = file_path.read_text(encoding='utf-8')
         matches: list[my_analyze_scan_dep.DependencyMatch] = list(
             my_analyze_scan_dep.scan(
@@ -831,31 +547,34 @@ Simple scanner with some extra stuff.
 We can add a progress bar + robust struct for storing our dependencies.
 
 ```python
-from dataclasses import dataclass
+import dataclasses
+from pathlib import Path
 
 import tqdm
 from ahocorasick import Automaton
 
+from clunkster import asset as my_asset
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
+from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
-# see Example 1.1 - Finding assets
-class Asset: ...
-
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
 
     location: my_analyze_location.BoundLocation
-    source_asset: Asset
-    target_asset: Asset
+    source_asset: my_asset.Asset
+    target_asset: my_asset.Asset
     contexts: tuple[str, ...]
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
 
 automaton = Automaton()
 for asset in assets:
@@ -869,7 +588,7 @@ total_matches = 0
 scans = tuple(
     (asset, file_path)
     for asset in assets
-    for file_path in asset.files_to_scan
+    for file_path in asset.get_scannables(PROJECT)
 )
 for asset, file_path in tqdm.tqdm(
     scans, total=len(scans), desc='Scanning'
@@ -913,24 +632,24 @@ For this we must set up few additional methods - worker's "init" and
 worker "work".
 
 ```python
+import dataclasses
 import multiprocessing as mp
 from concurrent import futures
-from dataclasses import dataclass
 from pathlib import Path
 
 import tqdm
 from ahocorasick import Automaton
 
+from clunkster import asset as my_asset
 from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
+from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
-# see Example 1.1 - Finding assets
-class Asset: ...
-
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ScanJob:
     """A lightweight payload sent over IPC to a worker process.
 
@@ -941,20 +660,20 @@ class ScanJob:
     file_path: Path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ScanResult:
     """Result of a scan."""
 
     matches: list[my_analyze_scan_dep.DependencyMatch]
     job: ScanJob
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
 
     location: my_analyze_location.BoundLocation
-    source_asset: Asset
-    target_asset: Asset
+    source_asset: my_asset.Asset
+    target_asset: my_asset.Asset
     contexts: tuple[str, ...]
 
 # we can't send the compiled Aho-Corasick automaton across process boundaries
@@ -989,14 +708,16 @@ def _worker_scan(job: ScanJob) -> ScanResult:
         job=job,
     )
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
 
 # generate list of atomic jobs
 jobs = [
     ScanJob(asset_name=asset.name, file_path=file_path)
     for asset in assets
-    for file_path in asset.files_to_scan
+    for file_path in asset.get_scannables(PROJECT)
 ]
 
 name2asset = {asset.name: asset for asset in assets}
@@ -1065,16 +786,16 @@ with rooms and `room_goto_next()`) might still get reported.
 Take the output of this with a grain of salt.
 
 ```python
-# see Example 1.1 - Finding assets
-class AssetType: ...
+from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
-class Asset: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 # see Example 2.2 - Reference scanning (fancier)
@@ -1118,11 +839,7 @@ else:
         )
 
         for asset in orphans:
-            print(
-                f'[{asset.asset_type.name: <10}] '
-                f'{"/".join(asset.tree_path)}'
-                f'/{asset.name}'
-            )
+            print(asset.to_str_linter())
 ```
 ### Example 2.5 - Lint: cross-cluster references
 Validate cluster boundaries.
@@ -1157,6 +874,8 @@ Make sure to fill in the `LINT_RULES` and `CONTEXT_RULES` - they'll
 be used by future linters.
 
 ```python
+from clunkster import asset as my_asset
+
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
@@ -1172,10 +891,8 @@ CONTEXT_RULES: dict[str, set[str]] = {
 }
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
-
-# see Example 1.1 - Finding assets
-class Asset: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1194,7 +911,7 @@ for dep in dependencies:
     source = dep.source_asset
 
     # remove deps to room
-    if target.asset_type == AssetType.ROOM:
+    if isinstance(target, my_asset.Room):
         continue
 
     # get permissions from lint rules
@@ -1279,11 +996,15 @@ a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
 `reachability_map:dict[str,set[str]]`
 
 ```python
+import collections.abc as col
+import dataclasses
 import sys
-from dataclasses import dataclass
 
 import rustworkx as rx
 import tqdm
+
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
 
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
@@ -1296,16 +1017,25 @@ EXTRA_ROOTS: set[str] = {
     # ...
 }
 
-# see Example 1.1 - Finding assets
-class AssetType: ...
+def filter_type[TFilter](
+    f_type: type[TFilter], items: col.Iterable[object]
+) -> col.Iterator[TFilter]:
+    """Filter given iterable based on type.
+
+    :param f_type: Type to filter for.
+    :param items: The iterable to filter.
+    :return: Iterator of items of type ``f_type``.
+    """
+    return (item for item in items if isinstance(item, f_type))
 
 # see Example 1.1 - Finding assets
-class Asset: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
 
-@dataclass
+@dataclasses.dataclass
 class RoomGraph:
     """Bundle of room graph data."""
 
@@ -1314,7 +1044,7 @@ class RoomGraph:
     graph: rx.PyDiGraph
     name2index: dict[str, int]
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 # see Example 2.2 - Reference scanning (fancier)
@@ -1337,7 +1067,7 @@ def build_graph(
         target_idx = asset_name2index[dep.target_asset.name]
 
         # delete references to rooms
-        if dep.target_asset.asset_type == AssetType.ROOM:
+        if isinstance(dep.target_asset, my_asset.Room):
             continue
 
         # context guards (nested guards intersect)
@@ -1367,9 +1097,7 @@ def build_graph(
 # group rooms by their allowed clusters
 cluster_groups: dict[frozenset[str], list[str]] = {}
 
-for asset_room in assets:
-    if asset_room.asset_type != AssetType.ROOM:
-        continue
+for asset_room in filter_type(my_asset.Room, assets):
     allowed_clusters = LINT_RULES.get(
         asset_room.cluster, {asset_room.cluster, 'Common'}
     )
@@ -1437,6 +1165,9 @@ been skipping over in simpler linter.
 ```python
 import collections
 
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
+
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
 
@@ -1447,10 +1178,8 @@ CONTEXT_RULES: dict[str, set[str]] = ...
 EXTRA_ROOTS: set[str] = ...
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
-
-# see Example 1.1 - Finding assets
-class Asset: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1458,7 +1187,7 @@ class Dependency: ...
 # see Example 3.1 - Generate set of used assets in each room
 class RoomGraph: ...
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 # see Example 2.2 - Reference scanning (fancier)
@@ -1480,10 +1209,10 @@ reachability_map = {
 for reachable_set in reachability_map.values():
     all_used_names.update(reachable_set)
 
-# we must explicitly add the Rooms themselves (edges to them
+# we must explicitly add the Rooms (edges to them
 #  were severed in the previous step)
 all_used_names.update(
-    asset.name for asset in assets if asset.asset_type == AssetType.ROOM
+    asset.name for asset in assets if isinstance(asset, my_asset.Room)
 )
 
 unused_assets: list[Asset] = [
@@ -1507,11 +1236,7 @@ else:
             dead_assets,
             key=lambda a: (a.asset_type.name, a.tree_path, a.name),
         ):
-            print(
-                f'[{asset.asset_type.name: <10}] '
-                f'{"/".join(asset.tree_path)}'
-                f'/{asset.name}'
-            )
+            print(asset.to_str_linter())
 
         print()
 ```
@@ -1528,6 +1253,8 @@ issue raised by simpler crossref linter.
 ```python
 import rustworkx as rx
 
+from clunkster.asset import Asset
+
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
 
@@ -1538,10 +1265,8 @@ CONTEXT_RULES: dict[str, set[str]] = ...
 EXTRA_ROOTS: set[str] = ...
 
 # see Example 1.1 - Finding assets
-class AssetType: ...
-
-# see Example 1.1 - Finding assets
-class Asset: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1549,7 +1274,7 @@ class Dependency: ...
 # see Example 3.1 - Generate set of used assets in each room
 class RoomGraph: ...
 
-# see Example 1.4 - Cluster aliasing
+# see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
 # see Example 2.2 - Reference scanning (fancier)
@@ -1698,11 +1423,11 @@ Following sections elaborate on prerequisites, reasons behind them, antipatterns
 
 <!--[[[cog
 cog.outl(f"""
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see [{rend.href('ex_clusters')}]), merging those based on a provided config (see [{rend.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{rend.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
 """)
 ]]]-->
 
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name (see [[ex1.3](#example-13---generating-clusters)]), merging those based on a provided config (see [[ex1.4](#example-14---cluster-aliasing)]). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [[ex1.3](#example-13---cluster-aliasing)]). Therefore, some amount of project keeping is required.
 
 <!--[[[end]]]-->
 ❌ Bad:
@@ -2311,7 +2036,7 @@ This starts with parsing `tree.yyd` files in order to discover assets and run in
 - ensure that stage assets are grouped in consistently named folders across all asset types
 
 See examples:
-- [{rend.href('ex_start')}] setting up asset discovery
+- [{rend.href('ex_start')}] setting up asset discovery, generating initial cluster map
 
 After that we may generate initial cluster map. In this step our goal is:
 - assign clusters based on `tree.yyd` data
@@ -2319,7 +2044,6 @@ After that we may generate initial cluster map. In this step our goal is:
 
 See examples:
 
-- [{rend.href('ex_clusters')}] generating initial cluster map
 - [{rend.href('ex_aliases')}] fixing duplicate clusters via aliases
 
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
@@ -2343,7 +2067,7 @@ This starts with parsing `tree.yyd` files in order to discover assets and run in
 - ensure that stage assets are grouped in consistently named folders across all asset types
 
 See examples:
-- [[ex1.1](#example-11---finding-assets)] setting up asset discovery
+- [[ex1.1](#example-11---finding-assets)] setting up asset discovery, generating initial cluster map
 
 After that we may generate initial cluster map. In this step our goal is:
 - assign clusters based on `tree.yyd` data
@@ -2351,8 +2075,7 @@ After that we may generate initial cluster map. In this step our goal is:
 
 See examples:
 
-- [[ex1.3](#example-13---generating-clusters)] generating initial cluster map
-- [[ex1.4](#example-14---cluster-aliasing)] fixing duplicate clusters via aliases
+- [[ex1.3](#example-13---cluster-aliasing)] fixing duplicate clusters via aliases
 
 Next, you want to set up dependency scanning. For this, we use [`ahocorasick`](https://pypi.org/project/pyahocorasick/). In my testing, sync version takes around the same amount of time as multiprocessing, so no real difference here.
 

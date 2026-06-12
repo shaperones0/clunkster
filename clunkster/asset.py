@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self
 
+from clunkster.parse import index as my_parse_index
 from clunkster.parse import tree as my_parse_tree
 
 
@@ -20,16 +21,6 @@ class Asset(ABC):
     @abstractmethod
     def _type_name(cls) -> str:
         """Get internal name of this asset."""
-
-    @classmethod
-    def type_is_builtin(cls) -> bool:
-        """Check whether this asset type is one of GameMaker's builtin types.
-
-        Base implementation simply returns false, as this would be so for
-        most user derivatives of this class
-        :return:
-        """
-        return False
 
     @classmethod
     @abstractmethod
@@ -56,6 +47,11 @@ class Asset(ABC):
         :return: Iterator of discovered assets.
         """
 
+    @classmethod
+    def type_iter_names(cls, project_root: pl.Path) -> col.Iterator[str]:
+        """Iterate raw asset names of this type."""
+        return (name for name, _ in cls.type_iter_clusters(project_root))
+
     @abstractmethod
     def get_scannables(self, project_root: pl.Path) -> col.Iterator[pl.Path]:
         """Get paths of scannable .gml or .txt files in this asset type.
@@ -70,10 +66,15 @@ class Asset(ABC):
     def get_tree_path(self) -> tuple[str, ...]:
         """Get this asset's tree path for use in sorting or output."""
 
+    @classmethod
+    def type_to_str_linter(cls) -> str:
+        """Descriptive asset repr to be used in linters."""
+        return f'[{cls._type_name():^10}]: '
+
     def to_str_linter(self) -> str:
-        """Return a descriptive repr to be used in linters."""
+        """Descriptive asset type repr to be used in linters."""
         return (
-            f'[{type(self)._type_name():^12}]: '
+            f'[{type(self)._type_name():^10}]: '  # noqa: SLF001
             f'{"/".join(self.get_tree_path())}'
             f'/{self.name}'
         )
@@ -84,14 +85,6 @@ class AssetBuiltin(Asset, ABC):
     """Builtin asset."""
 
     tree_path: tuple[str, ...]
-
-    @classmethod
-    def type_is_builtin(cls) -> bool:
-        """Check whether this asset type is one of GameMaker's builtin types.
-
-        :return: True.
-        """
-        return True
 
     @classmethod
     @abstractmethod
@@ -158,14 +151,26 @@ class AssetBuiltin(Asset, ABC):
         )
 
     @classmethod
-    def file_tree(cls, project_root: pl.Path) -> pl.Path:
+    def type_iter_names(cls, project_root: pl.Path) -> col.Iterator[str]:
+        """Iterate raw asset names of this type."""
+        return (name for name, _ in cls._iter_tree(project_root))
+
+    @classmethod
+    def type_file_tree(cls, project_root: pl.Path) -> pl.Path:
         """Get tree.yyd for this asset type."""
         return cls.type_get_dir(project_root) / 'tree.yyd'
 
     @classmethod
-    def file_index(cls, project_root: pl.Path) -> pl.Path:
+    def type_file_index(cls, project_root: pl.Path) -> pl.Path:
         """Get index.yyd for this asset type."""
         return cls.type_get_dir(project_root) / 'index.yyd'
+
+    @classmethod
+    def type_iter_index(cls, project_root: pl.Path) -> col.Iterator[str]:
+        """Iterate over entries in index.yyd file of this asset type."""
+        return my_parse_index.parse_skimmed(
+            cls.type_file_index(project_root).read_text().splitlines()
+        )
 
     def get_tree_path(self) -> tuple[str, ...]:
         """Get this asset's tree path for use in sorting or output."""
@@ -183,6 +188,93 @@ class AssetBuiltin(Asset, ABC):
 
 
 @dataclass(frozen=True, slots=True)
+class AssetExt(Asset, ABC):
+    """Abstract external asset."""
+
+    dir_path: tuple[str, ...]
+
+    @classmethod
+    @abstractmethod
+    def _type_get_dir_rel(cls) -> pl.Path:
+        """Get directory of this asset type relative to project root."""
+
+    @classmethod
+    def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
+        """Get directory of this asset type.
+
+        :param project_root: Project's root directory.
+        :return: pl.Path to directory of this asset type.
+        """
+        return project_root / cls._type_get_dir_rel()
+
+    @classmethod
+    def type_is_used(cls, project_root: pl.Path) -> bool:
+        """Whether this asset type is used in the project."""
+        return cls.type_get_dir(project_root).exists()
+
+    @classmethod
+    def _iter_dirs(
+        cls, project_root: pl.Path
+    ) -> col.Iterator[my_parse_tree.TreeEntry]:
+        """Iterate external asset's directory structure.
+
+        :param project_root: Project's root directory.
+        :return: Iterator of (asset_name, tree_path);
+          asset name is not appended to tree path.
+        """
+        asset_dir = cls.type_get_dir(project_root)
+        return (
+            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
+            for file in asset_dir.rglob('*')
+            if file.is_file()
+        )
+
+    @classmethod
+    def type_iter_clusters(
+        cls, project_root: pl.Path
+    ) -> col.Iterator[tuple[str, str]]:
+        """Discover assets and suggest clusters.
+
+        :param project_root: Project's root directory.
+        :return: Iterator of (asset_name, suggested_cluster)
+        """
+        return (
+            (asset_name, path[0] if path else 'Common')
+            for asset_name, path in cls._iter_dirs(project_root)
+        )
+
+    @classmethod
+    def type_iter(cls, project_root: pl.Path) -> col.Iterator[Self]:
+        """Discover assets of this type."""
+        return (
+            cls(
+                name=name,
+                cluster=path[0] if path else 'Common',
+                dir_path=path,
+            )
+            for name, path in cls._iter_dirs(project_root)
+        )
+
+    @classmethod
+    def type_iter_names(cls, project_root: pl.Path) -> col.Iterator[str]:
+        """Iterate raw asset names of this type."""
+        return (name for name, _ in cls._iter_dirs(project_root))
+
+    def get_tree_path(self) -> tuple[str, ...]:
+        """Get this asset's tree path for use in sorting or output."""
+        return self.dir_path
+
+    def get_scannables(self, project_root: pl.Path) -> col.Iterator[pl.Path]:
+        """Get scannable files of this asset.
+
+        Most external assets don't provide scannable files.
+        :param project_root: Project's root directory.
+        :return: Iterator of found scannable files.
+        """
+        yield from ()
+
+
+@dataclass(frozen=True, slots=True)
 class Background(AssetBuiltin):
     """GameMaker Background asset."""
 
@@ -193,6 +285,19 @@ class Background(AssetBuiltin):
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('backgrounds')
+
+
+@dataclass(frozen=True, slots=True)
+class Sound(AssetBuiltin):
+    """GameMaker Sound asset."""
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'SOUND'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> pl.Path:
+        return pl.Path('sounds')
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,111 +413,3 @@ class Sprite(AssetBuiltin):
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('sprites')
-
-
-@dataclass(frozen=True, slots=True)
-class AssetExt(Asset, ABC):
-    """Abstract external asset."""
-
-    dir_path: tuple[str, ...]
-
-    @classmethod
-    @abstractmethod
-    def _type_get_dir_rel(cls) -> pl.Path:
-        """Get directory of this asset type relative to project root."""
-
-    @classmethod
-    def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
-        """Get directory of this asset type.
-
-        :param project_root: Project's root directory.
-        :return: pl.Path to directory of this asset type.
-        """
-        return project_root / cls._type_get_dir_rel()
-
-    @classmethod
-    def type_is_used(cls, project_root: pl.Path) -> bool:
-        """Whether this asset type is used in the project."""
-        return cls.type_get_dir(project_root).exists()
-
-    @classmethod
-    def _iter_dirs(
-        cls, project_root: pl.Path
-    ) -> col.Iterator[my_parse_tree.TreeEntry]:
-        """Iterate external asset's directory structure.
-
-        :param project_root: Project's root directory.
-        :return: Iterator of (asset_name, tree_path);
-          asset name is not appended to tree path.
-        """
-        asset_dir = cls.type_get_dir(project_root)
-        return (
-            (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1])
-            for file in asset_dir.rglob('*')
-            if file.is_file()
-        )
-
-    @classmethod
-    def type_iter_clusters(
-        cls, project_root: pl.Path
-    ) -> col.Iterator[tuple[str, str]]:
-        """Discover assets and suggest clusters.
-
-        :param project_root: Project's root directory.
-        :return: Iterator of (asset_name, suggested_cluster)
-        """
-        return (
-            (asset_name, path[0] if path else 'Common')
-            for asset_name, path in cls._iter_dirs(project_root)
-        )
-
-    @classmethod
-    def type_iter(cls, project_root: pl.Path) -> col.Iterator[Self]:
-        """Discover assets of this type."""
-        return (
-            cls(
-                name=name,
-                cluster=path[0] if path else 'Common',
-                dir_path=path,
-            )
-            for name, path in cls._iter_dirs(project_root)
-        )
-
-    def get_tree_path(self) -> tuple[str, ...]:
-        """Get this asset's tree path for use in sorting or output."""
-        return self.dir_path
-
-    def get_scannables(self, project_root: pl.Path) -> col.Iterator[pl.Path]:
-        """Get scannable files of this asset.
-
-        Most external assets don't provide scannable files.
-        :param project_root: Project's root directory.
-        :return: Iterator of found scannable files.
-        """
-        yield from ()
-
-
-@dataclass(frozen=True, slots=True)
-class AssetExtBgm(AssetExt):
-    """External background music asset."""
-
-    @classmethod
-    def _type_name(cls) -> str:
-        return 'DATA_BGM'
-
-    @classmethod
-    def _type_get_dir_rel(cls) -> pl.Path:
-        return pl.Path('data') / 'music'
-
-
-@dataclass(frozen=True, slots=True)
-class AssetExtSfx(AssetExt):
-    """External sound effect asset."""
-
-    @classmethod
-    def _type_name(cls) -> str:
-        return 'DATA_SFX'
-
-    @classmethod
-    def _type_get_dir_rel(cls) -> pl.Path:
-        return pl.Path('data') / 'sounds'
