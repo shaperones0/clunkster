@@ -1624,7 +1624,7 @@ def main_juicer_gen_wet(assets: list[Asset]) -> None:  # noqa: PLR0915
     # --- COG_END: MAIN_EX_JUICER_GEN_WET ---
 
 
-def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
+def main_juicer_gen_gml(assets: list[Asset]) -> None:
     """It is time to finally integrate Clunkster into the project.
 
     Here's the static scripts that you'll have to add:
@@ -1661,7 +1661,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     1. ``clunkster_init()`` - Initializes Clunkster logic
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_init()
         //Initialize Clunkster globals
@@ -1675,7 +1675,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
     2. ``clunkster_room_start()`` - System's Room Start event, responsible
       for cleaning up unloaded assets.
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_room_start()
         //Clunkster's Room Start event
@@ -1700,7 +1700,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
       calls, which is responsible for loading any asset required by target
       room.
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_room_goto(room)
         //Intercept room_goto and load necessary clusters
@@ -1728,7 +1728,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     4. ``clunkster_registry_begin()`` - Switch registry mode ON.
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_registry_begin()
 
@@ -1736,7 +1736,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     5. ``clunkster_registry_end()`` - Switch registry mode OFF.
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_registry_end()
 
@@ -1744,7 +1744,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     6. ``clunkster_is_reg()`` - Check whether in registry mode.
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_is_reg()
         //Check whether in registry mode
@@ -1756,7 +1756,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     7. ``clunkster_gen_type()``
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_gen_type()
         //Returns the type of project.
@@ -1770,7 +1770,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     8. ``clunkster_gen_init_audio()``
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_gen_init_audio()
         //Initialize audio sources with stubs
@@ -1780,7 +1780,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     9. ``clunkster_gen_get_room_clusters(target_room)``
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_gen_get_room_clusters(target_room)
         //Get clusters that must be loaded for given room
@@ -1790,7 +1790,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     10. ``clunkster_gen_hydrate_cluster(cluster_name)``
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_gen_hydrate_cluster(cluster_name)
         //Loads data from specified cluster in one block
@@ -1799,7 +1799,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     11. ``clunkster_gen_dehydrate_cluster(cluster_name)``
 
-    ::
+    .. code-block:: gml
 
         ///clunkster_gen_dehydrate_cluster(cluster_name)
         //Unloads data from specified cluster in one block
@@ -1817,7 +1817,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     ``sndreg_init``:
 
-    ::
+    .. code-block:: gml
 
         ///sndreg_init()
         //Initialize sound registry
@@ -1827,7 +1827,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     ``sndreg_ext`` - Fills in all data of an audio at once:
 
-    ::
+    .. code-block:: gml
 
         ///sndreg_ext(snd,og_samplerate=44100,vol=1,[loopstart,loopend=-1])
         //Fill in all params at once
@@ -1856,7 +1856,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     ``sndreg_populate`` - This is where you define all those values:
 
-    ::
+    .. code-block:: gml
 
         ///sndreg_populate()
         //Populate sound registry with necessary sound data
@@ -1874,7 +1874,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     ``sndreg_apply`` - Apply registry values to a sound:
 
-    ::
+    .. code-block:: gml
 
         ///sndreg_apply(snd)
         if sound_exists(argument0) {
@@ -1915,7 +1915,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
       one should be used right after registry population, if project type
       is raw.
 
-    ::
+    .. code-block:: gml
 
         ///sndreg_apply_all()
         //Apply audio stuff to all sounds
@@ -1929,7 +1929,7 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
 
     This allows us to write a clean Game Start logic:
 
-    ::
+    .. code-block:: gml
 
         clunkster_registry_begin()
         sndreg_populate()
@@ -1942,7 +1942,13 @@ def main_ex_juicer_gen_gml(assets: list[Asset]) -> None:
             //we are in 'dev' or 'prod' build, generate stubs
             clunkster_gen_init_audio()
         }
+
+    Oh, what's that? You wanna have the code for the actual generation? There
+    ya go.
     """
+
+    # --- COG_START: MAIN_EX_JUICER_GEN_GML ---
+    # --- COG_END: MAIN_EX_JUICER_GEN_GML ---
 
 
 def _run_tutorials() -> None:

@@ -705,6 +705,23 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             ),
             source_of_stubs=(),
         ),
+        Example(
+            'ex_juicer_gen_gml',
+            'Project Juicer v1',
+            'Juicer: integrate Juicer into the game',
+            content=exs.gen_freeform(
+                func_name='main_juicer_gen_gml',
+                refs=[
+                    'DEF_TYPE_FILTER',
+                    '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!VAR_ASSETS',
+                    'PROJECT',
+                    'MAIN_EX_JUICER_GEN_GML',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
     ]
 
 
