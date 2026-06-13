@@ -1995,6 +1995,7 @@ From those dependencies, the tool can:
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
       - ^ That rule includes assigning assets to constants
     - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like ``sound_balance``), which only reference assets but don't instantiate them
+    - DON'T hide room transitions behind `room` variable assignments.
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
