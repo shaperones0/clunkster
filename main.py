@@ -752,7 +752,7 @@ def main_ex_lint_unused(
     # --- COG_END: MAIN_EX_LINT_UNUSED ---
 
 
-def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
+def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
     """Validate cluster boundaries.
 
     Simple check of clusters on both ends of dependency edge will filter
@@ -862,6 +862,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     # MD: clear out the dependency linter, are about trimming
     # MD: more unused assets via dependency graph.
     # --- COG_END: MAIN_EX_LINT_CROSSREF ---
+    return total_violations == 0
 
 
 def main_ex_graph(
@@ -1266,6 +1267,190 @@ def main_juicer_copy(assets: list[Asset]) -> None:
     # --- COG_END: MAIN_EX_JUICER_COPY ---
 
 
+def main_juicer_fix_masks(assets: list[Asset]) -> None:  # noqa: PLR0915
+    """Before we continue, we must fix one annoying GameMaker bug.
+
+    If you replace a sprite via ``sprite_replace_sprite``, it will not update
+    collision data for objects that use sprite. We'll have to do it manually
+    by injecting ``mask_index=mask_index`` into Room Start event of
+    every object.
+
+    Now, this fix isn't as trivial, since we have to inject code into objects,
+    making sure we solve every configuration preciely, without generating
+    unintended cases.
+
+    For this reason, we validate against specific action definitions, and raise
+    errors at a sight of any inconsistency. If your project frequently  uses
+    some substandard Room Start pattern than the ones we handle in this script,
+    feel free to modify it.
+
+    To elaborate on exact cases solved:
+
+    - A. Object already has Room Start event (line "#define Other_4" found)
+        - A1. Room Start starts with a code block (block 603)
+            - append the injected code after the action signature
+        - A2. Room Start starts with "Call parent's event" (block 604),
+            followed by a code block
+            - inject into the code block (tehcnically, the right
+              thing would be to inject it before "Call parent's event",
+              but, since this fix is applied to ALL objects, parent's
+              Room Start also has the mask fix)
+        - A3. Room Start starts with "Call parent's event", but not followed
+            by a code block (for whatever reason)
+            - create a new code block and inject right there (though I added
+              a warning for such cases, and you should investigate them)
+    - B. Object has no Room Start event
+        - B1. Object has a parent
+            - add "Call parent's event" block and a code block with inject
+              afterward
+        - B2. Object has no parent
+            - add just a code blck with inject
+
+    """
+    # --- COG_START: MAIN_EX_JUICER_FIX_MASKS ---
+    print('Injecting collision mask fixes into objects...')
+    target_event = '#define Other_4'
+
+    # exact action blocks, we'll validate against that;
+    #  notice that endings are deliberately LF, that's how .gm82 save
+    #  format works
+
+    # "Execute a piece of code"
+    block_603 = (
+        '/*"/*\'/**//* YYD ACTION\n'
+        'lib_id=1\n'
+        'action_id=603\n'
+        'applies_to=self\n'
+        '*/\n'
+    )
+
+    # "Call the parent's event"
+    block_604 = (
+        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+    )
+    injection_code = 'mask_index=mask_index\n'
+
+    objects = filter_type(my_asset.Object, assets)
+    for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
+        # use output dir, since that's where we'll be writing
+        gml_path = obj.get_object_gml(JUICER.dir_out)
+
+        # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
+        #  being just children of SpikeUp with no alterations other than
+        #  sprite) should have their code created
+        if not gml_path.exists():
+            gml_path.touch()
+
+        gml_text = gml_path.read_text(encoding='utf-8')
+        # check that the text was properly saved with LFs
+        assert '\r\n' not in gml_text
+
+        # check different cases
+        if target_event in gml_text:
+            # CASE A: Room Start already exists
+
+            # split event at event declaration and its trailing newline
+            parts = gml_text.split(target_event + '\n')
+
+            if len(parts) != 2:  # noqa: PLR2004
+                # handle edge case where the event is at the very end of
+                #  the file with no trailing newline
+                if gml_text.endswith(target_event):
+                    parts = gml_text.split(target_event)
+                    parts[1] = '\n'
+                else:
+                    raise ValueError(
+                        f'Validation Error: Multiple Room Start events or '
+                        f"malformed structure found in '{obj.name}.gml'."
+                    )
+
+            event_body = parts[1]
+
+            if event_body.startswith(block_603):
+                # CASE A1: starts with a code block
+                offset = len(block_603)
+                new_event_body = (
+                    event_body[:offset] + injection_code + event_body[offset:]
+                )
+                print(obj.name, '- A1: starts with a code block')
+
+            elif event_body.startswith(block_604 + block_603):
+                # CASE A2: starts with call parent, followed by a code block
+                offset = len(block_604) + len(block_603)
+                new_event_body = (
+                    event_body[:offset] + injection_code + event_body[offset:]
+                )
+                print(
+                    obj.name,
+                    '- A2: starts with call parent, followed by a code block',
+                )
+
+            elif event_body.startswith(block_604):
+                # CASE A3: starts with call parent, without any code blocks
+                # append a new code block
+                offset = len(block_604)
+                new_event_body = (
+                    event_body[:offset]
+                    + block_603
+                    + injection_code
+                    + event_body[offset:]
+                )
+                print(
+                    obj.name,
+                    '- A3: starts with call parent without code block '
+                    'afterward???',
+                )
+                warnings.warn(
+                    f'Object {obj.name} starts with call parent without '
+                    f'code block??? Investigate.',
+                    stacklevel=2,
+                )
+            else:
+                # idk
+                raise ValueError(
+                    f'Validation Error: YYD ACTION match '
+                    f"failed in '{obj.name}.gml'. The block immediately "
+                    f"following '{target_event}' does not match YYD ACTION "
+                    f'603 or 604 patterns.'
+                )
+
+            # rebuild, maintain LF
+            new_text = parts[0] + target_event + '\n' + new_event_body
+            gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+        else:
+            # CASE B: Room Start doesn't exist
+            meta = obj.get_object_metadata(JUICER.dir_out)
+            # objects with no parent have this string blank
+            has_parent = bool(meta.parent)
+
+            # append the event into the file
+
+            # check newline
+            #  since we could've just created the file, it is allowed
+            #  to be empty
+            if gml_text and not gml_text.endswith('\n'):
+                gml_text += '\n'
+
+            new_block = target_event + '\n'
+            if has_parent:
+                # CASE B1: use the "Call parent event" block
+                new_block += block_604
+                print(
+                    obj.name,
+                    '- B1: no room start + has parent, '
+                    'must add Call parent event',
+                )
+            else:
+                print(obj.name, '- B2: no room start')
+
+            # add the code block and injection
+            new_block += block_603 + injection_code
+            gml_text += new_block
+
+            gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+    # --- COG_END: MAIN_EX_JUICER_FIX_MASKS ---
+
+
 def main_juicer_gen_wet(assets: list[Asset]) -> None:  # noqa: PLR0915
     """Copying works, time to extract wet assets.
 
@@ -1524,7 +1709,10 @@ def main() -> None:
         deps = main_ex_scan_sync2(assets)
 
         # main_ex_lint_unused(deps, assets)
-        main_ex_lint_crossref(deps)
+        ok = main_ex_lint_crossref(deps)
+        if not ok:
+            print('Linting errors found - bailing out')
+            return
 
         room_data = main_ex_graph(assets, deps)
 
@@ -1535,6 +1723,7 @@ def main() -> None:
             return
 
         main_juicer_copy(assets)
+        main_juicer_fix_masks(assets)
         main_juicer_gen_wet(assets)
 
 

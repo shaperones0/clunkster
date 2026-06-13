@@ -81,7 +81,8 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
   * [4 - Project Juicer v1](#4---project-juicer-v1)
     * [Example 4.1 - Juicer: copy the project into build directory](#example-41---juicer-copy-the-project-into-build-directory)
-    * [Example 4.2 - Juicer: generate wet assets](#example-42---juicer-generate-wet-assets)
+    * [Example 4.2 - Juicer: fix object's masks](#example-42---juicer-fix-objects-masks)
+    * [Example 4.3 - Juicer: generate wet assets](#example-43---juicer-generate-wet-assets)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -1521,7 +1522,221 @@ for asset in assets:
             stub_img, asset.get_background_image(JUICER.dir_out)
         )
 ```
-### Example 4.2 - Juicer: generate wet assets
+### Example 4.2 - Juicer: fix object's masks
+Before we continue, we must fix one annoying GameMaker bug.
+
+If you replace a sprite via `sprite_replace_sprite`, it will not update
+collision data for objects that use sprite. We'll have to do it manually
+by injecting `mask_index=mask_index` into Room Start event of
+every object.
+
+Now, this fix isn't as trivial, since we have to inject code into objects,
+making sure we solve every configuration preciely, without generating
+unintended cases.
+
+For this reason, we validate against specific action definitions, and raise
+errors at a sight of any inconsistency. If your project frequently  uses
+some substandard Room Start pattern than the ones we handle in this script,
+feel free to modify it.
+
+To elaborate on exact cases solved:
+
+- A. Object already has Room Start event (line "#define Other_4" found)
+    - A1. Room Start starts with a code block (block 603)
+        - append the injected code after the action signature
+    - A2. Room Start starts with "Call parent's event" (block 604),
+        followed by a code block
+        - inject into the code block (tehcnically, the right
+          thing would be to inject it before "Call parent's event",
+          but, since this fix is applied to ALL objects, parent's
+          Room Start also has the mask fix)
+    - A3. Room Start starts with "Call parent's event", but not followed
+        by a code block (for whatever reason)
+        - create a new code block and inject right there (though I added
+          a warning for such cases, and you should investigate them)
+- B. Object has no Room Start event
+    - B1. Object has a parent
+        - add "Call parent's event" block and a code block with inject
+          afterward
+    - B2. Object has no parent
+        - add just a code blck with inject
+
+```python
+import collections.abc as col
+import warnings
+from pathlib import Path
+
+import tqdm
+
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
+
+def filter_type[TFilter](
+    f_type: type[TFilter], items: col.Iterable[object]
+) -> col.Iterator[TFilter]:
+    """Filter given iterable based on type.
+
+    :param f_type: Type to filter for.
+    :param items: The iterable to filter.
+    :return: Iterator of items of type ``f_type``.
+    """
+    return (item for item in items if isinstance(item, f_type))
+
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+# see Example 1.1 - Finding assets
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
+
+print('Injecting collision mask fixes into objects...')
+target_event = '#define Other_4'
+
+# exact action blocks, we'll validate against that;
+#  notice that endings are deliberately LF, that's how .gm82 save
+#  format works
+
+# "Execute a piece of code"
+block_603 = (
+    '/*"/*\'/**//* YYD ACTION\n'
+    'lib_id=1\n'
+    'action_id=603\n'
+    'applies_to=self\n'
+    '*/\n'
+)
+
+# "Call the parent's event"
+block_604 = (
+    '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+)
+injection_code = 'mask_index=mask_index\n'
+
+objects = filter_type(my_asset.Object, assets)
+for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
+    # use output dir, since that's where we'll be writing
+    gml_path = obj.get_object_gml(JUICER.dir_out)
+
+    # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
+    #  being just children of SpikeUp with no alterations other than
+    #  sprite) should have their code created
+    if not gml_path.exists():
+        gml_path.touch()
+
+    gml_text = gml_path.read_text(encoding='utf-8')
+    # check that the text was properly saved with LFs
+    assert '\r\n' not in gml_text
+
+    # check different cases
+    if target_event in gml_text:
+        # CASE A: Room Start already exists
+
+        # split event at event declaration and its trailing newline
+        parts = gml_text.split(target_event + '\n')
+
+        if len(parts) != 2:  # noqa: PLR2004
+            # handle edge case where the event is at the very end of
+            #  the file with no trailing newline
+            if gml_text.endswith(target_event):
+                parts = gml_text.split(target_event)
+                parts[1] = '\n'
+            else:
+                raise ValueError(
+                    f'Validation Error: Multiple Room Start events or '
+                    f"malformed structure found in '{obj.name}.gml'."
+                )
+
+        event_body = parts[1]
+
+        if event_body.startswith(block_603):
+            # CASE A1: starts with a code block
+            offset = len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(obj.name, '- A1: starts with a code block')
+
+        elif event_body.startswith(block_604 + block_603):
+            # CASE A2: starts with call parent, followed by a code block
+            offset = len(block_604) + len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A2: starts with call parent, followed by a code block',
+            )
+
+        elif event_body.startswith(block_604):
+            # CASE A3: starts with call parent, without any code blocks
+            # append a new code block
+            offset = len(block_604)
+            new_event_body = (
+                event_body[:offset]
+                + block_603
+                + injection_code
+                + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A3: starts with call parent without code block '
+                'afterward???',
+            )
+            warnings.warn(
+                f'Object {obj.name} starts with call parent without '
+                f'code block??? Investigate.',
+                stacklevel=2,
+            )
+        else:
+            # idk
+            raise ValueError(
+                f'Validation Error: YYD ACTION match '
+                f"failed in '{obj.name}.gml'. The block immediately "
+                f"following '{target_event}' does not match YYD ACTION "
+                f'603 or 604 patterns.'
+            )
+
+        # rebuild, maintain LF
+        new_text = parts[0] + target_event + '\n' + new_event_body
+        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+    else:
+        # CASE B: Room Start doesn't exist
+        meta = obj.get_object_metadata(JUICER.dir_out)
+        # objects with no parent have this string blank
+        has_parent = bool(meta.parent)
+
+        # append the event into the file
+
+        # check newline
+        #  since we could've just created the file, it is allowed
+        #  to be empty
+        if gml_text and not gml_text.endswith('\n'):
+            gml_text += '\n'
+
+        new_block = target_event + '\n'
+        if has_parent:
+            # CASE B1: use the "Call parent event" block
+            new_block += block_604
+            print(
+                obj.name,
+                '- B1: no room start + has parent, '
+                'must add Call parent event',
+            )
+        else:
+            print(obj.name, '- B2: no room start')
+
+        # add the code block and injection
+        new_block += block_603 + injection_code
+        gml_text += new_block
+
+        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+```
+### Example 4.3 - Juicer: generate wet assets
 Copying works, time to extract wet assets.
 
 For this process we'll convert sprites and backgrounds into

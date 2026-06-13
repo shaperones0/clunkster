@@ -672,6 +672,23 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             source_of_stubs=('CLS_JUICER_CONFIG',),
         ),
         Example(
+            'ex_juicer_fix_masks',
+            'Project Juicer v1',
+            "Juicer: fix object's masks",
+            content=exs.gen_freeform(
+                func_name='main_juicer_fix_masks',
+                refs=[
+                    'DEF_TYPE_FILTER',
+                    '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!VAR_ASSETS',
+                    'PROJECT',
+                    'MAIN_EX_JUICER_FIX_MASKS',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
+        Example(
             'ex_juicer_gen_wet',
             'Project Juicer v1',
             'Juicer: generate wet assets',

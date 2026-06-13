@@ -43,6 +43,19 @@ class BackgroundMetadata:
 
 
 @dataclass(frozen=True, slots=True)
+class ObjectMetadata:
+    """GameMaker Object's metadata from ``<object_name>.txt``."""
+
+    sprite: str
+    visible: int
+    solid: int
+    persistent: int
+    depth: int
+    parent: str
+    mask: str
+
+
+@dataclass(frozen=True, slots=True)
 class Asset(ABC):
     """Abstract asset."""
 
@@ -400,6 +413,16 @@ class Object(AssetBuiltin):
         file_gml = asset_dir / f'{self.name}.gml'
         yield file_meta
         yield file_gml  # both guaranteed to exist
+
+    def get_object_metadata(self, project_root: pl.Path) -> ObjectMetadata:
+        """Get object's metadata."""
+        file = type(self).type_get_dir(project_root) / f'{self.name}.txt'
+        with file.open('r', encoding='utf-8') as f:
+            return my_parse_kv.parse_dataclass(ObjectMetadata, f)
+
+    def get_object_gml(self, project_root: pl.Path) -> pl.Path:
+        """Get object's gml file."""
+        return type(self).type_get_dir(project_root) / f'{self.name}.gml'
 
 
 @dataclass(frozen=True, slots=True)
