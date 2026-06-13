@@ -712,7 +712,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             content=exs.gen_freeform(
                 func_name='main_juicer_gen_gml',
                 refs=[
-                    'DEF_TYPE_FILTER',
+                    '!LINT_RULES',
                     '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
                     '!VAR_ASSETS',
