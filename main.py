@@ -1192,10 +1192,10 @@ def main_juicer_copy(assets: list[Asset]) -> None:
     projects opens in Game Maker, and all the non-Common assets get replaced
     with stubs. If all of these checks out, then you can do the next step.
 
-    Btw, the project will open, but it won't run, because we deleted all the
-    audio. When you run the game, it will very soon crash due to unknown sound.
-    This issue will be solved at the end of the Juicer pipeline... for now
-    you'll have to live with it.
+    Btw, the project will open, but it won't be ready for playing, because
+    we deleted all the audio. When you run the game, it will very soon crash
+    due to unknown sound. This issue will be solved at the end of the Juicer
+    pipeline... for now you'll have to live with it.
     """
     # --- COG_START: MAIN_EX_JUICER_COPY ---
     # clear build folder
