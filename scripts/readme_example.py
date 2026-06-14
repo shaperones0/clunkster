@@ -41,7 +41,7 @@ def gen_stub_func(*names: str) -> str:
     :param names: Variable names (can include type hints).
     :return: Python code with stub variables.
     """
-    return '\n'.join(f'def {name}: ...' for name in names)
+    return '\n'.join(f'def {name}(): ...' for name in names)
 
 
 @dataclass(frozen=True, slots=True)
@@ -696,6 +696,8 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 func_name='main_juicer_gen_wet',
                 refs=[
                     'DEF_TYPE_FILTER',
+                    'DEF_PTH_GET_WET',
+                    'DEFS_JUICE',
                     '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
                     '!VAR_ASSETS',
@@ -703,7 +705,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                     'MAIN_EX_JUICER_GEN_WET',
                 ],
             ),
-            source_of_stubs=(),
+            source_of_stubs=('DEF_PTH_GET_WET', 'DEFS_JUICE'),
         ),
         Example(
             'ex_juicer_gen_gml',
@@ -712,12 +714,34 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             content=exs.gen_freeform(
                 func_name='main_juicer_gen_gml',
                 refs=[
+                    '!DEF_PTH_GET_WET',
                     '!LINT_RULES',
                     '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
                     '!VAR_ASSETS',
                     'PROJECT',
                     'MAIN_EX_JUICER_GEN_GML',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
+        Example(
+            'ex_juicer2_cls',
+            'Project Juicer v2',
+            'Juicer v2: classes',
+            content=exs.gen_freeform(
+                func_name='main_juicer2_cls',
+                refs=[
+                    'DEF_TYPE_FILTER',
+                    '!DEFS_JUICE',
+                    '!DEF_PTH_GET_WET',
+                    # '!LINT_RULES',
+                    # '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    # '!VAR_ASSETS',
+                    # 'PROJECT',
+                    # 'MAIN_EX_JUICER_GEN_GML',
+                    'CLS_TASKS',
                 ],
             ),
             source_of_stubs=(),
@@ -732,7 +756,9 @@ def main_manager(
     exs = ExampleManager.from_file_path(file_path)
     exs.stub_register(
         'CLS_ASSET_EXT',
-        gen_stub_cls('AssetExtBgm', 'AssetExtSfx'),
+        gen_stub_cls(
+            'AssetExtAudio', 'AssetExtBgm', 'AssetExtSfx', 'AssetExtSfx3'
+        ),
     )
     exs.stub_register('CLS_DEPENDENCY', gen_stub_cls('Dependency'))
     exs.stub_register('CLS_ROOM_GRAPH', gen_stub_cls('RoomGraph'))
@@ -758,6 +784,11 @@ def main_manager(
     )
     exs.stub_register('EXTRA_ROOTS', gen_stub_var('EXTRA_ROOTS: set[str]'))
     exs.stub_register('DEF_TYPE_FILTER', gen_stub_func('filter_type'))
+    exs.stub_register('DEF_PTH_GET_WET', gen_stub_func('pth_get_wet'))
+    exs.stub_register(
+        'DEFS_JUICE',
+        gen_stub_func('juice_sprite', 'juice_background', 'juice_audio'),
+    )
 
     # define examples (first pass)
     examples: list[Example] = main_examples(exs)

@@ -1,6 +1,7 @@
 """Abstract asset type and builtin definitions."""
 
 import collections.abc as col
+import itertools as it
 import pathlib as pl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -131,10 +132,8 @@ class Asset(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class AssetBuiltin(Asset, ABC):
-    """Builtin asset."""
-
-    tree_path: tuple[str, ...]
+class AssetFile(Asset, ABC):
+    """File-based asset (can be either builtin or external one)."""
 
     @classmethod
     @abstractmethod
@@ -154,6 +153,13 @@ class AssetBuiltin(Asset, ABC):
         :return: pl.Path to directory of this asset type.
         """
         return project_root / cls._type_get_dir_rel()
+
+
+@dataclass(frozen=True, slots=True)
+class AssetBuiltin(AssetFile, ABC):
+    """Builtin asset."""
+
+    tree_path: tuple[str, ...]
 
     @classmethod
     def type_is_used(cls, project_root: pl.Path) -> bool:
@@ -243,21 +249,15 @@ class AssetBuiltin(Asset, ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class AssetExt(Asset, ABC):
+class AssetExt(AssetFile, ABC):
     """Abstract external asset."""
 
     file: pl.Path
     dir_path: tuple[str, ...]
 
     @classmethod
-    @abstractmethod
-    def _type_get_dir_rel(cls) -> pl.Path:
-        """Get directory of this asset type relative to project root."""
-
-    @classmethod
-    def type_get_dir_rel(cls) -> pl.Path:
-        """Type's relative directory getter."""
-        return cls._type_get_dir_rel()
+    def _type_globs(cls) -> col.Iterable[str]:
+        return '*'
 
     @classmethod
     def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
@@ -286,7 +286,9 @@ class AssetExt(Asset, ABC):
         asset_dir = cls.type_get_dir(project_root)
         return (
             (file, (f'"{file.stem}"', file.relative_to(asset_dir).parts[:-1]))
-            for file in asset_dir.rglob('*')
+            for file in it.chain.from_iterable(
+                asset_dir.rglob(rglob) for rglob in cls._type_globs()
+            )
             if file.is_file()
         )
 
@@ -348,11 +350,15 @@ class Background(AssetBuiltin):
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('backgrounds')
 
+    def get_background_metadata_file(self, project_root: pl.Path) -> pl.Path:
+        """Get background's metadata (``.txt``) file."""
+        return type(self).type_get_dir(project_root) / f'{self.name}.txt'
+
     def get_background_metadata(
         self, project_root: pl.Path
     ) -> BackgroundMetadata:
         """Get background's metadata."""
-        file = type(self).type_get_dir(project_root) / f'{self.name}.txt'
+        file = self.get_background_metadata_file(project_root)
         with file.open('r', encoding='utf-8') as f:
             return my_parse_kv.parse_dataclass(BackgroundMetadata, f)
 
@@ -506,18 +512,18 @@ class Sprite(AssetBuiltin):
         assert folder.is_dir()
         return folder
 
+    def get_sprite_metadata_file(self, project_root: pl.Path) -> pl.Path:
+        """Get sprite's metadata file."""
+        return self.get_sprite_folder(project_root) / 'sprite.txt'
+
     def get_sprite_metadata(self, project_root: pl.Path) -> SpriteMetadata:
         """Get sprite's metadata."""
-        file = self.get_sprite_folder(project_root) / 'sprite.txt'
+        file = self.get_sprite_metadata_file(project_root)
         with file.open('r', encoding='utf-8') as f:
             return my_parse_kv.parse_dataclass(SpriteMetadata, f)
 
-    def get_sprite_images(
-        self, project_root: pl.Path, frames: int
-    ) -> col.Iterator[pl.Path]:
+    def get_sprite_image(self, project_root: pl.Path, frame: int) -> pl.Path:
         """Get sprite's images."""
-        folder = self.get_sprite_folder(project_root)
-        for i in range(frames):
-            img = folder / f'{i}.png'
-            assert img.is_file()
-            yield img
+        img = self.get_sprite_folder(project_root) / f'{frame}.png'
+        assert img.is_file()
+        return img

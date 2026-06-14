@@ -84,6 +84,8 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 4.2 - Juicer: fix object's masks](#example-42---juicer-fix-objects-masks)
     * [Example 4.3 - Juicer: generate wet assets](#example-43---juicer-generate-wet-assets)
     * [Example 4.4 - Juicer: integrate Juicer into the game](#example-44---juicer-integrate-juicer-into-the-game)
+  * [5 - Project Juicer v2](#5---project-juicer-v2)
+    * [Example 5.1 - Juicer v2: classes](#example-51---juicer-v2-classes)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -117,14 +119,21 @@ folders `sprStageA` and `bgStageA` to end up in a unified cluster
 `StageA`. This will be done a bit later.
 
 ```python
+import collections.abc as col
 import dataclasses
+from abc import ABC
 from pathlib import Path
 
 from clunkster import asset as my_asset
 from clunkster.asset import Asset
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtBgm(my_asset.AssetExt):
+class AssetExtAudio(my_asset.AssetExt, ABC):
+    """Generic external audio asset."""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtBgm(AssetExtAudio):
     """External background music asset."""
 
     @classmethod
@@ -137,12 +146,33 @@ class AssetExtBgm(my_asset.AssetExt):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtSfx(my_asset.AssetExt):
-    """External sound effect asset."""
+class AssetExtSfx(AssetExtAudio):
+    """External sound effect asset (kind 0)."""
+
+    @classmethod
+    def _type_globs(cls) -> col.Iterable[str]:
+        return ('*.wav',)
 
     @classmethod
     def _type_name(cls) -> str:
         return 'DATA_SFX'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'sounds'
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtSfx3(AssetExtAudio):
+    """External sound effect asset (kind 3)."""
+
+    @classmethod
+    def _type_globs(cls) -> col.Iterable[str]:
+        return '*.ogg', '*.mp3'
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_SFX3'
 
     @classmethod
     def _type_get_dir_rel(cls) -> Path:
@@ -163,6 +193,7 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
     *CLUSTERABLE_BUILTINS,
     AssetExtBgm,
     AssetExtSfx,
+    AssetExtSfx3,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -200,8 +231,10 @@ from clunkster import asset as my_asset
 from clunkster.parse import tree as my_parse_tree
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
     my_asset.Sprite,
@@ -218,6 +251,7 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
     *CLUSTERABLE_BUILTINS,
     AssetExtBgm,
     AssetExtSfx,
+    AssetExtSfx3,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -334,8 +368,10 @@ if alias is not None:
 Full example:
 
 ```python
+import collections.abc as col
 import dataclasses
 import warnings
+from abc import ABC
 from pathlib import Path
 
 from clunkster import asset as my_asset
@@ -363,7 +399,12 @@ ALIAS: dict[str, list[str]] = {
 }
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtBgm(my_asset.AssetExt):
+class AssetExtAudio(my_asset.AssetExt, ABC):
+    """Generic external audio asset."""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtBgm(AssetExtAudio):
     """External background music asset."""
 
     @classmethod
@@ -376,12 +417,33 @@ class AssetExtBgm(my_asset.AssetExt):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtSfx(my_asset.AssetExt):
-    """External sound effect asset."""
+class AssetExtSfx(AssetExtAudio):
+    """External sound effect asset (kind 0)."""
+
+    @classmethod
+    def _type_globs(cls) -> col.Iterable[str]:
+        return ('*.wav',)
 
     @classmethod
     def _type_name(cls) -> str:
         return 'DATA_SFX'
+
+    @classmethod
+    def _type_get_dir_rel(cls) -> Path:
+        return Path('data') / 'sounds'
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AssetExtSfx3(AssetExtAudio):
+    """External sound effect asset (kind 3)."""
+
+    @classmethod
+    def _type_globs(cls) -> col.Iterable[str]:
+        return '*.ogg', '*.mp3'
+
+    @classmethod
+    def _type_name(cls) -> str:
+        return 'DATA_SFX3'
 
     @classmethod
     def _type_get_dir_rel(cls) -> Path:
@@ -402,6 +464,7 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
     *CLUSTERABLE_BUILTINS,
     AssetExtBgm,
     AssetExtSfx,
+    AssetExtSfx3,
 )
 
 PROJECT = Path('path/to/the/project')
@@ -508,8 +571,10 @@ from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
@@ -564,8 +629,10 @@ from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
@@ -651,8 +718,10 @@ from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ScanJob:
@@ -794,8 +863,10 @@ Take the output of this with a grain of salt.
 from clunkster.asset import Asset
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -896,8 +967,10 @@ CONTEXT_RULES: dict[str, set[str]] = {
 }
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1042,8 +1115,10 @@ def filter_type[TFilter](
     return (item for item in items if isinstance(item, f_type))
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1191,8 +1266,10 @@ CONTEXT_RULES: dict[str, set[str]] = ...
 EXTRA_ROOTS: set[str] = ...
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1286,8 +1363,10 @@ CONTEXT_RULES: dict[str, set[str]] = ...
 EXTRA_ROOTS: set[str] = ...
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 2.2 - Reference scanning (fancier)
 class Dependency: ...
@@ -1449,8 +1528,10 @@ JUICER = ConfJuicer(
 )
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
@@ -1469,18 +1550,24 @@ paths_unignore: set[Path] = set()
 for asset in assets:
     if asset.cluster != 'Common':
         continue
-    if not isinstance(asset, (AssetExtSfx, AssetExtBgm)):
+    # hardcode this for now (we'll fix later)
+    if not isinstance(asset, (AssetExtSfx, AssetExtSfx3, AssetExtBgm)):
         continue
     paths_unignore.add(asset.file)
 
 sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
+sfx3_dir = AssetExtSfx3.type_get_dir(PROJECT)
 bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
 
 def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
     """Callback for copytree to skip copying audio, except Common."""
     path = Path(dir_path)
 
-    if path.is_relative_to(sfx_dir) or path.is_relative_to(bgm_dir):
+    if (
+        path.is_relative_to(sfx_dir)
+        or path.is_relative_to(bgm_dir)
+        or path.is_relative_to(sfx3_dir)
+    ):
         ignored_items = []
 
         for content in dir_contents:
@@ -1513,7 +1600,8 @@ for asset in assets:
 
     if isinstance(asset, my_asset.Sprite):
         meta = asset.get_sprite_metadata(JUICER.dir_out)
-        for img in asset.get_sprite_images(JUICER.dir_out, meta.frames):
+        for image_index in range(meta.frames):
+            img = asset.get_sprite_image(JUICER.dir_out, image_index)
             shutil.copyfile(stub_img, img)
     elif isinstance(asset, my_asset.Background):
         meta = asset.get_background_metadata(JUICER.dir_out)
@@ -1588,8 +1676,10 @@ class ConfJuicer: ...
 JUICER: ConfJuicer = ...
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
@@ -1750,7 +1840,7 @@ library [gmcodec](https://github.com/shaperones0/gmcodec).
 
 Compressing audio was done via FFmpeg. Normally I'd postpone any
 optimization passes until the pipeline is done, but the audio compression
-one was too easy to insert for me to miss out on it.
+one was too easy to insert for me to miss out.
 
 As an unfortunate side effect, the process now takes around a minute
 to finish... We'll address that once we are done with v1 of the pipeline.
@@ -1783,30 +1873,48 @@ def filter_type[TFilter](
     """
     return (item for item in items if isinstance(item, f_type))
 
-# see Example 4.1 - Juicer: copy the project into build directory
-class ConfJuicer: ...
-JUICER: ConfJuicer = ...
+def pth_get_wet(dir_wet_cluster: Path, asset: my_asset.AssetFile) -> Path:
+    """Gen wet file location.
 
-# see Example 1.1 - Finding assets
-class AssetExtBgm: ...
-class AssetExtSfx: ...
+    :param dir_wet_cluster: Wet root directory, including cluster name
+      (e.g. data/chunks/StageA/)
+    :param asset: Asset to get wet filename of.
+    :return: Resulting wet filename.
+    """
+    if isinstance(asset, AssetExtSfx):
+        fname = f'{asset.name[1:-1]}.wav'
+    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
+        fname = f'{asset.name[1:-1]}.ogg'
+    elif isinstance(asset, my_asset.Sprite):
+        fname = f'{asset.name}.gmspr'
+    elif isinstance(asset, my_asset.Background):
+        fname = f'{asset.name}.gmbck'
+    else:
+        raise NotImplementedError('Asset type not supported')
 
-# see Example 1.3 - Cluster aliasing
-assets: list[Asset] = ...
+    wet_type_dir = dir_wet_cluster / type(asset).type_get_dir_rel()
+    return wet_type_dir / fname
 
-PROJECT = Path('path/to/the/project')
+def juice_sprite(
+    sprite: my_asset.Sprite, project_root: Path, out_file: Path
+) -> None:
+    """Juice a sprite into external ``.gmspr`` file.
 
-def dehydrate_sprite(sprite: my_asset.Sprite, out_dir: Path) -> None:
+    :param sprite: Sprite object.
+    :param project_root: Project root directory.
+    :param out_file: File to write resulting ``.gmspr`` bytes to.
+    """
     # read original metadata
-    meta = sprite.get_sprite_metadata(PROJECT)
+    meta = sprite.get_sprite_metadata(project_root)
 
     frames_bgra: list[bytes] = []
-    width, height = 0, 0
+    width, height = -1, -1
 
-    for img_path in sprite.get_sprite_images(PROJECT, meta.frames):
+    for image_index in range(meta.frames):
+        img_path = sprite.get_sprite_image(project_root, image_index)
         with Image.open(img_path) as img:
             img = img.convert('RGBA')
-            if width == 0:
+            if width == -1:
                 width, height = img.size
             frames_bgra.append(img.tobytes('raw', 'BGRA'))
 
@@ -1833,15 +1941,23 @@ def dehydrate_sprite(sprite: my_asset.Sprite, out_dir: Path) -> None:
     gmc_validate.gmspr_validate(gm_meta, frames_bgra)
     payload = gmc_core.gmspr_build_payload(gm_meta, frames_bgra)
 
-    out_file = out_dir / f'{sprite.name}.gmspr'
     out_file.write_bytes(gmc_file.file_pack(payload))
 
-def dehydrate_background(bg: my_asset.Background, out_dir: Path) -> None:
+
+def juice_background(
+    bg: my_asset.Background, project_root: Path, out_file: Path
+) -> None:
+    """Juice a background into external ``.gmbck`` file.
+
+    :param bg: Background object.
+    :param project_root: Project root directory.
+    :param out_file: File to write resulting ``.gmbck`` bytes to.
+    """
     # read the original metadata
-    meta = bg.get_background_metadata(PROJECT)
+    meta = bg.get_background_metadata(project_root)
 
     # meta.exists == 0 was already filtered out
-    img_path = bg.get_background_image(PROJECT)
+    img_path = bg.get_background_image(project_root)
     with Image.open(img_path) as img:
         img = img.convert('RGBA')
         width, height = img.size
@@ -1863,19 +1979,17 @@ def dehydrate_background(bg: my_asset.Background, out_dir: Path) -> None:
     gmc_validate.gmbck_validate(gm_meta, pixel_data)
     payload = gmc_core.gmbck_build_payload(gm_meta, pixel_data)
 
-    out_file = out_dir / f'{bg.name}.gmbck'
     out_file.write_bytes(gmc_file.file_pack(payload))
 
-def dehydrate_audio(audio: my_asset.AssetExt, out_dir: Path) -> None:
-    # remember when we added those " to names yeah
-    clean_name = audio.name[1:-1]
 
-    if (
-        isinstance(audio, AssetExtSfx)
-        and audio.file.suffix.lower() == '.wav'
-    ):
+def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
+    """Juice audio into a compressed format.
+
+    :param audio: External audio.
+    :param out_file: File to write result to.
+    """
+    if isinstance(audio, AssetExtSfx):
         # FMOD kind 0 (RAM): compress to MS ADPCM 22050Hz
-        out_file = out_dir / f'{clean_name}.wav'
         subprocess.run(  # noqa: S603
             [  # noqa: S607
                 'ffmpeg',
@@ -1894,7 +2008,6 @@ def dehydrate_audio(audio: my_asset.AssetExt, out_dir: Path) -> None:
         )
     else:
         # FMOD kind 1/3 (Stream): compress to low-bitrate Ogg Vorbis
-        out_file = out_dir / f'{clean_name}.ogg'
         subprocess.run(  # noqa: S603
             [  # noqa: S607
                 'ffmpeg',
@@ -1914,6 +2027,21 @@ def dehydrate_audio(audio: my_asset.AssetExt, out_dir: Path) -> None:
             stderr=subprocess.DEVNULL,
         )
 
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+# see Example 1.1 - Finding assets
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
+
 dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
 if dir_wet.exists():
     shutil.rmtree(dir_wet)
@@ -1924,26 +2052,27 @@ for asset in tqdm.tqdm(
     list(filter_type(my_asset.Sprite, assets)),
     desc='Encoding sprites...',
 ):
-    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
-    dir_out.mkdir(parents=True, exist_ok=True)
-    dehydrate_sprite(asset, dir_out)
+    wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
+    wet_file.parent.mkdir(parents=True, exist_ok=True)
+    juice_sprite(asset, PROJECT, wet_file)
 
 for asset in tqdm.tqdm(
     list(filter_type(my_asset.Background, assets)),
     desc='Encoding backgrounds...',
 ):
-    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
-    dir_out.mkdir(parents=True, exist_ok=True)
-    dehydrate_background(asset, dir_out)
+    wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
+    wet_file.parent.mkdir(parents=True, exist_ok=True)
+    juice_background(asset, PROJECT, wet_file)
 
 for asset in tqdm.tqdm(
     list(filter_type(AssetExtSfx, assets))
+    + list(filter_type(AssetExtSfx3, assets))
     + list(filter_type(AssetExtBgm, assets)),
     desc='Compressing audio...',
 ):
-    dir_out = dir_wet / asset.cluster / type(asset).type_get_dir_rel()
-    dir_out.mkdir(parents=True, exist_ok=True)
-    dehydrate_audio(asset, dir_out)
+    wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
+    wet_file.parent.mkdir(parents=True, exist_ok=True)
+    juice_audio(asset, wet_file)
 ```
 ### Example 4.4 - Juicer: integrate Juicer into the game
 It is time to finally integrate Clunkster into the project.
@@ -2262,12 +2391,18 @@ synchronously in one block, resulting in 1-5 second stutters during
 loads. I don't think such low loading time create a need for things like
 loading screens.
 
+Notice the humongous number of functions. That's a secret tool that will
+come in handy later.
+
 ```python
 import itertools as it
 from pathlib import Path
 
 from clunkster import asset as my_asset
 from clunkster.asset import Asset
+
+# see Example 4.3 - Juicer: generate wet assets
+def pth_get_wet(): ...
 
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
@@ -2277,8 +2412,10 @@ class ConfJuicer: ...
 JUICER: ConfJuicer = ...
 
 # see Example 1.1 - Finding assets
+class AssetExtAudio: ...
 class AssetExtBgm: ...
 class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
@@ -2313,6 +2450,7 @@ assert all(
 # filter clusterable assets
 assets_bgm: list[AssetExtBgm] = []
 assets_sfx: list[AssetExtSfx] = []
+assets_sfx3: list[AssetExtSfx3] = []
 assets_spr: list[my_asset.Sprite] = []
 assets_bg: list[my_asset.Background] = []
 assets_rooms: list[my_asset.Room] = []  # needed for scripts
@@ -2326,53 +2464,27 @@ for asset in assets:
 
     dehydrated_clusters.add(asset.cluster)
 
-    # get wet file location
-    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet / asset.cluster
-
     # populate specific array
     if isinstance(asset, AssetExtBgm):
         assets_bgm.append(asset)
-        clean_name = asset.name[1:-1]
-        pth_wet = (
-            dir_wet / type(asset).type_get_dir_rel() / f'{clean_name}.ogg'
-        )
     elif isinstance(asset, AssetExtSfx):
         assets_sfx.append(asset)
-        clean_name = asset.name[1:-1]
-        if asset.file.suffix == '.wav':
-            pth_wet = (
-                dir_wet
-                / type(asset).type_get_dir_rel()
-                / f'{clean_name}.wav'
-            )
-        else:
-            pth_wet = (
-                dir_wet
-                / type(asset).type_get_dir_rel()
-                / f'{clean_name}.ogg'
-            )
+    elif isinstance(asset, AssetExtSfx3):
+        assets_sfx3.append(asset)
     elif isinstance(asset, my_asset.Sprite):
         assets_spr.append(asset)
-        pth_wet = (
-            dir_wet
-            / type(asset).type_get_dir_rel()
-            / f'{asset.name}.gmspr'
-        )
     elif isinstance(asset, my_asset.Background):
         assets_bg.append(asset)
-        pth_wet = (
-            dir_wet
-            / type(asset).type_get_dir_rel()
-            / f'{asset.name}.gmbck'
-        )
     elif isinstance(asset, my_asset.Room):
         assets_rooms.append(asset)
         continue
     else:
         continue
 
+    # get wet file location
+    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet / asset.cluster
     asset_name_to_file_wet[asset.name] = str(
-        pth_wet.relative_to(JUICER.dir_out)
+        pth_get_wet(dir_wet, asset).relative_to(JUICER.dir_out)
     )
 
 # common params for writing anything related to game maker
@@ -2440,16 +2552,15 @@ gml_gen_init_audio = [
 cluster_load_code: dict[str, list[str]] = {}
 cluster_unload_code: dict[str, list[str]] = {}
 
-for asset in assets_bgm + assets_sfx:
+for asset in assets_bgm + assets_sfx + assets_sfx3:
     clean_name = asset.name[1:-1]
-    ext_orig = asset.file.suffix.lower()
 
     if isinstance(asset, AssetExtBgm):
         stub_var = '_p_bgm'
         kind = 1
         streamed = 1
         preload = 1
-    elif ext_orig == '.wav':
+    elif isinstance(asset, AssetExtSfx):
         stub_var = '_p_sfx'
         kind = 0
         streamed = 0
@@ -2533,6 +2644,194 @@ scr_gen_hydrate_cluster.write_text('\n'.join(gml_hydrate), **text_params)
 scr_gen_dehydrate_cluster.write_text(
     '\n'.join(gml_dehydrate), **text_params
 )
+```
+
+Once the GML files are generated and integrated, the project
+should become launchable and playable. Once you verify that, you
+continue onto the improved version of Project Juicer below.
+## 5 - Project Juicer v2
+### Example 5.1 - Juicer v2: classes
+Let's upgrade the Juicer.
+
+Now that we've verified our project generation, we can optimize the
+two lengthiest parts of the pipeline: project copying and asset
+processing. We want to lower our build times down to 5-10 seconds on
+regular builds, which we'll do with the help of caching and
+multiprocessing.
+
+Clunkster provides several utilities for such project conversion, one of
+them is a system of "tasks" (atomic conversion of one asset) and
+"processors" (factories, that walk through the asset/dependency lists and
+generate tasks). Also, processors have a second function of telling which
+parts of the project don't need copying.
+
+So let's write those processors and tasks. We'll reuse our logic from
+earlier examples. Notice that there's a fair bit of code repition.
+It is how it is.
+
+```python
+import collections.abc as col
+from abc import ABC
+from pathlib import Path
+
+from clunkster import asset as my_asset
+from clunkster.asset import Asset
+from clunkster.project import processor as my_proj_processor
+from clunkster.project import task as my_proj_task
+from clunkster.project.task import Task
+
+def filter_type[TFilter](
+    f_type: type[TFilter], items: col.Iterable[object]
+) -> col.Iterator[TFilter]:
+    """Filter given iterable based on type.
+
+    :param f_type: Type to filter for.
+    :param items: The iterable to filter.
+    :return: Iterator of items of type ``f_type``.
+    """
+    return (item for item in items if isinstance(item, f_type))
+
+# see Example 4.3 - Juicer: generate wet assets
+def juice_sprite(): ...
+def juice_background(): ...
+def juice_audio(): ...
+
+# see Example 4.3 - Juicer: generate wet assets
+def pth_get_wet(): ...
+
+# see Example 1.1 - Finding assets
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+class TaskAsset[TAsset: my_asset.AssetFile](my_proj_task.Task, ABC):
+    """Generic asset-based task with a defined constructor."""
+
+
+class TaskEncodeBackground(TaskAsset[my_asset.Background]):
+    """Encode background task."""
+
+    def __init__(
+        self,
+        background: my_asset.Background,
+        project_root: Path,
+        dir_wet_cluster: Path,
+    ) -> None:
+        """Create the task from existing asset."""
+        self.background = background
+        self.project_root = project_root
+        self.file_gmbck_output = pth_get_wet(dir_wet_cluster, background)
+        super().__init__(
+            task_id=f'encode_bg_{background.name}',
+            inputs=(
+                background.get_background_metadata_file(project_root),
+                background.get_background_image(project_root),
+            ),
+            outputs=(self.file_gmbck_output,),
+        )
+
+    def execute(self) -> None:
+        """Execute the task."""
+        juice_background(
+            self.background, self.project_root, self.file_gmbck_output
+        )
+
+
+class TaskEncodeSprite(TaskAsset[my_asset.Sprite]):
+    """Encode sprite task."""
+
+    def __init__(
+        self,
+        sprite: my_asset.Sprite,
+        project_root: Path,
+        dir_wet_cluster: Path,
+    ) -> None:
+        """Create the task from existing asset."""
+        self.sprite = sprite
+        self.project_root = project_root
+        self.file_gmspr_output = pth_get_wet(dir_wet_cluster, sprite)
+        meta = sprite.get_sprite_metadata(project_root)
+        super().__init__(
+            task_id=f'encode_spr_{sprite.name}',
+            inputs=(
+                sprite.get_sprite_metadata_file(project_root),
+                *(
+                    sprite.get_sprite_image(project_root, i)
+                    for i in range(meta.frames)
+                ),
+            ),
+            outputs=(self.file_gmspr_output,),
+        )
+
+    def execute(self) -> None:
+        """Execute the task."""
+        juice_sprite(self.sprite, self.project_root, self.file_gmspr_output)
+
+
+class TaskCompressAudio(TaskAsset[AssetExtAudio]):
+    """Compress audio task."""
+
+    def __init__(
+        self, audio: AssetExtAudio, project_root: Path, dir_wet_cluster: Path
+    ) -> None:
+        """Create the task from existing asset."""
+        self.audio = audio
+        self.project_root = project_root
+        self.file_audio_output = pth_get_wet(dir_wet_cluster, audio)
+        super().__init__(
+            task_id=f'compress_{audio.name[1:-1]}',
+            inputs=(audio.file,),
+            outputs=(self.file_audio_output,),
+        )
+
+    def execute(self) -> None:
+        """Execute the task."""
+        juice_audio(self.audio, self.file_audio_output)
+
+
+class ProcessorGeneric[TAsset: my_asset.AssetFile](
+    my_proj_processor.Processor
+):
+    """Generic asset type processor, processes all assets of the given type.
+
+    Puts type's directory into ignore, expects task constructor
+    signature to be (``asset``, ``project_root``, ``dir_wet_cluster``).
+    """
+
+    def __init__(
+        self,
+        cls_asset: type[TAsset],
+        # bruuuuuuuuuuuuuuuuh
+        cls_task: col.Callable[[TAsset, Path, Path], TaskAsset[TAsset]],
+        dir_wet: Path,
+    ) -> None:
+        """Initialize generic asset processor.
+
+        :param dir_wet: Exported assets directory, like ``data/chunks``.
+        """
+        self.cls_asset = cls_asset
+        self.cls_task = cls_task
+        self.dir_wet = dir_wet
+
+    def get_ignored_source_dirs(
+        self, project_root: Path
+    ) -> col.Iterable[Path]:
+        """Ignores entire directory of this asset type.
+
+        :param project_root:
+        :return:
+        """
+        yield self.cls_asset.type_get_dir(project_root)
+
+    def generate_tasks(
+        self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
+    ) -> col.Iterable[Task]:
+        """Generate tasks for converting all assets of this type."""
+        for asset in filter_type(self.cls_asset, assets):
+            yield self.cls_task(
+                asset, project_root, self.dir_wet / asset.cluster
+            )
 ```
 <!--[[[end]]]-->
 

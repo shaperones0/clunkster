@@ -104,6 +104,9 @@ ignore = [
     # allow asserts in simple projects
     'S101',
 
+    # this isn't backend or anything
+    'S324',
+
     # conflicting rules
 
     # prefer no blank line before class docstring
