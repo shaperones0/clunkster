@@ -732,16 +732,30 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             content=exs.gen_freeform(
                 func_name='main_juicer2_cls',
                 refs=[
+                    '!CLS_JUICER_CONFIG',
                     'DEF_TYPE_FILTER',
                     '!DEFS_JUICE',
                     '!DEF_PTH_GET_WET',
-                    # '!LINT_RULES',
-                    # '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
-                    # '!VAR_ASSETS',
-                    # 'PROJECT',
-                    # 'MAIN_EX_JUICER_GEN_GML',
                     'CLS_TASKS',
+                    'MAIN_EX_JUICER2_CLS',
+                ],
+            ),
+            source_of_stubs=('VARS_JUICER2', 'CLS_TASKS'),
+        ),
+        Example(
+            'ex_juicer2_copy',
+            'Project Juicer v2',
+            'Juicer v2: copy the project (but smarter)',
+            content=exs.gen_freeform(
+                func_name='main_juicer2_copy',
+                refs=[
+                    '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!CLS_TASKS',
+                    '!VARS_JUICER2',
+                    'PROJECT',
+                    'MAIN_EX_JUICER2_COPY',
                 ],
             ),
             source_of_stubs=(),
@@ -754,6 +768,16 @@ def main_manager(
 ) -> tuple[ExampleManager, ExampleRenderer]:
     """Generate example manager and renderer for our project."""
     exs = ExampleManager.from_file_path(file_path)
+    # constants
+    exs.stub_register(
+        'LINT_RULES', gen_stub_var('LINT_RULES: dict[str, set[str]]')
+    )
+    exs.stub_register(
+        'CONTEXT_RULES', gen_stub_var('CONTEXT_RULES: dict[str, set[str]]')
+    )
+    exs.stub_register('EXTRA_ROOTS', gen_stub_var('EXTRA_ROOTS: set[str]'))
+
+    # classes
     exs.stub_register(
         'CLS_ASSET_EXT',
         gen_stub_cls(
@@ -768,6 +792,26 @@ def main_manager(
             (gen_stub_cls('ConfJuicer'), gen_stub_var('JUICER: ConfJuicer'))
         ),
     )
+    exs.stub_register(
+        'CLS_TASKS',
+        gen_stub_cls(
+            'TaskAsset',
+            'TaskEncodeBackground',
+            'TaskEncodeSprite',
+            'TaskCompressAudio',
+            'ProcessorGeneric',
+        ),
+    )
+
+    # funcs
+    exs.stub_register('DEF_TYPE_FILTER', gen_stub_func('filter_type'))
+    exs.stub_register('DEF_PTH_GET_WET', gen_stub_func('pth_get_wet'))
+    exs.stub_register(
+        'DEFS_JUICE',
+        gen_stub_func('juice_sprite', 'juice_background', 'juice_audio'),
+    )
+
+    # variables
     exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))
     exs.stub_register(
         'VAR_DEPS', gen_stub_var('dependencies: list[Dependency]')
@@ -777,17 +821,7 @@ def main_manager(
         gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
     )
     exs.stub_register(
-        'LINT_RULES', gen_stub_var('LINT_RULES: dict[str, set[str]]')
-    )
-    exs.stub_register(
-        'CONTEXT_RULES', gen_stub_var('CONTEXT_RULES: dict[str, set[str]]')
-    )
-    exs.stub_register('EXTRA_ROOTS', gen_stub_var('EXTRA_ROOTS: set[str]'))
-    exs.stub_register('DEF_TYPE_FILTER', gen_stub_func('filter_type'))
-    exs.stub_register('DEF_PTH_GET_WET', gen_stub_func('pth_get_wet'))
-    exs.stub_register(
-        'DEFS_JUICE',
-        gen_stub_func('juice_sprite', 'juice_background', 'juice_audio'),
+        'VARS_JUICER2', gen_stub_var('cl_cache', 'cl_ignore', 'cl_processors')
     )
 
     # define examples (first pass)

@@ -1,10 +1,11 @@
 """Processing pipeline backbone."""
 
 import collections.abc as col
-import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+
+from clunkster.project.cache import file_hash
 
 
 class Task(ABC):
@@ -30,13 +31,7 @@ class Task(ABC):
 
     def get_input_hash(self) -> str:
         """Calculate MD5 hash of all input files."""
-        hasher = hashlib.md5()
-        for filepath in sorted(self.inputs):
-            if filepath.exists():
-                with filepath.open('rb') as f:
-                    for chunk in iter(lambda: f.read(4096), b''):
-                        hasher.update(chunk)
-        return hasher.hexdigest()
+        return file_hash(*self.inputs)
 
     @abstractmethod
     def execute(self) -> None:

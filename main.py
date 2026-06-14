@@ -37,13 +37,14 @@ from clunkster.analyze import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
+from clunkster.project import cache as my_proj_cache
+from clunkster.project import ignore as my_proj_ignore
 from clunkster.project import (
     processor as my_proj_processor,
 )
 from clunkster.project import (
     task as my_proj_task,
 )
-from clunkster.project.task import Task
 
 # --- COG_START: TERMINAL_COLORS ---
 # terminal color for output
@@ -275,6 +276,11 @@ class ConfJuicer:
     # dry asset source dir
     dir_dry: Path
 
+    # cache.json file
+    file_cache: Path
+    # .clunksterignore file
+    file_ignore: Path
+
 
 JUICER = ConfJuicer(
     # start with dev builds
@@ -285,6 +291,8 @@ JUICER = ConfJuicer(
     #  such is available in repository's /data/dry folder
     dir_dry=Path(__file__).parent / 'data' / 'dry',
     rel_dir_wet=Path('data') / 'chunks',
+    file_cache=Path(__file__).parent / 'cache.json',
+    file_ignore=Path('path/to/project/.clunksterignore'),
 )
 # --- COG_END: CLS_JUICER_CONFIG ---
 
@@ -2402,7 +2410,7 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
 
     def generate_tasks(
         self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
-    ) -> col.Iterable[Task]:
+    ) -> col.Iterable[my_proj_task.Task]:
         """Generate tasks for converting all assets of this type."""
         for asset in filter_type(self.cls_asset, assets):
             yield self.cls_task(
@@ -2413,7 +2421,11 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
 # --- COG_END: CLS_TASKS ---
 
 
-def main_juicer2_cls() -> None:
+def main_juicer2_cls() -> tuple[
+    my_proj_cache.FileBuildCache,
+    my_proj_ignore.FileIgnore,
+    tuple[my_proj_processor.Processor, ...],
+]:
     """Let's upgrade the Juicer.
 
     Now that we've verified our project generation, we can optimize the
@@ -2432,6 +2444,81 @@ def main_juicer2_cls() -> None:
     earlier examples. Notice that there's a fair bit of code repition.
     It is how it is.
     """
+    # --- COG_START: MAIN_EX_JUICER2_CLS ---
+    # setup build cache and ignore file while we're at it
+    cl_cache = my_proj_cache.FileBuildCache(JUICER.file_cache)
+    cl_ignore = my_proj_ignore.FileIgnore.from_file(JUICER.file_ignore)
+    cl_processors = (
+        ProcessorGeneric(
+            my_asset.Background,
+            TaskEncodeBackground,
+            JUICER.dir_out / JUICER.rel_dir_wet,
+        ),
+    )
+    # --- COG_END: MAIN_EX_JUICER2_CLS ---
+    return cl_cache, cl_ignore, cl_processors
+
+
+def main_juicer2_copy(
+    cl_cache: my_proj_cache.FileBuildCache,
+    cl_ignore: my_proj_ignore.FileIgnore,
+    cl_processors: my_proj_processor.Processor,
+) -> None:
+    """Let's address the copying problem first.
+
+    We can make a makeshift "copy tasks" by constructing cache entries by hand.
+    This does make the first copy a bit slower than our initial version,
+    but this time we get to skip over most of the assets on subsequent builds.
+    """
+    # --- COG_START: MAIN_EX_JUICER2_COPY ---
+    print('Syncing project files...')
+
+    # processor ignores
+    proc_ignore = tuple(
+        p.relative_to(PROJECT)
+        for p in cl_processors.get_ignored_source_dirs(PROJECT)
+    )
+
+    stat_copied = 0
+    stat_skipped = 0
+
+    all_files = [p for p in PROJECT.rglob('*') if p.is_file()]
+    for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
+        rel_path = src_path.relative_to(PROJECT)
+        rel_posix = rel_path.as_posix()
+
+        # skip paths claimed by processors
+        #  append / to ensure it matches dirs
+        if any(
+            rel_posix == dyn or rel_posix.startswith(f'{dyn}/')
+            for dyn in proc_ignore
+        ):
+            continue
+
+        # check clunksterignore
+        if cl_ignore.is_ignored(rel_posix):
+            continue
+
+        # check cache
+        dest_path = JUICER.dir_out / rel_path
+        task_id = f'copy_{rel_posix}'
+        current_hash = my_proj_cache.file_hash(dest_path)
+        if cl_cache.is_fresh(
+            task_id=task_id,
+            current_hash=current_hash,
+            outputs=(dest_path,),
+        ):
+            stat_skipped += 1
+            continue
+
+        # copy and update cache
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dest_path)
+        cl_cache.update(task_id, current_hash)
+        stat_copied += 1
+
+    print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
+    # --- COG_END: MAIN_EX_JUICER2_COPY ---
 
 
 def _run_tutorials() -> None:
@@ -2470,6 +2557,8 @@ def _load_private(config_dir: Path) -> None:
         dir_out=config_dir.parent / '_build',
         dir_dry=JUICER.dir_dry,  # og dir
         rel_dir_wet=JUICER.rel_dir_wet,
+        file_cache=JUICER.file_cache,
+        file_ignore=config_dir.parent / '.clunksterignore',
     )
 
     _file_private_alias = config_dir / 'alias.json'

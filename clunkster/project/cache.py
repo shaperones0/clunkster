@@ -1,8 +1,21 @@
 """Build progress caching."""
 
 import collections.abc as col
+import hashlib
 import json
 from pathlib import Path
+
+
+def file_hash(*paths: Path) -> str:
+    """Calculate MD5 hash of all input files."""
+    hasher = hashlib.md5()
+    for filepath in sorted(paths):
+        if filepath.exists():
+            assert filepath.is_file()
+            with filepath.open('rb') as f:
+                for chunk in iter(lambda: f.read(4096), b''):
+                    hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 class FileBuildCache:
