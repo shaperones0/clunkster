@@ -3052,6 +3052,7 @@ Also don't forget to preserve Common assets as is.
 
 ```python
 import fnmatch
+import re
 import shutil
 from pathlib import Path
 
@@ -3089,6 +3090,9 @@ print('Syncing project files...')
 proc_ignore_patterns: list[str] = []
 for proc in cl_processors:
     proc_ignore_patterns.extend(proc.get_ignored_source_patterns(PROJECT))
+procs_rex = [
+    re.compile(fnmatch.translate(pat)) for pat in proc_ignore_patterns
+]
 
 stat_copied = 0
 stat_skipped = 0
@@ -3101,9 +3105,8 @@ for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
     # skip paths claimed by processors
     #  append / to ensure it matches dirs
     if any(
-        fnmatch.fnmatch(rel_posix, pat)
-        or fnmatch.fnmatch(src_path.name, pat)
-        for pat in proc_ignore_patterns
+        pat.match(rel_posix) or pat.match(src_path.name)
+        for pat in procs_rex
     ):
         continue
 

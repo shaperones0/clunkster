@@ -9,6 +9,7 @@ import itertools as it
 import json
 import multiprocessing as mp
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -2635,7 +2636,6 @@ def main_juicer2_cls() -> tuple[
 
 
 def main_juicer2_copy(
-    assets: list[Asset],
     cl_cache: my_proj_cache.FileBuildCache,
     cl_ignore: my_proj_ignore.FileIgnore,
     cl_processors: col.Iterable[my_proj_processor.Processor],
@@ -2658,6 +2658,9 @@ def main_juicer2_copy(
     proc_ignore_patterns: list[str] = []
     for proc in cl_processors:
         proc_ignore_patterns.extend(proc.get_ignored_source_patterns(PROJECT))
+    procs_rex = [
+        re.compile(fnmatch.translate(pat)) for pat in proc_ignore_patterns
+    ]
 
     stat_copied = 0
     stat_skipped = 0
@@ -2670,9 +2673,8 @@ def main_juicer2_copy(
         # skip paths claimed by processors
         #  append / to ensure it matches dirs
         if any(
-            fnmatch.fnmatch(rel_posix, pat)
-            or fnmatch.fnmatch(src_path.name, pat)
-            for pat in proc_ignore_patterns
+            pat.match(rel_posix) or pat.match(src_path.name)
+            for pat in procs_rex
         ):
             continue
 
@@ -2940,7 +2942,7 @@ def main() -> None:
             return
 
     cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
-    main_juicer2_copy(assets, cl_cache, cl_ignore, cl_processors)
+    main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
     main_juicer2_mp(assets, cl_cache, cl_processors)
     main_juicer_gen_gml(assets)
     main_juicer2_gm_compile()
