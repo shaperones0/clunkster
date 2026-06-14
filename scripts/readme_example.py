@@ -778,6 +778,19 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             ),
             source_of_stubs=(),
         ),
+        Example(
+            'ex_juicer2_gm_compile',
+            'Project Juicer v2',
+            'Juicer v2: game maker compile',
+            content=exs.gen_freeform(
+                func_name='main_juicer2_gm_compile',
+                refs=[
+                    '!CLS_JUICER_CONFIG',
+                    'MAIN_EX_JUICER2_GM_COMPILE',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
     ]
 
 

@@ -88,6 +88,7 @@ cog.outl('\n'.join(generate_toc()))
     * [Example 5.1 - Juicer v2: classes](#example-51---juicer-v2-classes)
     * [Example 5.2 - Juicer v2: copy the project (but smarter)](#example-52---juicer-v2-copy-the-project-but-smarter)
     * [Example 5.3 - Juicer v2: multiprocessing pipeline](#example-53---juicer-v2-multiprocessing-pipeline)
+    * [Example 5.4 - Juicer v2: game maker compile](#example-54---juicer-v2-game-maker-compile)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -1530,6 +1531,9 @@ class ConfJuicer:
     # .clunksterignore file
     file_ignore: Path
 
+    # filename of the gm82 project
+    fname_gm82: str
+
 
 JUICER = ConfJuicer(
     # start with dev builds
@@ -1542,6 +1546,7 @@ JUICER = ConfJuicer(
     rel_dir_wet=Path('data') / 'chunks',
     file_cache=Path(__file__).parent / 'cache.json',
     file_ignore=Path('path/to/project/.clunksterignore'),
+    fname_gm82='projectidk.gm82',
 )
 
 # see Example 1.1 - Finding assets
@@ -3229,6 +3234,75 @@ else:
 ```
 
 Don't forget to run our old GML generator after doing this step.
+Could also run Game Maker's CLI compile with `subprocess.Popen`
+### Example 5.4 - Juicer v2: game maker compile
+One last step is automatic compile.
+
+Game Maker's CLI for compiling is:
+
+```
+GameMaker.exe [project.gm82] --build [exe]
+```
+And Game Maker's exe is usually at:
+
+```
+C:\Users\user\AppData\Roaming\GameMaker8.2\GameMaker.exe
+```
+but I also added a new environment variable `GM82_PATH` just for that
+one guy.
+
+```python
+import os
+import subprocess
+from pathlib import Path
+
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+print('Jostling Game Maker 8.2 compiler...')
+
+project_file = JUICER.dir_out / JUICER.fname_gm82
+output_exe = JUICER.dir_out / 'game.exe'
+
+custom_path = os.getenv('GM82_PATH')
+if custom_path:
+    gm_exe = Path(custom_path)
+else:
+    appdata_str = os.getenv('APPDATA')
+    if not appdata_str:
+        raise RuntimeError(
+            'Could not resolve APPDATA environment variable.'
+        )
+
+    appdata_path = Path(appdata_str)
+
+    gm_exe = appdata_path / 'GameMaker8.2' / 'GameMaker.exe'
+
+if not gm_exe.exists():
+    raise FileNotFoundError(
+        f'GameMaker 8.2 compiler not found at:\n{gm_exe}\n'
+        "If you have a custom installation, set the 'GM82_PATH' "
+        'environment variable.'
+    )
+
+print(f'Compiling {output_exe.name}...')
+
+try:
+    subprocess.run(  # noqa: S603
+        [str(gm_exe), str(project_file), '--build', str(output_exe)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+    print('Build completely successfully!')
+    subprocess.run(str(output_exe), cwd=JUICER.dir_out)  # noqa: S603
+
+except subprocess.CalledProcessError as e:
+    raise RuntimeError(
+        f'GameMaker 8.2 compilation failed with exit code {e.returncode}'
+    ) from e
+```
 <!--[[[end]]]-->
 
 # Rationale

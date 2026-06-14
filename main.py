@@ -8,10 +8,10 @@ import fnmatch
 import itertools as it
 import json
 import multiprocessing as mp
+import os
 import shutil
 import subprocess
 import sys
-import time
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -286,6 +286,9 @@ class ConfJuicer:
     # .clunksterignore file
     file_ignore: Path
 
+    # filename of the gm82 project
+    fname_gm82: str
+
 
 JUICER = ConfJuicer(
     # start with dev builds
@@ -298,6 +301,7 @@ JUICER = ConfJuicer(
     rel_dir_wet=Path('data') / 'chunks',
     file_cache=Path(__file__).parent / 'cache.json',
     file_ignore=Path('path/to/project/.clunksterignore'),
+    fname_gm82='projectidk.gm82',
 )
 # --- COG_END: CLS_JUICER_CONFIG ---
 
@@ -2771,6 +2775,70 @@ def main_juicer2_mp(
     # --- COG_END: MAIN_EX_JUICER2_MP ---
 
 
+def main_juicer2_gm_compile() -> None:
+    r"""One last step is automatic compile.
+
+    Game Maker's CLI for compiling is:
+
+    ::
+
+        GameMaker.exe [project.gm82] --build [exe]
+
+    And Game Maker's exe is usually at:
+
+    ::
+
+        C:\Users\user\AppData\Roaming\GameMaker8.2\GameMaker.exe
+
+    but I also added a new environment variable ``GM82_PATH`` just for that
+    one guy.
+    """
+    # --- COG_START: MAIN_EX_JUICER2_GM_COMPILE ---
+    print('Jostling Game Maker 8.2 compiler...')
+
+    project_file = JUICER.dir_out / JUICER.fname_gm82
+    output_exe = JUICER.dir_out / 'game.exe'
+
+    custom_path = os.getenv('GM82_PATH')
+    if custom_path:
+        gm_exe = Path(custom_path)
+    else:
+        appdata_str = os.getenv('APPDATA')
+        if not appdata_str:
+            raise RuntimeError(
+                'Could not resolve APPDATA environment variable.'
+            )
+
+        appdata_path = Path(appdata_str)
+
+        gm_exe = appdata_path / 'GameMaker8.2' / 'GameMaker.exe'
+
+    if not gm_exe.exists():
+        raise FileNotFoundError(
+            f'GameMaker 8.2 compiler not found at:\n{gm_exe}\n'
+            "If you have a custom installation, set the 'GM82_PATH' "
+            'environment variable.'
+        )
+
+    print(f'Compiling {output_exe.name}...')
+
+    try:
+        subprocess.run(  # noqa: S603
+            [str(gm_exe), str(project_file), '--build', str(output_exe)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+        print('Build completely successfully!')
+        subprocess.run(str(output_exe), cwd=JUICER.dir_out)  # noqa: S603
+
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f'GameMaker 8.2 compilation failed with exit code {e.returncode}'
+        ) from e
+    # --- COG_END: MAIN_EX_JUICER2_GM_COMPILE ---
+
+
 def _run_tutorials() -> None:
     main_ex_start()
     main_ex_aliases()
@@ -2801,6 +2869,8 @@ def _load_private(config_dir: Path) -> None:
             f'Config file not found: {_file_private_config}'
         )
 
+    _config = json.loads(_file_private_config.read_text())
+
     PROJECT = config_dir.parent / 'source'
     JUICER = ConfJuicer(
         is_prod=False,
@@ -2809,6 +2879,7 @@ def _load_private(config_dir: Path) -> None:
         rel_dir_wet=JUICER.rel_dir_wet,
         file_cache=config_dir.parent / 'clunkster_cache.json',
         file_ignore=config_dir.parent / '.clunksterignore',
+        fname_gm82=_config['fname_gm82'],
     )
 
     _file_private_alias = config_dir / 'alias.json'
@@ -2837,52 +2908,42 @@ def main() -> None:
 
     # allow testing tutorials on private data as well
     is_test = False
-    if len(sys.argv) > 2 and sys.argv[2] == '--test':  # noqa: PLR2004
-        is_test = True
+    is_check = False
+    if len(sys.argv) > 2:  # noqa: PLR2004
+        if sys.argv[2] == 'test':
+            is_test = True
+        elif sys.argv[2] == 'check':
+            is_check = True
 
     if is_test:
         _run_tutorials()
         return
 
-    t = time.time()
     main_ex_lint_tree()
-    print('\nLint tree:', time.time() - t)
-
-    # flush cause progressbars can be iffy
-    print(flush=True)
-
-    t = time.time()
     assets = main_ex_aliases()
-    print('\nAsset discovery:', time.time() - t)
 
-    # time.sleep(0.5)
-    #
-    # # flush cause progressbars can be iffy
-    # print(flush=True)
-    #
-    # t = time.time()
-    # deps = main_ex_scan_sync2(assets)
-    #
-    # # main_ex_lint_unused(deps, assets)
-    # ok = main_ex_lint_crossref(deps)
-    # if not ok:
-    #     print('\nLinting errors found - bailing out')
-    #     return
-    #
-    # room_data = main_ex_graph(assets, deps)
-    #
-    # # main_ex_lint_unused_graph(assets, room_data)
-    # ok = main_ex_lint_crossref_graph(assets, room_data)
-    # if not ok:
-    #     print('\nLinting errors found - bailing out')
-    #     return
-    # print('\nLinters:', time.time() - t)
-    #
-    # t = time.time()
+    if is_check:
+        deps = main_ex_scan_sync2(assets)
+
+        # main_ex_lint_unused(deps, assets)
+        ok = main_ex_lint_crossref(deps)
+        if not ok:
+            print('\nLinting errors found - bailing out')
+            return
+
+        room_data = main_ex_graph(assets, deps)
+
+        # main_ex_lint_unused_graph(assets, room_data)
+        ok = main_ex_lint_crossref_graph(assets, room_data)
+        if not ok:
+            print('\nLinting errors found - bailing out')
+            return
+
     cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
     main_juicer2_copy(assets, cl_cache, cl_ignore, cl_processors)
     main_juicer2_mp(assets, cl_cache, cl_processors)
     main_juicer_gen_gml(assets)
+    main_juicer2_gm_compile()
 
 
 if __name__ == '__main__':
