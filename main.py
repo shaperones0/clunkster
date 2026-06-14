@@ -2046,9 +2046,9 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
         else:
             continue
 
-        asset_name_to_file_wet[asset.name] = pth_wet.relative_to(
-            JUICER.dir_out
-        ).as_posix()
+        asset_name_to_file_wet[asset.name] = str(
+            pth_wet.relative_to(JUICER.dir_out)
+        )
 
     # common params for writing anything related to game maker
     text_params = {'encoding': 'utf-8', 'newline': '\n'}
@@ -2281,39 +2281,57 @@ def main() -> None:
 
     if is_test:
         _run_tutorials()
-    else:
-        main_ex_lint_tree()
+        return
 
-        # flush cause progressbars can be iffy
-        print(flush=True)
+    t = time.time()
+    main_ex_lint_tree()
+    print('\nLint tree:', time.time() - t)
 
-        assets = main_ex_aliases()
+    # flush cause progressbars can be iffy
+    print(flush=True)
 
-        time.sleep(0.5)
+    t = time.time()
+    assets = main_ex_aliases()
+    print('\nAsset discovery:', time.time() - t)
 
-        # flush cause progressbars can be iffy
-        print(flush=True)
+    time.sleep(0.5)
 
-        deps = main_ex_scan_sync2(assets)
+    # flush cause progressbars can be iffy
+    print(flush=True)
 
-        # main_ex_lint_unused(deps, assets)
-        ok = main_ex_lint_crossref(deps)
-        if not ok:
-            print('Linting errors found - bailing out')
-            return
+    t = time.time()
+    deps = main_ex_scan_sync2(assets)
 
-        room_data = main_ex_graph(assets, deps)
+    # main_ex_lint_unused(deps, assets)
+    ok = main_ex_lint_crossref(deps)
+    if not ok:
+        print('\nLinting errors found - bailing out')
+        return
 
-        # main_ex_lint_unused_graph(assets, room_data)
-        ok = main_ex_lint_crossref_graph(assets, room_data)
-        if not ok:
-            print('Linting errors found - bailing out')
-            return
+    room_data = main_ex_graph(assets, deps)
 
-        main_juicer_copy(assets)
-        main_juicer_fix_masks(assets)
-        main_juicer_gen_wet(assets)
-        main_juicer_gen_gml(assets)
+    # main_ex_lint_unused_graph(assets, room_data)
+    ok = main_ex_lint_crossref_graph(assets, room_data)
+    if not ok:
+        print('\nLinting errors found - bailing out')
+        return
+    print('\nLinters:', time.time() - t)
+
+    t = time.time()
+    main_juicer_copy(assets)
+    print('\nJuicer copy:', time.time() - t)
+
+    t = time.time()
+    main_juicer_fix_masks(assets)
+    print('\nJuicer fix masks:', time.time() - t)
+
+    t = time.time()
+    main_juicer_gen_wet(assets)
+    print('\nJuicer extract:', time.time() - t)
+
+    t = time.time()
+    main_juicer_gen_gml(assets)
+    print('\nJuicer generate gml:', time.time() - t)
 
 
 if __name__ == '__main__':

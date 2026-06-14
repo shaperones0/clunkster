@@ -2371,9 +2371,9 @@ for asset in assets:
     else:
         continue
 
-    asset_name_to_file_wet[asset.name] = pth_wet.relative_to(
-        JUICER.dir_out
-    ).as_posix()
+    asset_name_to_file_wet[asset.name] = str(
+        pth_wet.relative_to(JUICER.dir_out)
+    )
 
 # common params for writing anything related to game maker
 text_params = {'encoding': 'utf-8', 'newline': '\n'}
