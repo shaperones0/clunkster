@@ -146,6 +146,20 @@ class AssetFile(Asset, ABC):
         return cls._type_get_dir_rel()
 
     @classmethod
+    @abstractmethod
+    def _type_globs(cls) -> col.Iterable[str]:
+        """Get globs of files of this type.
+
+        Example: *.wav, *.ogg
+        """
+        return '*'
+
+    @classmethod
+    def type_globs(cls) -> col.Iterable[str]:
+        """Get globs of files of this type."""
+        return cls._type_globs()
+
+    @classmethod
     def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
         """Get directory of this asset type.
 
@@ -256,10 +270,6 @@ class AssetExt(AssetFile, ABC):
     dir_path: tuple[str, ...]
 
     @classmethod
-    def _type_globs(cls) -> col.Iterable[str]:
-        return '*'
-
-    @classmethod
     def type_get_dir(cls, project_root: pl.Path) -> pl.Path:
         """Get directory of this asset type.
 
@@ -347,6 +357,10 @@ class Background(AssetBuiltin):
         return 'BACKGROUND'
 
     @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return '*.png', '*.txt'
+
+    @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('backgrounds')
 
@@ -364,9 +378,7 @@ class Background(AssetBuiltin):
 
     def get_background_image(self, project_root: pl.Path) -> pl.Path:
         """Get background's image."""
-        file = type(self).type_get_dir(project_root) / f'{self.name}.png'
-        assert file.is_file()
-        return file
+        return type(self).type_get_dir(project_root) / f'{self.name}.png'
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +388,11 @@ class Sound(AssetBuiltin):
     @classmethod
     def _type_name(cls) -> str:
         return 'SOUND'
+
+    @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        # ive no idea
+        return ('*',)
 
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
@@ -391,6 +408,10 @@ class Font(AssetBuiltin):
         return 'FONT'
 
     @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return ('*.txt',)
+
+    @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('fonts')
 
@@ -402,6 +423,10 @@ class Object(AssetBuiltin):
     @classmethod
     def _type_name(cls) -> str:
         return 'OBJECT'
+
+    @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return '*.gml', '*.txt'
 
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
@@ -440,6 +465,10 @@ class Path(AssetBuiltin):
         return 'PATH'
 
     @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return ('*.txt',)
+
+    @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('paths')
 
@@ -451,6 +480,10 @@ class Room(AssetBuiltin):
     @classmethod
     def _type_name(cls) -> str:
         return 'ROOM'
+
+    @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return '*.gml', '*.txt'
 
     @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
@@ -480,6 +513,10 @@ class Script(AssetBuiltin):
         return 'SCRIPT'
 
     @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return ('*.gml',)
+
+    @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('scripts')
 
@@ -503,14 +540,16 @@ class Sprite(AssetBuiltin):
         return 'SPRITE'
 
     @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return '*.png', '*.txt'
+
+    @classmethod
     def _type_get_dir_rel(cls) -> pl.Path:
         return pl.Path('sprites')
 
     def get_sprite_folder(self, project_root: pl.Path) -> pl.Path:
         """Get sprite's folder with .pngs and .txt metadata."""
-        folder = type(self).type_get_dir(project_root) / self.name
-        assert folder.is_dir()
-        return folder
+        return type(self).type_get_dir(project_root) / self.name
 
     def get_sprite_metadata_file(self, project_root: pl.Path) -> pl.Path:
         """Get sprite's metadata file."""
@@ -524,6 +563,4 @@ class Sprite(AssetBuiltin):
 
     def get_sprite_image(self, project_root: pl.Path, frame: int) -> pl.Path:
         """Get sprite's images."""
-        img = self.get_sprite_folder(project_root) / f'{frame}.png'
-        assert img.is_file()
-        return img
+        return self.get_sprite_folder(project_root) / f'{frame}.png'

@@ -12,12 +12,12 @@ class Processor(ABC):
     """Abstract factory class that analyzes the project and generates Tasks."""
 
     @abstractmethod
-    def get_ignored_source_dirs(
+    def get_ignored_source_patterns(
         self, project_root: Path
-    ) -> col.Iterable[Path]:
-        """Return directories this processor manages exclusively.
+    ) -> col.Iterable[str]:
+        """Return globs for files that this processor manages exclusively.
 
-        Any directories listed here should be skipped when copying the project.
+        Example: "``sprites/**/*.png``".
         :param project_root: Project root directory.
         :return: Paths to directories that should be skipped.
         """

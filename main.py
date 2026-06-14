@@ -4,6 +4,7 @@ import collections
 import collections.abc as col
 import concurrent.futures
 import dataclasses
+import fnmatch
 import itertools as it
 import json
 import multiprocessing as mp
@@ -12,7 +13,7 @@ import subprocess
 import sys
 import time
 import warnings
-from abc import ABC
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import rustworkx as rx
@@ -69,6 +70,10 @@ class AssetExtBgm(AssetExtAudio):
     @classmethod
     def _type_name(cls) -> str:
         return 'DATA_BGM'
+
+    @classmethod
+    def _type_globs(cls) -> tuple[str, ...]:
+        return '*.ogg', '*.mp3', '*.wav'
 
     @classmethod
     def _type_get_dir_rel(cls) -> Path:
@@ -2290,7 +2295,15 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
 # --- COG_START: CLS_TASKS ---
 class TaskAsset[TAsset: my_asset.AssetFile](my_proj_task.Task, ABC):
-    """Generic asset-based task with a defined constructor."""
+    """Generic asset-based task."""
+
+    @abstractmethod
+    def _get_asset(self) -> my_asset.AssetFile:
+        """Get the asset that this tasks processes."""
+
+    def get_asset(self) -> my_asset.AssetFile:
+        """Get the asset that this tasks processes."""
+        return self._get_asset()
 
 
 class TaskEncodeBackground(TaskAsset[my_asset.Background]):
@@ -2300,25 +2313,64 @@ class TaskEncodeBackground(TaskAsset[my_asset.Background]):
         self,
         background: my_asset.Background,
         project_root: Path,
+        dir_project_out: Path,
         dir_wet_cluster: Path,
+        file_dry: Path,
     ) -> None:
         """Create the task from existing asset."""
         self.background = background
         self.project_root = project_root
+        self.project_out = dir_project_out
+        self.file_dry = file_dry
+
+        # destination image (dry or as-is if Common)
+        self.file_meta = background.get_background_metadata_file(project_root)
+        self.out_img = background.get_background_image(dir_project_out)
+
+        # add png into required outputs
+        outputs = [self.out_img]
+
+        # add gmbck only if not common (commons won't be generating those)
         self.file_gmbck_output = pth_get_wet(dir_wet_cluster, background)
+        if background.cluster != 'Common':
+            outputs.append(self.file_gmbck_output)
+
         super().__init__(
             task_id=f'encode_bg_{background.name}',
             inputs=(
                 background.get_background_metadata_file(project_root),
                 background.get_background_image(project_root),
             ),
-            outputs=(self.file_gmbck_output,),
+            outputs=outputs,
         )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.background
 
     def execute(self) -> None:
         """Execute the task."""
-        juice_background(
-            self.background, self.project_root, self.file_gmbck_output
+        if self.background.cluster == 'Common':
+            # raw copy
+            src = self.background.get_background_image(self.project_root)
+            dest = self.out_img
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+        else:
+            # juice
+            juice_background(
+                self.background, self.project_root, self.file_gmbck_output
+            )
+            # stub
+            dest = self.out_img
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(self.file_dry, dest)
+
+        # always copy the metadata
+        dest = self.project_out / self.file_meta.relative_to(self.project_root)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            self.file_meta,
+            dest,
         )
 
 
@@ -2329,13 +2381,33 @@ class TaskEncodeSprite(TaskAsset[my_asset.Sprite]):
         self,
         sprite: my_asset.Sprite,
         project_root: Path,
+        dir_project_out: Path,
         dir_wet_cluster: Path,
+        file_dry: Path,
     ) -> None:
         """Create the task from existing asset."""
         self.sprite = sprite
         self.project_root = project_root
-        self.file_gmspr_output = pth_get_wet(dir_wet_cluster, sprite)
+        self.project_out = dir_project_out
+        self.file_dry = file_dry
+
+        self.file_meta = sprite.get_sprite_metadata_file(project_root)
         meta = sprite.get_sprite_metadata(project_root)
+
+        # map destination images (dry or as-is if Common)
+        self.out_imgs = [
+            sprite.get_sprite_image(dir_project_out, i)
+            for i in range(meta.frames)
+        ]
+
+        # add pngs into required outputs
+        outputs = list(self.out_imgs)
+
+        # add gmspr only if not common (commons won't be generating those)
+        self.file_gmspr_output = pth_get_wet(dir_wet_cluster, sprite)
+        if sprite.cluster != 'Common':
+            outputs.append(self.file_gmspr_output)
+
         super().__init__(
             task_id=f'encode_spr_{sprite.name}',
             inputs=(
@@ -2345,33 +2417,90 @@ class TaskEncodeSprite(TaskAsset[my_asset.Sprite]):
                     for i in range(meta.frames)
                 ),
             ),
-            outputs=(self.file_gmspr_output,),
+            outputs=outputs,
         )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.sprite
 
     def execute(self) -> None:
         """Execute the task."""
-        juice_sprite(self.sprite, self.project_root, self.file_gmspr_output)
+        meta = self.sprite.get_sprite_metadata(self.project_root)
+        if self.sprite.cluster == 'Common':
+            # raw copy
+            for i in range(meta.frames):
+                src = self.sprite.get_sprite_image(self.project_root, i)
+                dest = self.out_imgs[i]
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+        else:
+            # juice
+            juice_sprite(
+                self.sprite, self.project_root, self.file_gmspr_output
+            )
+            # stub
+            for dest in self.out_imgs:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(self.file_dry, dest)
+
+        # always copy the metadata
+        dest = self.project_out / self.file_meta.relative_to(self.project_root)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            self.file_meta,
+            dest,
+        )
 
 
 class TaskCompressAudio(TaskAsset[AssetExtAudio]):
     """Compress audio task."""
 
     def __init__(
-        self, audio: AssetExtAudio, project_root: Path, dir_wet_cluster: Path
+        self,
+        audio: AssetExtAudio,
+        project_root: Path,
+        dir_project_out: Path,
+        dir_wet_cluster: Path,
+        _: Path,
     ) -> None:
         """Create the task from existing asset."""
         self.audio = audio
         self.project_root = project_root
-        self.file_audio_output = pth_get_wet(dir_wet_cluster, audio)
+        self.project_out = dir_project_out
+        # there's no dry file for audio
+
+        # Commons compress into data/music folder,
+        #  non-Commons into data/chunks/whatever
+        self.file_out_chunked = pth_get_wet(dir_wet_cluster, audio)
+        self.file_out_raw = (
+            dir_project_out
+            / self.file_out_chunked.relative_to(dir_wet_cluster)
+        )
+
+        if audio.cluster == 'Common':
+            self.file_output = self.file_out_raw
+        else:
+            self.file_output = self.file_out_chunked
         super().__init__(
             task_id=f'compress_{audio.name[1:-1]}',
             inputs=(audio.file,),
-            outputs=(self.file_audio_output,),
+            outputs=(self.file_output,),
         )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.audio
 
     def execute(self) -> None:
         """Execute the task."""
-        juice_audio(self.audio, self.file_audio_output)
+        # it might sound tempting to compress the Common audio as well,
+        #  but you don't really wanna hear it
+        if self.audio.cluster == 'Common':
+            src = self.audio.file
+            dest = self.file_output
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dest)
+        else:
+            juice_audio(self.audio, self.file_output)
 
 
 class ProcessorGeneric[TAsset: my_asset.AssetFile](
@@ -2387,26 +2516,36 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
         self,
         cls_asset: type[TAsset],
         # bruuuuuuuuuuuuuuuuh
-        cls_task: col.Callable[[TAsset, Path, Path], TaskAsset[TAsset]],
+        cls_task: col.Callable[
+            [TAsset, Path, Path, Path, Path], TaskAsset[TAsset]
+        ],
         dir_wet: Path,
+        file_dry: Path,
     ) -> None:
         """Initialize generic asset processor.
 
+        :param cls_task: Class with a constructor signature of (``asset``,
+          ``path_project_root``, ``path_project_out``, ``path_wet_cluster``,
+          ``file_ry``)
         :param dir_wet: Exported assets directory, like ``data/chunks``.
         """
         self.cls_asset = cls_asset
         self.cls_task = cls_task
         self.dir_wet = dir_wet
+        self.file_dry = file_dry
 
-    def get_ignored_source_dirs(
+    def get_ignored_source_patterns(
         self, project_root: Path
-    ) -> col.Iterable[Path]:
+    ) -> col.Iterable[str]:
         """Ignores entire directory of this asset type.
 
         :param project_root:
         :return:
         """
-        yield self.cls_asset.type_get_dir(project_root)
+        # not a single day without hax
+        dir_posix = self.cls_asset.type_get_dir_rel().as_posix()
+        for ext_glob in self.cls_asset.type_globs():
+            yield f'{dir_posix}/**/{ext_glob}'
 
     def generate_tasks(
         self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
@@ -2414,7 +2553,11 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
         """Generate tasks for converting all assets of this type."""
         for asset in filter_type(self.cls_asset, assets):
             yield self.cls_task(
-                asset, project_root, self.dir_wet / asset.cluster
+                asset,
+                project_root,
+                dir_out,
+                self.dir_wet / asset.cluster,
+                self.file_dry,
             )
 
 
@@ -2434,15 +2577,25 @@ def main_juicer2_cls() -> tuple[
     regular builds, which we'll do with the help of caching and
     multiprocessing.
 
-    Clunkster provides several utilities for such project conversion, one of
-    them is a system of "tasks" (atomic conversion of one asset) and
-    "processors" (factories, that walk through the asset/dependency lists and
-    generate tasks). Also, processors have a second function of telling which
-    parts of the project don't need copying.
+    Now, caching and multiprocessing also means that we'll have to convert
+    our code into atomic "tasks", that can be fed into a process pool executor
+    and do their stuff from here. But this presents a bit of a challenge on its
+    own - sending stuff between Python processes takes some effort. Python has
+    to picke objects on one side, send it, and then unpickle on the other (_god
+    i wish there was an easier way to do this lol_). So some cheap operations
+    (like copying the bulk of the file count, ahem, rooms, ahem) can be done
+    synchronously in-place (or via Python's threading). So that's why we'll
+    split this pipeline into, again, copying the (bulk of the) project, and
+    then the actual expensive tasks would be sent to ``ProcessPoolExecutor``.
+
+    It's a good thing that Clunkster provides several utilities for such
+    project conversions, one of them is a system of "tasks" (atomic conversion
+    of one asset) and "processors" (factories, that walk through the
+    asset/dependency lists and generate tasks).
 
     So let's write those processors and tasks. We'll reuse our logic from
-    earlier examples. Notice that there's a fair bit of code repition.
-    It is how it is.
+    earlier examples. Notice that we have a bunch of separate logic for
+    Common and non-Common assets. It is how it is.
     """
     # --- COG_START: MAIN_EX_JUICER2_CLS ---
     # setup build cache and ignore file while we're at it
@@ -2454,33 +2607,31 @@ def main_juicer2_cls() -> tuple[
             my_asset.Background,
             TaskEncodeBackground,
             dir_wet,
+            JUICER.dir_dry
+            / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}',
         ),
         ProcessorGeneric(
             my_asset.Sprite,
             TaskEncodeSprite,
             dir_wet,
+            JUICER.dir_dry
+            / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}',
         ),
         ProcessorGeneric(
             AssetExtBgm,
             TaskCompressAudio,
             dir_wet,
+            Path(),  # dummy
         ),
-        ProcessorGeneric(
-            AssetExtSfx,
-            TaskCompressAudio,
-            dir_wet,
-        ),
-        ProcessorGeneric(
-            AssetExtSfx3,
-            TaskCompressAudio,
-            dir_wet,
-        ),
+        ProcessorGeneric(AssetExtSfx, TaskCompressAudio, dir_wet, Path()),
+        ProcessorGeneric(AssetExtSfx3, TaskCompressAudio, dir_wet, Path()),
     )
     # --- COG_END: MAIN_EX_JUICER2_CLS ---
     return cl_cache, cl_ignore, cl_processors
 
 
 def main_juicer2_copy(
+    assets: list[Asset],
     cl_cache: my_proj_cache.FileBuildCache,
     cl_ignore: my_proj_ignore.FileIgnore,
     cl_processors: col.Iterable[my_proj_processor.Processor],
@@ -2493,17 +2644,16 @@ def main_juicer2_copy(
 
     This results in around 5-10 seconds on first launch and 1-2 seconds on
     subsequent ones (we still do calculate hashes of every file duh).
+
+    Also don't forget to preserve Common assets as is.
     """
     # --- COG_START: MAIN_EX_JUICER2_COPY ---
     print('Syncing project files...')
 
     # processor ignores
-    proc_ignore: list[str] = []
+    proc_ignore_patterns: list[str] = []
     for proc in cl_processors:
-        proc_ignore.extend(
-            ignore.relative_to(PROJECT).as_posix()
-            for ignore in proc.get_ignored_source_dirs(PROJECT)
-        )
+        proc_ignore_patterns.extend(proc.get_ignored_source_patterns(PROJECT))
 
     stat_copied = 0
     stat_skipped = 0
@@ -2516,8 +2666,9 @@ def main_juicer2_copy(
         # skip paths claimed by processors
         #  append / to ensure it matches dirs
         if any(
-            rel_posix == dyn or rel_posix.startswith(f'{dyn}/')
-            for dyn in proc_ignore
+            fnmatch.fnmatch(rel_posix, pat)
+            or fnmatch.fnmatch(src_path.name, pat)
+            for pat in proc_ignore_patterns
         ):
             continue
 
@@ -2550,7 +2701,7 @@ def main_juicer2_copy(
 
 
 def main_juicer2_mp(
-    assets: list[my_asset.Asset],
+    assets: list[Asset],
     cl_cache: my_proj_cache.FileBuildCache,
     cl_processors: col.Iterable[my_proj_processor.Processor],
 ) -> None:
@@ -2615,6 +2766,7 @@ def main_juicer2_mp(
 
         if stat_failed > 0:
             raise RuntimeError('Pipeline halted due to aids')
+    # MD: Don't forget to run our old GML generator after doing this step.
     # --- COG_END: MAIN_EX_JUICER2_MP ---
 
 
@@ -2727,8 +2879,9 @@ def main() -> None:
     #
     # t = time.time()
     cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
-    main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
+    main_juicer2_copy(assets, cl_cache, cl_ignore, cl_processors)
     main_juicer2_mp(assets, cl_cache, cl_processors)
+    main_juicer_gen_gml(assets)
 
 
 if __name__ == '__main__':
