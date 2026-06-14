@@ -2448,11 +2448,32 @@ def main_juicer2_cls() -> tuple[
     # setup build cache and ignore file while we're at it
     cl_cache = my_proj_cache.FileBuildCache(JUICER.file_cache)
     cl_ignore = my_proj_ignore.FileIgnore.from_file(JUICER.file_ignore)
+    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
     cl_processors = (
         ProcessorGeneric(
             my_asset.Background,
             TaskEncodeBackground,
-            JUICER.dir_out / JUICER.rel_dir_wet,
+            dir_wet,
+        ),
+        ProcessorGeneric(
+            my_asset.Sprite,
+            TaskEncodeSprite,
+            dir_wet,
+        ),
+        ProcessorGeneric(
+            AssetExtBgm,
+            TaskCompressAudio,
+            dir_wet,
+        ),
+        ProcessorGeneric(
+            AssetExtSfx,
+            TaskCompressAudio,
+            dir_wet,
+        ),
+        ProcessorGeneric(
+            AssetExtSfx3,
+            TaskCompressAudio,
+            dir_wet,
         ),
     )
     # --- COG_END: MAIN_EX_JUICER2_CLS ---
@@ -2462,22 +2483,27 @@ def main_juicer2_cls() -> tuple[
 def main_juicer2_copy(
     cl_cache: my_proj_cache.FileBuildCache,
     cl_ignore: my_proj_ignore.FileIgnore,
-    cl_processors: my_proj_processor.Processor,
+    cl_processors: col.Iterable[my_proj_processor.Processor],
 ) -> None:
     """Let's address the copying problem first.
 
     We can make a makeshift "copy tasks" by constructing cache entries by hand.
     This does make the first copy a bit slower than our initial version,
     but this time we get to skip over most of the assets on subsequent builds.
+
+    This results in around 5-10 seconds on first launch and 1-2 seconds on
+    subsequent ones (we still do calculate hashes of every file duh).
     """
     # --- COG_START: MAIN_EX_JUICER2_COPY ---
     print('Syncing project files...')
 
     # processor ignores
-    proc_ignore = tuple(
-        p.relative_to(PROJECT)
-        for p in cl_processors.get_ignored_source_dirs(PROJECT)
-    )
+    proc_ignore: list[str] = []
+    for proc in cl_processors:
+        proc_ignore.extend(
+            ignore.relative_to(PROJECT).as_posix()
+            for ignore in proc.get_ignored_source_dirs(PROJECT)
+        )
 
     stat_copied = 0
     stat_skipped = 0
@@ -2502,7 +2528,7 @@ def main_juicer2_copy(
         # check cache
         dest_path = JUICER.dir_out / rel_path
         task_id = f'copy_{rel_posix}'
-        current_hash = my_proj_cache.file_hash(dest_path)
+        current_hash = my_proj_cache.file_hash(src_path)
         if cl_cache.is_fresh(
             task_id=task_id,
             current_hash=current_hash,
@@ -2517,6 +2543,7 @@ def main_juicer2_copy(
         cl_cache.update(task_id, current_hash)
         stat_copied += 1
 
+    cl_cache.save()
     print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
     # --- COG_END: MAIN_EX_JUICER2_COPY ---
 
@@ -2557,7 +2584,7 @@ def _load_private(config_dir: Path) -> None:
         dir_out=config_dir.parent / '_build',
         dir_dry=JUICER.dir_dry,  # og dir
         rel_dir_wet=JUICER.rel_dir_wet,
-        file_cache=JUICER.file_cache,
+        file_cache=config_dir.parent / 'clunkster_cache.json',
         file_ignore=config_dir.parent / '.clunksterignore',
     )
 
@@ -2602,47 +2629,35 @@ def main() -> None:
     print(flush=True)
 
     t = time.time()
-    assets = main_ex_aliases()
+    # assets = main_ex_aliases()
     print('\nAsset discovery:', time.time() - t)
 
-    time.sleep(0.5)
-
-    # flush cause progressbars can be iffy
-    print(flush=True)
-
-    t = time.time()
-    deps = main_ex_scan_sync2(assets)
-
-    # main_ex_lint_unused(deps, assets)
-    ok = main_ex_lint_crossref(deps)
-    if not ok:
-        print('\nLinting errors found - bailing out')
-        return
-
-    room_data = main_ex_graph(assets, deps)
-
-    # main_ex_lint_unused_graph(assets, room_data)
-    ok = main_ex_lint_crossref_graph(assets, room_data)
-    if not ok:
-        print('\nLinting errors found - bailing out')
-        return
-    print('\nLinters:', time.time() - t)
-
-    t = time.time()
-    main_juicer_copy(assets)
-    print('\nJuicer copy:', time.time() - t)
-
-    t = time.time()
-    main_juicer_fix_masks(assets)
-    print('\nJuicer fix masks:', time.time() - t)
-
-    t = time.time()
-    main_juicer_gen_wet(assets)
-    print('\nJuicer extract:', time.time() - t)
-
-    t = time.time()
-    main_juicer_gen_gml(assets)
-    print('\nJuicer generate gml:', time.time() - t)
+    # time.sleep(0.5)
+    #
+    # # flush cause progressbars can be iffy
+    # print(flush=True)
+    #
+    # t = time.time()
+    # deps = main_ex_scan_sync2(assets)
+    #
+    # # main_ex_lint_unused(deps, assets)
+    # ok = main_ex_lint_crossref(deps)
+    # if not ok:
+    #     print('\nLinting errors found - bailing out')
+    #     return
+    #
+    # room_data = main_ex_graph(assets, deps)
+    #
+    # # main_ex_lint_unused_graph(assets, room_data)
+    # ok = main_ex_lint_crossref_graph(assets, room_data)
+    # if not ok:
+    #     print('\nLinting errors found - bailing out')
+    #     return
+    # print('\nLinters:', time.time() - t)
+    #
+    # t = time.time()
+    cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
+    main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
 
 
 if __name__ == '__main__':

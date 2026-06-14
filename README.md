@@ -2849,11 +2849,32 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
 # setup build cache and ignore file while we're at it
 cl_cache = my_proj_cache.FileBuildCache(JUICER.file_cache)
 cl_ignore = my_proj_ignore.FileIgnore.from_file(JUICER.file_ignore)
+dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
 cl_processors = (
     ProcessorGeneric(
         my_asset.Background,
         TaskEncodeBackground,
-        JUICER.dir_out / JUICER.rel_dir_wet,
+        dir_wet,
+    ),
+    ProcessorGeneric(
+        my_asset.Sprite,
+        TaskEncodeSprite,
+        dir_wet,
+    ),
+    ProcessorGeneric(
+        AssetExtBgm,
+        TaskCompressAudio,
+        dir_wet,
+    ),
+    ProcessorGeneric(
+        AssetExtSfx,
+        TaskCompressAudio,
+        dir_wet,
+    ),
+    ProcessorGeneric(
+        AssetExtSfx3,
+        TaskCompressAudio,
+        dir_wet,
     ),
 )
 ```
@@ -2899,10 +2920,12 @@ PROJECT = Path('path/to/the/project')
 print('Syncing project files...')
 
 # processor ignores
-proc_ignore = tuple(
-    p.relative_to(PROJECT)
-    for p in cl_processors.get_ignored_source_dirs(PROJECT)
-)
+proc_ignore: list[str] = []
+for proc in cl_processors:
+    proc_ignore.extend(
+        ignore.relative_to(PROJECT).as_posix()
+        for ignore in proc.get_ignored_source_dirs(PROJECT)
+    )
 
 stat_copied = 0
 stat_skipped = 0
@@ -2927,7 +2950,7 @@ for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
     # check cache
     dest_path = JUICER.dir_out / rel_path
     task_id = f'copy_{rel_posix}'
-    current_hash = my_proj_cache.file_hash(dest_path)
+    current_hash = my_proj_cache.file_hash(src_path)
     if cl_cache.is_fresh(
         task_id=task_id,
         current_hash=current_hash,
@@ -2942,6 +2965,7 @@ for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
     cl_cache.update(task_id, current_hash)
     stat_copied += 1
 
+cl_cache.save()
 print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
 ```
 <!--[[[end]]]-->
