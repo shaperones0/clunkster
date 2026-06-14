@@ -2767,6 +2767,7 @@ def main_juicer2_mp(
         if stat_failed > 0:
             raise RuntimeError('Pipeline halted due to aids')
     # MD: Don't forget to run our old GML generator after doing this step.
+    # MD: Could also run Game Maker's CLI compile with `subprocess.Popen`
     # --- COG_END: MAIN_EX_JUICER2_MP ---
 
 
