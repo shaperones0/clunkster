@@ -2,6 +2,7 @@
 
 import collections
 import collections.abc as col
+import concurrent.futures
 import dataclasses
 import itertools as it
 import json
@@ -12,7 +13,6 @@ import sys
 import time
 import warnings
 from abc import ABC
-from concurrent import futures
 from pathlib import Path
 
 import rustworkx as rx
@@ -689,7 +689,7 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
     worker_count = mp.cpu_count()
     print(f'Initializing executor pool with {worker_count} workers')
 
-    with futures.ProcessPoolExecutor(
+    with concurrent.futures.ProcessPoolExecutor(
         max_workers=worker_count,
         initializer=_worker_init,
         initargs=(list(name2asset.keys()),),
@@ -698,7 +698,7 @@ def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
 
         # feed into mp
         for future in tqdm.tqdm(
-            futures.as_completed(submits),
+            concurrent.futures.as_completed(submits),
             total=len(jobs),
             desc='Scanning',
         ):
@@ -1543,13 +1543,13 @@ def juice_sprite(
     meta = sprite.get_sprite_metadata(project_root)
 
     frames_bgra: list[bytes] = []
-    width, height = -1, -1
+    width, height = 0, 0
 
     for image_index in range(meta.frames):
         img_path = sprite.get_sprite_image(project_root, image_index)
         with Image.open(img_path) as img:
             img = img.convert('RGBA')
-            if width == -1:
+            if width == 0:
                 width, height = img.size
             frames_bgra.append(img.tobytes('raw', 'BGRA'))
 
@@ -2543,9 +2543,79 @@ def main_juicer2_copy(
         cl_cache.update(task_id, current_hash)
         stat_copied += 1
 
-    cl_cache.save()
+    # don't save yet - wait until the next stage
+    # cl_cache.save()
     print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
     # --- COG_END: MAIN_EX_JUICER2_COPY ---
+
+
+def main_juicer2_mp(
+    assets: list[my_asset.Asset],
+    cl_cache: my_proj_cache.FileBuildCache,
+    cl_processors: col.Iterable[my_proj_processor.Processor],
+) -> None:
+    """This is it Luigi."""
+    # --- COG_START: MAIN_EX_JUICER2_MP ---
+    print('Generating tasks...')
+
+    tasks: list[my_proj_task.Task] = []
+    stat_cached = 0
+
+    for proc in cl_processors:
+        # 3rd param is unused doh
+        for task in proc.generate_tasks(assets, PROJECT, JUICER.dir_out):
+            current_hash = task.get_input_hash()
+
+            if cl_cache.is_fresh(
+                task_id=task.task_id,
+                current_hash=current_hash,
+                outputs=task.outputs,
+            ):
+                stat_cached += 1
+            else:
+                tasks.append(task)
+
+    if not tasks:
+        print(f'All assets are up to date! ({stat_cached} cached)')
+    else:
+        print(f'Processing {len(tasks)} assets')
+
+        stat_success = 0
+        stat_failed = 0
+
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # submit to wrapper
+            futures = [
+                executor.submit(my_proj_task.worker_exec_task, task)
+                for task in tasks
+            ]
+
+            future_iter = tqdm.tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc='Juicing assets',
+            )
+
+            for future in future_iter:
+                result = future.result()
+
+                if result.success:
+                    # cache update on success
+                    cl_cache.update(result.task_id, result.new_hash)
+                    stat_success += 1
+                else:
+                    print(
+                        f'\n[FUCK] Task {result.task_id} failed:'
+                        f'\n{result.error}'
+                    )
+                    stat_failed += 1
+
+        cl_cache.save()
+        print(f'Done: {stat_success} succeeded, {stat_failed} failed')
+
+        if stat_failed > 0:
+            raise RuntimeError('Pipeline halted due to aids')
+    # --- COG_END: MAIN_EX_JUICER2_MP ---
 
 
 def _run_tutorials() -> None:
@@ -2629,7 +2699,7 @@ def main() -> None:
     print(flush=True)
 
     t = time.time()
-    # assets = main_ex_aliases()
+    assets = main_ex_aliases()
     print('\nAsset discovery:', time.time() - t)
 
     # time.sleep(0.5)
@@ -2658,6 +2728,7 @@ def main() -> None:
     # t = time.time()
     cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
     main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
+    main_juicer2_mp(assets, cl_cache, cl_processors)
 
 
 if __name__ == '__main__':

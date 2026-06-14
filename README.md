@@ -87,6 +87,7 @@ cog.outl('\n'.join(generate_toc()))
   * [5 - Project Juicer v2](#5---project-juicer-v2)
     * [Example 5.1 - Juicer v2: classes](#example-51---juicer-v2-classes)
     * [Example 5.2 - Juicer v2: copy the project (but smarter)](#example-52---juicer-v2-copy-the-project-but-smarter)
+    * [Example 5.3 - Juicer v2: multiprocessing pipeline](#example-53---juicer-v2-multiprocessing-pipeline)
 * [Rationale](#rationale)
   * [Linters](#linters)
   * [Prerequisites](#prerequisites)
@@ -705,9 +706,9 @@ For this we must set up few additional methods - worker's "init" and
 worker "work".
 
 ```python
+import concurrent.futures
 import dataclasses
 import multiprocessing as mp
-from concurrent import futures
 from pathlib import Path
 
 import tqdm
@@ -802,7 +803,7 @@ dependencies: list[Dependency] = []
 worker_count = mp.cpu_count()
 print(f'Initializing executor pool with {worker_count} workers')
 
-with futures.ProcessPoolExecutor(
+with concurrent.futures.ProcessPoolExecutor(
     max_workers=worker_count,
     initializer=_worker_init,
     initargs=(list(name2asset.keys()),),
@@ -811,7 +812,7 @@ with futures.ProcessPoolExecutor(
 
     # feed into mp
     for future in tqdm.tqdm(
-        futures.as_completed(submits),
+        concurrent.futures.as_completed(submits),
         total=len(jobs),
         desc='Scanning',
     ):
@@ -1916,13 +1917,13 @@ def juice_sprite(
     meta = sprite.get_sprite_metadata(project_root)
 
     frames_bgra: list[bytes] = []
-    width, height = -1, -1
+    width, height = 0, 0
 
     for image_index in range(meta.frames):
         img_path = sprite.get_sprite_image(project_root, image_index)
         with Image.open(img_path) as img:
             img = img.convert('RGBA')
-            if width == -1:
+            if width == 0:
                 width, height = img.size
             frames_bgra.append(img.tobytes('raw', 'BGRA'))
 
@@ -2885,6 +2886,9 @@ We can make a makeshift "copy tasks" by constructing cache entries by hand.
 This does make the first copy a bit slower than our initial version,
 but this time we get to skip over most of the assets on subsequent builds.
 
+This results in around 5-10 seconds on first launch and 1-2 seconds on
+subsequent ones (we still do calculate hashes of every file duh).
+
 ```python
 import shutil
 from pathlib import Path
@@ -2965,8 +2969,108 @@ for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
     cl_cache.update(task_id, current_hash)
     stat_copied += 1
 
-cl_cache.save()
+# don't save yet - wait until the next stage
+# cl_cache.save()
 print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
+```
+### Example 5.3 - Juicer v2: multiprocessing pipeline
+This is it Luigi.
+
+```python
+import concurrent.futures
+from pathlib import Path
+
+import tqdm
+
+from clunkster.asset import Asset
+from clunkster.project import task as my_proj_task
+
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+# see Example 1.1 - Finding assets
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+# see Example 5.1 - Juicer v2: classes
+class TaskAsset: ...
+class TaskEncodeBackground: ...
+class TaskEncodeSprite: ...
+class TaskCompressAudio: ...
+class ProcessorGeneric: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+# see Example 5.1 - Juicer v2: classes
+cl_cache = ...
+cl_ignore = ...
+cl_processors = ...
+
+PROJECT = Path('path/to/the/project')
+
+print('Generating tasks...')
+
+tasks: list[my_proj_task.Task] = []
+stat_cached = 0
+
+for proc in cl_processors:
+    # 3rd param is unused doh
+    for task in proc.generate_tasks(assets, PROJECT, JUICER.dir_out):
+        current_hash = task.get_input_hash()
+
+        if cl_cache.is_fresh(
+            task_id=task.task_id,
+            current_hash=current_hash,
+            outputs=task.outputs,
+        ):
+            stat_cached += 1
+        else:
+            tasks.append(task)
+
+if not tasks:
+    print(f'All assets are up to date! ({stat_cached} cached)')
+else:
+    print(f'Processing {len(tasks)} assets')
+
+    stat_success = 0
+    stat_failed = 0
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # submit to wrapper
+        futures = [
+            executor.submit(my_proj_task.worker_exec_task, task)
+            for task in tasks
+        ]
+
+        future_iter = tqdm.tqdm(
+            concurrent.futures.as_completed(futures),
+            total=len(futures),
+            desc='Juicing assets',
+        )
+
+        for future in future_iter:
+            result = future.result()
+
+            if result.success:
+                # cache update on success
+                cl_cache.update(result.task_id, result.new_hash)
+                stat_success += 1
+            else:
+                print(
+                    f'\n[FUCK] Task {result.task_id} failed:'
+                    f'\n{result.error}'
+                )
+                stat_failed += 1
+
+    cl_cache.save()
+    print(f'Done: {stat_success} succeeded, {stat_failed} failed')
+
+    if stat_failed > 0:
+        raise RuntimeError('Pipeline halted due to aids')
 ```
 <!--[[[end]]]-->
 

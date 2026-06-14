@@ -760,6 +760,24 @@ def main_examples(exs: ExampleManager) -> list[Example]:
             ),
             source_of_stubs=(),
         ),
+        Example(
+            'ex_juicer2_mp',
+            'Project Juicer v2',
+            'Juicer v2: multiprocessing pipeline',
+            content=exs.gen_freeform(
+                func_name='main_juicer2_mp',
+                refs=[
+                    '!CLS_JUICER_CONFIG',
+                    '!CLS_ASSET_EXT',
+                    '!CLS_TASKS',
+                    '!VAR_ASSETS',
+                    '!VARS_JUICER2',
+                    'PROJECT',
+                    'MAIN_EX_JUICER2_MP',
+                ],
+            ),
+            source_of_stubs=(),
+        ),
     ]
 
 

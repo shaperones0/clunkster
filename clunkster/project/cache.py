@@ -49,7 +49,7 @@ class FileBuildCache:
         :param task_id: Task ID.
         :param current_hash: Hash of the task's inputs.
         :param outputs: Paths to task outputs.
-        :return: ``True``, if task must be executed.
+        :return: ``False``, if task must be executed.
         """
         if not all(out.exists() for out in outputs):
             return False

@@ -114,6 +114,9 @@ ignore = [
     'D203',
     # prefer multiline summary being placed on """ line
     'D213',
+
+    # thoumstve dared against luigi
+    'D404'
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
