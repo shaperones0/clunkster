@@ -1677,7 +1677,7 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
                 '-c:a',
                 'libvorbis',
                 '-q:a',
-                '2',
+                '3',
                 str(out_file),
             ],
             check=True,
@@ -2587,6 +2587,67 @@ class TaskFixMaskObjects(TaskAsset[my_asset.Object]):
         obj_fix_mask(self.obj, self.out_file_gml, self.project_root)
 
 
+class TaskFixBgStretchRooms(TaskAsset[my_asset.Room]):
+    """Inject background stretch logic into room's ``code.gml``."""
+
+    def __init__(
+        self,
+        room: my_asset.Room,
+        project_root: Path,
+        dir_project_out: Path,
+        dir_wet_cluster: Path,
+        _: Path,
+    ) -> None:
+        """Initialize room background stretch fixer."""
+        self.room = room
+        self.project_root = project_root
+        self.project_out = dir_project_out
+
+        self.in_file_meta = room.get_room_metadata_file(project_root)
+        self.in_file_gml = room.get_room_gml_file(project_root)
+
+        self.out_file_meta = dir_project_out / self.in_file_meta.relative_to(
+            project_root
+        )
+        self.out_file_gml = dir_project_out / self.in_file_gml.relative_to(
+            project_root
+        )
+
+        # all files and fields are guaranteed to exist
+        meta = room.get_room_metadata(project_root)
+        self.idx_stretch: list[int] = [
+            i for i in range(8) if getattr(meta, f'bg_stretch{i}')
+        ]
+        self.gml_src = self.in_file_gml.read_text(encoding='utf-8')
+
+        super().__init__(
+            task_id=f'rm_fixstretch_{room.name}',
+            inputs=(self.in_file_meta, self.in_file_gml),
+            outputs=(self.out_file_meta, self.out_file_gml),
+        )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.room
+
+    def execute(self) -> None:
+        """Execute task."""
+        code = self.gml_src
+        if self.idx_stretch:
+            lines = [
+                '\n// --- CLUNKSTER BG STRETCH FIX ---',
+                *(
+                    f"""
+if background_width[{i}]>0 && background_height[{i}]>0 {{
+    background_xscale[{i}]=room_width/background_width[{i}]
+    background_yscale[{i}]=room_height/background_height[{i}]
+}}"""
+                    for i in self.idx_stretch
+                ),
+            ]
+            code = '\n'.join(lines) + '\n' + self.gml_src
+        self.out_file_gml.write_text(code, encoding='utf-8')
+
+
 class ProcessorGeneric[TAsset: my_asset.AssetFile](
     my_proj_processor.Processor
 ):
@@ -2641,6 +2702,44 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
                 project_root,
                 dir_out,
                 self.dir_wet / asset.cluster,
+                self.file_dry,
+            )
+
+
+class ProcessorRoomsPatch(my_proj_processor.Processor):
+    """Processes rooms to fix background scaling."""
+
+    def __init__(
+        self,
+        dir_wet: Path,
+        file_dry: Path,
+    ) -> None:
+        """Initialize generic asset processor.
+
+        :param dir_wet: Exported assets directory, like ``data/chunks``.
+        """
+        self.dir_wet = dir_wet
+        self.file_dry = file_dry
+
+    def get_ignored_source_patterns(
+        self, project_root: Path
+    ) -> col.Iterable[str]:
+        """Get ignored patters.
+
+        Don't hijack anything.
+        """
+        return []
+
+    def generate_tasks(
+        self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
+    ) -> col.Iterable[my_proj_task.Task]:
+        """Generate room fix tasks."""
+        for room in filter_type(my_asset.Room, assets):
+            yield TaskFixBgStretchRooms(
+                room,
+                project_root,
+                dir_out,
+                self.dir_wet / room.cluster,
                 self.file_dry,
             )
 
@@ -2710,6 +2809,7 @@ def main_juicer2_cls() -> tuple[
         ProcessorGeneric(AssetExtSfx, TaskCompressAudio, dir_wet, Path()),
         ProcessorGeneric(AssetExtSfx3, TaskCompressAudio, dir_wet, Path()),
         ProcessorGeneric(my_asset.Object, TaskFixMaskObjects, dir_wet, Path()),
+        ProcessorRoomsPatch(dir_wet, Path()),
     )
     # --- COG_END: MAIN_EX_JUICER2_CLS ---
     return cl_cache, cl_ignore, cl_processors

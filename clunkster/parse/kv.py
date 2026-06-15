@@ -11,6 +11,9 @@ def parse_pairs(lines: col.Iterable[str]) -> col.Iterator[tuple[str, str]]:
     :return: Iterator of (key, value) pairs.
     """
     for line in lines:
+        if not line.strip():
+            # skip blank lines
+            continue
         key, value = line.rstrip().split('=', 1)
         yield key, value
 

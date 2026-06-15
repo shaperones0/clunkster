@@ -57,6 +57,252 @@ class ObjectMetadata:
 
 
 @dataclass(frozen=True, slots=True)
+class RoomMetadata:
+    """GameMaker Room's metadata from ``room.txt``."""
+
+    # general
+    caption: str
+    width: int
+    height: int
+    snap_x: int
+    snap_y: int
+    isometric: int
+    roomspeed: int
+    roompersistent: int
+    bg_color: int
+    clear_screen: int
+    clear_view: int
+
+    # bgs
+    bg_visible0: int
+    bg_is_foreground0: int
+    bg_source0: str
+    bg_xoffset0: int
+    bg_yoffset0: int
+    bg_tile_h0: int
+    bg_tile_v0: int
+    bg_hspeed0: int
+    bg_vspeed0: int
+    bg_stretch0: int
+
+    bg_visible1: int
+    bg_is_foreground1: int
+    bg_source1: str
+    bg_xoffset1: int
+    bg_yoffset1: int
+    bg_tile_h1: int
+    bg_tile_v1: int
+    bg_hspeed1: int
+    bg_vspeed1: int
+    bg_stretch1: int
+
+    bg_visible2: int
+    bg_is_foreground2: int
+    bg_source2: str
+    bg_xoffset2: int
+    bg_yoffset2: int
+    bg_tile_h2: int
+    bg_tile_v2: int
+    bg_hspeed2: int
+    bg_vspeed2: int
+    bg_stretch2: int
+
+    bg_visible3: int
+    bg_is_foreground3: int
+    bg_source3: str
+    bg_xoffset3: int
+    bg_yoffset3: int
+    bg_tile_h3: int
+    bg_tile_v3: int
+    bg_hspeed3: int
+    bg_vspeed3: int
+    bg_stretch3: int
+
+    bg_visible4: int
+    bg_is_foreground4: int
+    bg_source4: str
+    bg_xoffset4: int
+    bg_yoffset4: int
+    bg_tile_h4: int
+    bg_tile_v4: int
+    bg_hspeed4: int
+    bg_vspeed4: int
+    bg_stretch4: int
+
+    bg_visible5: int
+    bg_is_foreground5: int
+    bg_source5: str
+    bg_xoffset5: int
+    bg_yoffset5: int
+    bg_tile_h5: int
+    bg_tile_v5: int
+    bg_hspeed5: int
+    bg_vspeed5: int
+    bg_stretch5: int
+
+    bg_visible6: int
+    bg_is_foreground6: int
+    bg_source6: str
+    bg_xoffset6: int
+    bg_yoffset6: int
+    bg_tile_h6: int
+    bg_tile_v6: int
+    bg_hspeed6: int
+    bg_vspeed6: int
+    bg_stretch6: int
+
+    bg_visible7: int
+    bg_is_foreground7: int
+    bg_source7: str
+    bg_xoffset7: int
+    bg_yoffset7: int
+    bg_tile_h7: int
+    bg_tile_v7: int
+    bg_hspeed7: int
+    bg_vspeed7: int
+    bg_stretch7: int
+
+    # views
+    views_enabled: int
+
+    view_visible0: int
+    view_xview0: int
+    view_yview0: int
+    view_wview0: int
+    view_hview0: int
+    view_xport0: int
+    view_yport0: int
+    view_wport0: int
+    view_hport0: int
+    view_fol_hbord0: int
+    view_fol_vbord0: int
+    view_fol_hspeed0: int
+    view_fol_vspeed0: int
+    view_fol_target0: str
+
+    view_visible1: int
+    view_xview1: int
+    view_yview1: int
+    view_wview1: int
+    view_hview1: int
+    view_xport1: int
+    view_yport1: int
+    view_wport1: int
+    view_hport1: int
+    view_fol_hbord1: int
+    view_fol_vbord1: int
+    view_fol_hspeed1: int
+    view_fol_vspeed1: int
+    view_fol_target1: str
+
+    view_visible2: int
+    view_xview2: int
+    view_yview2: int
+    view_wview2: int
+    view_hview2: int
+    view_xport2: int
+    view_yport2: int
+    view_wport2: int
+    view_hport2: int
+    view_fol_hbord2: int
+    view_fol_vbord2: int
+    view_fol_hspeed2: int
+    view_fol_vspeed2: int
+    view_fol_target2: str
+
+    view_visible3: int
+    view_xview3: int
+    view_yview3: int
+    view_wview3: int
+    view_hview3: int
+    view_xport3: int
+    view_yport3: int
+    view_wport3: int
+    view_hport3: int
+    view_fol_hbord3: int
+    view_fol_vbord3: int
+    view_fol_hspeed3: int
+    view_fol_vspeed3: int
+    view_fol_target3: str
+
+    view_visible4: int
+    view_xview4: int
+    view_yview4: int
+    view_wview4: int
+    view_hview4: int
+    view_xport4: int
+    view_yport4: int
+    view_wport4: int
+    view_hport4: int
+    view_fol_hbord4: int
+    view_fol_vbord4: int
+    view_fol_hspeed4: int
+    view_fol_vspeed4: int
+    view_fol_target4: str
+
+    view_visible5: int
+    view_xview5: int
+    view_yview5: int
+    view_wview5: int
+    view_hview5: int
+    view_xport5: int
+    view_yport5: int
+    view_wport5: int
+    view_hport5: int
+    view_fol_hbord5: int
+    view_fol_vbord5: int
+    view_fol_hspeed5: int
+    view_fol_vspeed5: int
+    view_fol_target5: str
+
+    view_visible6: int
+    view_xview6: int
+    view_yview6: int
+    view_wview6: int
+    view_hview6: int
+    view_xport6: int
+    view_yport6: int
+    view_wport6: int
+    view_hport6: int
+    view_fol_hbord6: int
+    view_fol_vbord6: int
+    view_fol_hspeed6: int
+    view_fol_vspeed6: int
+    view_fol_target6: str
+
+    view_visible7: int
+    view_xview7: int
+    view_yview7: int
+    view_wview7: int
+    view_hview7: int
+    view_xport7: int
+    view_yport7: int
+    view_wport7: int
+    view_hport7: int
+    view_fol_hbord7: int
+    view_fol_vbord7: int
+    view_fol_hspeed7: int
+    view_fol_vspeed7: int
+    view_fol_target7: str
+
+    # ide
+    remember: int
+    editor_width: int
+    editor_height: int
+    show_grid: int
+    show_objects: int
+    show_tiles: int
+    show_backgrounds: int
+    show_foregrounds: int
+    show_views: int
+    delete_underlying_objects: int
+    delete_underlying_tiles: int
+    tab: int
+    editor_x: int
+    editor_y: int
+
+
+@dataclass(frozen=True, slots=True)
 class Asset(ABC):
     """Abstract asset."""
 
@@ -506,6 +752,24 @@ class Room(AssetBuiltin):
         dir_room = type(self).type_get_dir(project_root) / self.name
         yield from dir_room.glob('*.txt')
         yield from dir_room.glob('*.gml')
+
+    def get_room_folder(self, project_root: pl.Path) -> pl.Path:
+        """Get room's folder."""
+        return type(self).type_get_dir(project_root) / self.name
+
+    def get_room_metadata_file(self, project_root: pl.Path) -> pl.Path:
+        """Get room's metadata (``.txt``) file."""
+        return self.get_room_folder(project_root) / 'room.txt'
+
+    def get_room_metadata(self, project_root: pl.Path) -> RoomMetadata:
+        """Get room's metadata."""
+        file = self.get_room_metadata_file(project_root)
+        with file.open('r', encoding='utf-8') as f:
+            return my_parse_kv.parse_dataclass(RoomMetadata, f)
+
+    def get_room_gml_file(self, project_root: pl.Path) -> pl.Path:
+        """Get room's gml file."""
+        return self.get_room_folder(project_root) / 'code.gml'
 
 
 @dataclass(frozen=True, slots=True)
