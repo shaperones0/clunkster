@@ -1328,7 +1328,148 @@ def main_juicer_copy(assets: list[Asset]) -> None:
     # --- COG_END: MAIN_EX_JUICER_COPY ---
 
 
-def main_juicer_fix_masks(assets: list[Asset]) -> None:  # noqa: PLR0915
+# --- COG_START: DEF_OBJ_FIX_MASK ---
+def obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
+    """Fix objects masks not updating when replacing sprites."""
+    # exact action blocks, we'll validate against that;
+    #  notice that endings are deliberately LF, that's how .gm82 save
+    #  format works
+
+    target_event = '#define Other_4'  # Room Start
+
+    # "Execute a piece of code"
+    block_603 = (
+        '/*"/*\'/**//* YYD ACTION\n'
+        'lib_id=1\n'
+        'action_id=603\n'
+        'applies_to=self\n'
+        '*/\n'
+    )
+
+    # "Call the parent's event"
+    block_604 = (
+        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+    )
+    injection_code = 'mask_index=mask_index\n'
+
+    # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
+    #  being just children of SpikeUp with no alterations other than
+    #  sprite) should have their code created
+    if not gml_path.exists():
+        gml_path.touch()
+
+    gml_text = gml_path.read_text(encoding='utf-8')
+    # check that the text was properly saved with LFs
+    assert '\r\n' not in gml_text
+
+    # check different cases
+    if target_event in gml_text:
+        # CASE A: Room Start already exists
+
+        # split event at event declaration and its trailing newline
+        parts = gml_text.split(target_event + '\n')
+
+        if len(parts) != 2:  # noqa: PLR2004
+            # handle edge case where the event is at the very end of
+            #  the file with no trailing newline
+            if gml_text.endswith(target_event):
+                parts = gml_text.split(target_event)
+                parts[1] = '\n'
+            else:
+                raise ValueError(
+                    f'Validation Error: Multiple Room Start events or '
+                    f"malformed structure found in '{obj.name}.gml'."
+                )
+
+        event_body = parts[1]
+
+        if event_body.startswith(block_603):
+            # CASE A1: starts with a code block
+            offset = len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(obj.name, '- A1: starts with a code block')
+
+        elif event_body.startswith(block_604 + block_603):
+            # CASE A2: starts with call parent, followed by a code block
+            offset = len(block_604) + len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A2: starts with call parent, followed by a code block',
+            )
+
+        elif event_body.startswith(block_604):
+            # CASE A3: starts with call parent, without any code blocks
+            # append a new code block
+            offset = len(block_604)
+            new_event_body = (
+                event_body[:offset]
+                + block_603
+                + injection_code
+                + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A3: starts with call parent without code block '
+                'afterward???',
+            )
+            warnings.warn(
+                f'Object {obj.name} starts with call parent without '
+                f'code block??? Investigate.',
+                stacklevel=2,
+            )
+        else:
+            # idk
+            raise ValueError(
+                f'Validation Error: YYD ACTION match '
+                f"failed in '{obj.name}.gml'. The block immediately "
+                f"following '{target_event}' does not match YYD ACTION "
+                f'603 or 604 patterns.'
+            )
+
+        # rebuild, maintain LF
+        new_text = parts[0] + target_event + '\n' + new_event_body
+        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+    else:
+        # CASE B: Room Start doesn't exist
+        meta = obj.get_object_metadata(dir_out)
+        # objects with no parent have this string blank
+        has_parent = bool(meta.parent)
+
+        # append the event into the file
+
+        # check newline
+        #  since we could've just created the file, it is allowed
+        #  to be empty
+        if gml_text and not gml_text.endswith('\n'):
+            gml_text += '\n'
+
+        new_block = target_event + '\n'
+        if has_parent:
+            # CASE B1: use the "Call parent event" block
+            new_block += block_604
+            print(
+                obj.name,
+                '- B1: no room start + has parent, must add Call parent event',
+            )
+        else:
+            print(obj.name, '- B2: no room start')
+
+        # add the code block and injection
+        new_block += block_603 + injection_code
+        gml_text += new_block
+
+        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+
+
+# --- COG_END: DEF_OBJ_FIX_MASK ---
+
+
+def main_juicer_fix_masks(assets: list[Asset]) -> None:
     """Before we continue, we must fix one annoying GameMaker bug.
 
     If you replace a sprite via ``sprite_replace_sprite``, it will not update
@@ -1370,145 +1511,12 @@ def main_juicer_fix_masks(assets: list[Asset]) -> None:  # noqa: PLR0915
     """
     # --- COG_START: MAIN_EX_JUICER_FIX_MASKS ---
     print('Injecting collision mask fixes into objects...')
-    target_event = '#define Other_4'
-
-    # exact action blocks, we'll validate against that;
-    #  notice that endings are deliberately LF, that's how .gm82 save
-    #  format works
-
-    # "Execute a piece of code"
-    block_603 = (
-        '/*"/*\'/**//* YYD ACTION\n'
-        'lib_id=1\n'
-        'action_id=603\n'
-        'applies_to=self\n'
-        '*/\n'
-    )
-
-    # "Call the parent's event"
-    block_604 = (
-        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
-    )
-    injection_code = 'mask_index=mask_index\n'
 
     objects = filter_type(my_asset.Object, assets)
     for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
         # use output dir, since that's where we'll be writing
-        gml_path = obj.get_object_gml(JUICER.dir_out)
-
-        # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
-        #  being just children of SpikeUp with no alterations other than
-        #  sprite) should have their code created
-        if not gml_path.exists():
-            gml_path.touch()
-
-        gml_text = gml_path.read_text(encoding='utf-8')
-        # check that the text was properly saved with LFs
-        assert '\r\n' not in gml_text
-
-        # check different cases
-        if target_event in gml_text:
-            # CASE A: Room Start already exists
-
-            # split event at event declaration and its trailing newline
-            parts = gml_text.split(target_event + '\n')
-
-            if len(parts) != 2:  # noqa: PLR2004
-                # handle edge case where the event is at the very end of
-                #  the file with no trailing newline
-                if gml_text.endswith(target_event):
-                    parts = gml_text.split(target_event)
-                    parts[1] = '\n'
-                else:
-                    raise ValueError(
-                        f'Validation Error: Multiple Room Start events or '
-                        f"malformed structure found in '{obj.name}.gml'."
-                    )
-
-            event_body = parts[1]
-
-            if event_body.startswith(block_603):
-                # CASE A1: starts with a code block
-                offset = len(block_603)
-                new_event_body = (
-                    event_body[:offset] + injection_code + event_body[offset:]
-                )
-                print(obj.name, '- A1: starts with a code block')
-
-            elif event_body.startswith(block_604 + block_603):
-                # CASE A2: starts with call parent, followed by a code block
-                offset = len(block_604) + len(block_603)
-                new_event_body = (
-                    event_body[:offset] + injection_code + event_body[offset:]
-                )
-                print(
-                    obj.name,
-                    '- A2: starts with call parent, followed by a code block',
-                )
-
-            elif event_body.startswith(block_604):
-                # CASE A3: starts with call parent, without any code blocks
-                # append a new code block
-                offset = len(block_604)
-                new_event_body = (
-                    event_body[:offset]
-                    + block_603
-                    + injection_code
-                    + event_body[offset:]
-                )
-                print(
-                    obj.name,
-                    '- A3: starts with call parent without code block '
-                    'afterward???',
-                )
-                warnings.warn(
-                    f'Object {obj.name} starts with call parent without '
-                    f'code block??? Investigate.',
-                    stacklevel=2,
-                )
-            else:
-                # idk
-                raise ValueError(
-                    f'Validation Error: YYD ACTION match '
-                    f"failed in '{obj.name}.gml'. The block immediately "
-                    f"following '{target_event}' does not match YYD ACTION "
-                    f'603 or 604 patterns.'
-                )
-
-            # rebuild, maintain LF
-            new_text = parts[0] + target_event + '\n' + new_event_body
-            gml_path.write_text(new_text, encoding='utf-8', newline='\n')
-        else:
-            # CASE B: Room Start doesn't exist
-            meta = obj.get_object_metadata(JUICER.dir_out)
-            # objects with no parent have this string blank
-            has_parent = bool(meta.parent)
-
-            # append the event into the file
-
-            # check newline
-            #  since we could've just created the file, it is allowed
-            #  to be empty
-            if gml_text and not gml_text.endswith('\n'):
-                gml_text += '\n'
-
-            new_block = target_event + '\n'
-            if has_parent:
-                # CASE B1: use the "Call parent event" block
-                new_block += block_604
-                print(
-                    obj.name,
-                    '- B1: no room start + has parent, '
-                    'must add Call parent event',
-                )
-            else:
-                print(obj.name, '- B2: no room start')
-
-            # add the code block and injection
-            new_block += block_603 + injection_code
-            gml_text += new_block
-
-            gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+        gml_path = obj.get_object_gml_file(JUICER.dir_out)
+        obj_fix_mask(obj, gml_path, JUICER.dir_out)
     # --- COG_END: MAIN_EX_JUICER_FIX_MASKS ---
 
 
@@ -2531,6 +2539,49 @@ class TaskCompressAudio(TaskAsset[AssetExtAudio]):
             juice_audio(self.audio, self.file_output)
 
 
+class TaskFixMaskObjects(TaskAsset[my_asset.Object]):
+    """Inject ``mask_index=mask_index`` on objects room start."""
+
+    def __init__(
+        self,
+        obj: my_asset.Object,
+        project_root: Path,
+        dir_project_out: Path,
+        dir_wet_cluster: Path,
+        _: Path,
+    ) -> None:
+        """Mask fixer."""
+        self.obj = obj
+        self.project_root = project_root
+        self.project_out = dir_project_out
+
+        self.in_file_meta = obj.get_object_metadata_file(project_root)
+        self.in_file_gml = obj.get_object_gml_file(project_root)
+
+        self.out_file_meta = dir_project_out / self.in_file_meta.relative_to(
+            self.project_root
+        )
+        self.out_file_gml = dir_project_out / self.in_file_gml.relative_to(
+            self.project_root
+        )
+
+        super().__init__(
+            task_id=f'fixmasks_{obj.name}',
+            inputs=(self.in_file_meta, self.in_file_gml),
+            outputs=(self.out_file_meta, self.out_file_gml),
+        )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.obj
+
+    def execute(self) -> None:
+        """Execute the task."""
+        # inject the code into every object, regardless of common or not
+
+        # feed project root into dir_out because idk that's the source FIXME
+        obj_fix_mask(self.obj, self.out_file_gml, self.project_root)
+
+
 class ProcessorGeneric[TAsset: my_asset.AssetFile](
     my_proj_processor.Processor
 ):
@@ -2653,6 +2704,7 @@ def main_juicer2_cls() -> tuple[
         ),
         ProcessorGeneric(AssetExtSfx, TaskCompressAudio, dir_wet, Path()),
         ProcessorGeneric(AssetExtSfx3, TaskCompressAudio, dir_wet, Path()),
+        ProcessorGeneric(my_asset.Object, TaskFixMaskObjects, dir_wet, Path()),
     )
     # --- COG_END: MAIN_EX_JUICER2_CLS ---
     return cl_cache, cl_ignore, cl_processors

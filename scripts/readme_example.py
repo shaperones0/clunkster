@@ -679,6 +679,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 func_name='main_juicer_fix_masks',
                 refs=[
                     'DEF_TYPE_FILTER',
+                    'DEF_OBJ_FIX_MASK',
                     '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
                     '!VAR_ASSETS',
@@ -686,7 +687,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                     'MAIN_EX_JUICER_FIX_MASKS',
                 ],
             ),
-            source_of_stubs=(),
+            source_of_stubs=('DEF_OBJ_FIX_MASK',),
         ),
         Example(
             'ex_juicer_gen_wet',
@@ -716,6 +717,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 refs=[
                     '!DEF_PTH_GET_WET',
                     '!LINT_RULES',
+                    '!CONTEXT_RULES',
                     '!CLS_JUICER_CONFIG',
                     '!CLS_ASSET_EXT',
                     '!VAR_ASSETS',
@@ -734,6 +736,7 @@ def main_examples(exs: ExampleManager) -> list[Example]:
                 refs=[
                     '!CLS_JUICER_CONFIG',
                     'DEF_TYPE_FILTER',
+                    '!DEF_OBJ_FIX_MASK',
                     '!DEFS_JUICE',
                     '!DEF_PTH_GET_WET',
                     '!CLS_ASSET_EXT',
@@ -841,6 +844,7 @@ def main_manager(
         'DEFS_JUICE',
         gen_stub_func('juice_sprite', 'juice_background', 'juice_audio'),
     )
+    exs.stub_register('DEF_OBJ_FIX_MASK', gen_stub_func('obj_fix_mask'))
 
     # variables
     exs.stub_register('VAR_ASSETS', gen_stub_var('assets: list[Asset]'))

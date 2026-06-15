@@ -1693,47 +1693,28 @@ def filter_type[TFilter](
     """
     return (item for item in items if isinstance(item, f_type))
 
-# see Example 4.1 - Juicer: copy the project into build directory
-class ConfJuicer: ...
-JUICER: ConfJuicer = ...
+def obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
+    """Fix objects masks not updating when replacing sprites."""
+    # exact action blocks, we'll validate against that;
+    #  notice that endings are deliberately LF, that's how .gm82 save
+    #  format works
 
-# see Example 1.1 - Finding assets
-class AssetExtAudio: ...
-class AssetExtBgm: ...
-class AssetExtSfx: ...
-class AssetExtSfx3: ...
+    target_event = '#define Other_4'  # Room Start
 
-# see Example 1.3 - Cluster aliasing
-assets: list[Asset] = ...
+    # "Execute a piece of code"
+    block_603 = (
+        '/*"/*\'/**//* YYD ACTION\n'
+        'lib_id=1\n'
+        'action_id=603\n'
+        'applies_to=self\n'
+        '*/\n'
+    )
 
-PROJECT = Path('path/to/the/project')
-
-print('Injecting collision mask fixes into objects...')
-target_event = '#define Other_4'
-
-# exact action blocks, we'll validate against that;
-#  notice that endings are deliberately LF, that's how .gm82 save
-#  format works
-
-# "Execute a piece of code"
-block_603 = (
-    '/*"/*\'/**//* YYD ACTION\n'
-    'lib_id=1\n'
-    'action_id=603\n'
-    'applies_to=self\n'
-    '*/\n'
-)
-
-# "Call the parent's event"
-block_604 = (
-    '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
-)
-injection_code = 'mask_index=mask_index\n'
-
-objects = filter_type(my_asset.Object, assets)
-for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
-    # use output dir, since that's where we'll be writing
-    gml_path = obj.get_object_gml(JUICER.dir_out)
+    # "Call the parent's event"
+    block_604 = (
+        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+    )
+    injection_code = 'mask_index=mask_index\n'
 
     # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
     #  being just children of SpikeUp with no alterations other than
@@ -1819,7 +1800,7 @@ for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
         gml_path.write_text(new_text, encoding='utf-8', newline='\n')
     else:
         # CASE B: Room Start doesn't exist
-        meta = obj.get_object_metadata(JUICER.dir_out)
+        meta = obj.get_object_metadata(dir_out)
         # objects with no parent have this string blank
         has_parent = bool(meta.parent)
 
@@ -1837,8 +1818,7 @@ for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
             new_block += block_604
             print(
                 obj.name,
-                '- B1: no room start + has parent, '
-                'must add Call parent event',
+                '- B1: no room start + has parent, must add Call parent event',
             )
         else:
             print(obj.name, '- B2: no room start')
@@ -1848,6 +1828,29 @@ for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
         gml_text += new_block
 
         gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+
+# see Example 4.1 - Juicer: copy the project into build directory
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+# see Example 1.1 - Finding assets
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+# see Example 1.3 - Cluster aliasing
+assets: list[Asset] = ...
+
+PROJECT = Path('path/to/the/project')
+
+print('Injecting collision mask fixes into objects...')
+
+objects = filter_type(my_asset.Object, assets)
+for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
+    # use output dir, since that's where we'll be writing
+    gml_path = obj.get_object_gml_file(JUICER.dir_out)
+    obj_fix_mask(obj, gml_path, JUICER.dir_out)
 ```
 ### Example 4.3 - Juicer: generate wet assets
 Copying works, time to extract wet assets.
@@ -2429,6 +2432,9 @@ def pth_get_wet(): ...
 # see Example 2.5 - Lint: cross-cluster references
 LINT_RULES: dict[str, set[str]] = ...
 
+# see Example 2.5 - Lint: cross-cluster references
+CONTEXT_RULES: dict[str, set[str]] = ...
+
 # see Example 4.1 - Juicer: copy the project into build directory
 class ConfJuicer: ...
 JUICER: ConfJuicer = ...
@@ -2752,6 +2758,9 @@ def filter_type[TFilter](
     """
     return (item for item in items if isinstance(item, f_type))
 
+# see Example 4.2 - Juicer: fix object's masks
+def obj_fix_mask(): ...
+
 # see Example 4.3 - Juicer: generate wet assets
 def juice_sprite(): ...
 def juice_background(): ...
@@ -2975,6 +2984,49 @@ class TaskCompressAudio(TaskAsset[AssetExtAudio]):
             juice_audio(self.audio, self.file_output)
 
 
+class TaskFixMaskObjects(TaskAsset[my_asset.Object]):
+    """Inject ``mask_index=mask_index`` on objects room start."""
+
+    def __init__(
+        self,
+        obj: my_asset.Object,
+        project_root: Path,
+        dir_project_out: Path,
+        dir_wet_cluster: Path,
+        _: Path,
+    ) -> None:
+        """Mask fixer."""
+        self.obj = obj
+        self.project_root = project_root
+        self.project_out = dir_project_out
+
+        self.in_file_meta = obj.get_object_metadata_file(project_root)
+        self.in_file_gml = obj.get_object_gml_file(project_root)
+
+        self.out_file_meta = dir_project_out / self.in_file_meta.relative_to(
+            self.project_root
+        )
+        self.out_file_gml = dir_project_out / self.in_file_gml.relative_to(
+            self.project_root
+        )
+
+        super().__init__(
+            task_id=f'fixmasks_{obj.name}',
+            inputs=(self.in_file_meta, self.in_file_gml),
+            outputs=(self.out_file_meta, self.out_file_gml),
+        )
+
+    def _get_asset(self) -> my_asset.AssetFile:
+        return self.obj
+
+    def execute(self) -> None:
+        """Execute the task."""
+        # inject the code into every object, regardless of common or not
+
+        # feed project root into dir_out because idk that's the source FIXME
+        obj_fix_mask(self.obj, self.out_file_gml, self.project_root)
+
+
 class ProcessorGeneric[TAsset: my_asset.AssetFile](
     my_proj_processor.Processor
 ):
@@ -3059,6 +3111,7 @@ cl_processors = (
     ),
     ProcessorGeneric(AssetExtSfx, TaskCompressAudio, dir_wet, Path()),
     ProcessorGeneric(AssetExtSfx3, TaskCompressAudio, dir_wet, Path()),
+    ProcessorGeneric(my_asset.Object, TaskFixMaskObjects, dir_wet, Path()),
 )
 ```
 ### Example 5.2 - Juicer v2: copy the project (but smarter)

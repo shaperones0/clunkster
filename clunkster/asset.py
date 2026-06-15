@@ -445,13 +445,17 @@ class Object(AssetBuiltin):
         yield file_meta
         yield file_gml  # both guaranteed to exist
 
+    def get_object_metadata_file(self, project_root: pl.Path) -> pl.Path:
+        """Get object's metadata (``.txt``) file."""
+        return type(self).type_get_dir(project_root) / f'{self.name}.txt'
+
     def get_object_metadata(self, project_root: pl.Path) -> ObjectMetadata:
         """Get object's metadata."""
-        file = type(self).type_get_dir(project_root) / f'{self.name}.txt'
+        file = self.get_object_metadata_file(project_root)
         with file.open('r', encoding='utf-8') as f:
             return my_parse_kv.parse_dataclass(ObjectMetadata, f)
 
-    def get_object_gml(self, project_root: pl.Path) -> pl.Path:
+    def get_object_gml_file(self, project_root: pl.Path) -> pl.Path:
         """Get object's gml file."""
         return type(self).type_get_dir(project_root) / f'{self.name}.gml'
 
