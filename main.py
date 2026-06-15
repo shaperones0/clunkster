@@ -1650,9 +1650,9 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
                 str(audio.file),
                 '-y',
                 '-c:a',
-                'adpcm_ms',
+                'pcm_s16le',
                 '-ar',
-                '22050',
+                '44100',
                 str(out_file),
             ],
             check=True,
@@ -3120,6 +3120,8 @@ def main() -> None:
         if not ok:
             print('\nLinting errors found - bailing out')
             return
+        print('All ok, exiting regardless :D')
+        return
 
     cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
     main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
