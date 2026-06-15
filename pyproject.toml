@@ -11,7 +11,6 @@ dev = [
     'cogapp>=3.6.0',
     'deptry>=0.25.1',
     "gmcodec",
-    "orjson>=3.11.9",
     "pillow>=12.2.0",
     "pyahocorasick>=2.3.1",
     'pytest>=9.0.3',

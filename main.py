@@ -1667,6 +1667,11 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
                 '-i',
                 str(audio.file),
                 '-y',
+                # kill anything that isn't first audio stream from input 0
+                '-map',
+                '0:a:0',
+                # kill any cover art just in case
+                '-vn',
                 '-map_metadata',
                 '-1',
                 '-c:a',
