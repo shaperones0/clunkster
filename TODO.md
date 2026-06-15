@@ -1,3 +1,4 @@
+- fix not including metadata in the input files of tasks
 - remove the Process system (it sucsk)
 - replace with a "stage" system
     - tasks can be assigned a build stage name
