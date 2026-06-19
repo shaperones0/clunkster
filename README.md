@@ -34,7 +34,7 @@ Lightly destructive tools:
 
 Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
+- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
 
 """)
 ]]]-->
@@ -52,7 +52,7 @@ Lightly destructive tools:
 
 Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- (TODO) Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
+- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
 
 
 <!--[[[end]]]-->
