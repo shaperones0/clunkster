@@ -36,9 +36,8 @@ from PIL import Image
 
 from clunkster import asset as my_asset, lint as my_lint
 from clunkster.text import location as my_location, read as my_read
-from clunkster.analyze import scan_dep as my_analyze_scan_dep
+from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
-from clunkster.text.location import Location
 from clunkster.parse import tree as my_parse_tree
 from clunkster.project import cache as my_proj_cache
 from clunkster.project import ignore as my_proj_ignore
@@ -228,20 +227,21 @@ ALIAS: dict[str, list[str]] = {
     ],
     # ...
 }
+ALIAS_INV: dict[str, str]
 
 
-def alias_invert() -> None:
-    global ALIAS_INV
-    inv: dict[str, str] = {}
+def global_set_alias(alias: dict[str, list[str]]) -> None:
+    global ALIAS, ALIAS_INV
+    ALIAS = alias
+
+    ALIAS_INV = {}
     for name, clusters in ALIAS.items():
         for cluster in clusters:
-            if cluster in inv:
+            if cluster in ALIAS_INV:
                 raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
-            inv[cluster] = name
-    ALIAS_INV = inv
+            ALIAS_INV[cluster] = name
 
 
-ALIAS_INV: dict[str, str]
 # --- COG_END: ALIAS ---
 
 # --- COG_START: LINT_RULES_EXPLAIN ---
@@ -291,7 +291,9 @@ PROJECT = Path('path/to/the/project')
 LINT: my_lint.LinterSession
 
 
-def set_project(project_root: Path) -> None:
+def global_set_project(project_root: Path) -> None:
+    """Convenience function for initializing the project."""
+
     global PROJECT, LINT
     PROJECT = project_root
     my_read.reg_root(PROJECT)
@@ -396,7 +398,7 @@ class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViol
 
     @override
     @property
-    def location(self) -> Location:
+    def location(self) -> my_location.Location:
         return self.loc
 
     @override
@@ -643,8 +645,8 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     ):
         text = my_read.read(file_path)
         line_map = my_read.line_map(file_path)
-        matches: list[my_analyze_scan_dep.DependencyMatch] = list(
-            my_analyze_scan_dep.scan(
+        matches: list[my_scan_dep.DependencyMatch] = list(
+            my_scan_dep.scan(
                 text,
                 automaton.iter(text),
             )
@@ -769,7 +771,7 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
 
     @override
     @property
-    def location(self) -> Location:
+    def location(self) -> my_location.Location:
         return self._dependency.location
 
     @override
@@ -856,6 +858,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
         if target_cluster not in allowed_targets:
             LINT.push(LintCrossref(dep))
 
+    # you can turn on verbose=True
     violations_cnt = LINT.consume(LintCrossref)
     if violations_cnt:
         print(f"\nFound {violations_cnt} violations.")
@@ -1109,7 +1112,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                 for err in errors:
                     target_errors.setdefault(err.target_name, []).append(err)
                 for target, errors in sorted(target_errors.items()):
-                    lines.append(f'  [{errors[0].target_cluster}] {target}')
+                    lines.append(f'  {target} [{errors[0].target_cluster}]')
                     for err in errors:
                         lines.append(f'    {err.trace}')
 
@@ -3032,7 +3035,7 @@ def _run_tutorials() -> None:
     main_ex_start()
     main_ex_aliases()
 
-    assets = stage_discover_assets()
+    assets = main_ex_aliases()
     main_ex_scan_sync(assets)
 
 
@@ -3050,7 +3053,7 @@ def test_tutorials() -> None:
 
 
 def _load_private(config_dir: Path) -> None:
-    global PROJECT, ALIAS, LINT_RULES, CONTEXT_RULES, JUICER
+    global LINT_RULES, CONTEXT_RULES, JUICER
 
     _file_private_config = config_dir / 'config.json'
     if not _file_private_config.exists():
@@ -3060,7 +3063,10 @@ def _load_private(config_dir: Path) -> None:
 
     _config = json.loads(_file_private_config.read_text())
 
-    set_project(config_dir.parent / 'source')
+    # PROJECT
+    global_set_project(config_dir.parent / 'source')
+
+    # JUICER
     JUICER = ConfJuicer(
         is_prod=False,
         dir_out=config_dir.parent / '_build',
@@ -3071,10 +3077,11 @@ def _load_private(config_dir: Path) -> None:
         fname_gm82=_config['fname_gm82'],
     )
 
+    # ALIAS
     _file_private_alias = config_dir / 'alias.json'
-    ALIAS = json.loads(_file_private_alias.read_text(encoding='utf-8'))
-    alias_invert()
+    global_set_alias(json.loads(_file_private_alias.read_text(encoding='utf-8')))
 
+    # LINT_RULES
     _file_private_lint_rules = config_dir / 'lint_rules.json'
     rules = json.loads(_file_private_lint_rules.read_text(encoding='utf-8'))
     LINT_RULES = {
@@ -3082,6 +3089,7 @@ def _load_private(config_dir: Path) -> None:
         for cluster, allowed_clusters in rules.items()
     }
 
+    # CONTEXT RULES
     _file_private_context_rules = config_dir / 'context_rules.json'
     rules = json.loads(_file_private_context_rules.read_text(encoding='utf-8'))
     CONTEXT_RULES = {

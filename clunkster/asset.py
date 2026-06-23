@@ -10,6 +10,7 @@ from typing import Self, override
 from clunkster.parse import index as my_parse_index
 from clunkster.parse import kv as my_parse_kv
 from clunkster.parse import tree as my_parse_tree
+from clunkster.text import read as my_read
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +307,9 @@ class RoomMetadata:
 class Asset(ABC):
     """Abstract asset."""
 
-    # name is the identifier by which the asset is referenced in code
+    # name is the identifier by which the asset is referenced in GML code;
+    #  it is also used as a primary key of the asset, so unique assets
+    #  must have unique names
     name: str
 
     @classmethod
@@ -385,7 +388,8 @@ class AssetBuiltin(AssetHasPath, AssetHasDir, ABC):
     @override
     @classmethod
     def type_discover_all(cls, project_root: pl.Path) -> col.Iterator[Self]:
-        tree_lines = cls.type_get_tree_file(project_root).read_text(encoding='utf-8').splitlines()
+        tree_file = cls.type_get_tree_file(project_root)
+        tree_lines = my_read.lines(tree_file)
         return (
             cls(
                 name=asset_name,
@@ -397,7 +401,9 @@ class AssetBuiltin(AssetHasPath, AssetHasDir, ABC):
     @override
     @classmethod
     def type_discover_names(cls, project_root: pl.Path) -> col.Iterator[str]:
-        return my_parse_index.parse_skimmed(cls.type_get_index_file(project_root).read_text(encoding='utf-8').splitlines())
+        index_file = cls.type_get_index_file(project_root)
+        index_lines = my_read.lines(index_file)
+        return my_parse_index.parse_skimmed(index_lines)
 
 
 @dataclass(frozen=True, slots=True)

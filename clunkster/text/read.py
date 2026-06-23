@@ -9,6 +9,7 @@ from clunkster.text.line import LineMap
 READ_ONLY_ROOTS: list[Path] = []
 CACHE_TXT: dict[Path, str] = {}
 CACHE_MAPS: dict[Path, LineMap] = {}
+CACHE_LINES: dict[Path, tuple[str, ...]] = {}
 
 
 def reg_root(root_path: Path) -> None:
@@ -48,9 +49,9 @@ def line_map(path: Path, *, must_readonly: bool = True) -> LineMap:
     return lm
 
 
-def lines(path: Path, *, must_readonly: bool = True) -> Iterator[str]:
-    txt = read(path, must_readonly=must_readonly)
-    lm = line_map(path, must_readonly=must_readonly)
-    for l_start, l_end in pairwise(chain(lm.line_starts, (len(txt),))):
-        line = txt[l_start:l_end]
-        yield line.rstrip("\r\n")
+def lines(path: Path, *, must_readonly: bool = True) -> tuple[str, ...]:
+    if path in CACHE_LINES:
+        return CACHE_LINES[path]
+    ls = tuple(read(path, must_readonly=must_readonly).splitlines())
+    CACHE_LINES[path] = ls
+    return ls
