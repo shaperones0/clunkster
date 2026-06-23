@@ -3,7 +3,6 @@
 import collections.abc as col
 from dataclasses import dataclass
 
-import clunkster.analyze.location as my_analyze_location
 import clunkster.parse.gml as my_parse_gml
 
 
@@ -11,8 +10,8 @@ import clunkster.parse.gml as my_parse_gml
 class DependencyMatch:
     """Detected dependency."""
 
-    location: my_analyze_location.Location
-    target_asset: str
+    idx: int
+    target: str
     contexts: tuple[str, ...]
 
 
@@ -33,7 +32,6 @@ def scan(
         return
 
     gml_index = my_parse_gml.GmlIndex.from_text(text)
-    gml_line_map = my_analyze_location.SourceLineMap.from_text(text)
 
     for end_idx, target_asset in search_iter:
         start_idx = end_idx - len(target_asset) + 1
@@ -65,14 +63,9 @@ def scan(
             continue
 
         contexts = gml_index.get_contexts_at(start_idx)
-        line, column = gml_line_map.get_line_col(start_idx)
 
         yield DependencyMatch(
-            location=my_analyze_location.Location(
-                loc_line=line,
-                loc_column=column,
-                loc_index=start_idx,
-            ),
-            target_asset=target_asset,
+            idx=start_idx,
+            target=target_asset,
             contexts=contexts,
         )

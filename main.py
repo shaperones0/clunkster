@@ -7,7 +7,6 @@ import dataclasses
 import fnmatch
 import itertools as it
 import json
-import multiprocessing as mp
 import os
 import re
 import shutil
@@ -16,6 +15,7 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import override
 
 import rustworkx as rx
 import tqdm
@@ -34,10 +34,11 @@ from gmcodec import (
 )
 from PIL import Image
 
-from clunkster import asset as my_asset
-from clunkster.analyze import location as my_analyze_location
+from clunkster import asset as my_asset, lint as my_lint
+from clunkster.text import location as my_location, read as my_read
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
+from clunkster.text.location import Location
 from clunkster.parse import tree as my_parse_tree
 from clunkster.project import cache as my_proj_cache
 from clunkster.project import ignore as my_proj_ignore
@@ -60,24 +61,32 @@ TER_RESET = '\033[0m'
 
 # --- COG_START: CLS_ASSET_EXT ---
 @dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtAudio(my_asset.AssetExt, ABC):
+class AssetExtAudio(my_asset.AssetSingleFile, ABC):
     """Generic external audio asset."""
+
+    @override
+    def get_ref(self) -> str:
+        # wrap reference in quotes
+        return f"\"{self.name}\""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtBgm(AssetExtAudio):
     """External background music asset."""
 
+    @override
     @classmethod
-    def _type_name(cls) -> str:
+    def type_name(cls) -> str:
         return 'DATA_BGM'
 
+    @override
     @classmethod
-    def _type_globs(cls) -> tuple[str, ...]:
+    def type_globs(cls) -> tuple[str, ...]:
         return '*.ogg', '*.mp3', '*.wav'
 
+    @override
     @classmethod
-    def _type_get_dir_rel(cls) -> Path:
+    def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'music'
 
 
@@ -85,16 +94,19 @@ class AssetExtBgm(AssetExtAudio):
 class AssetExtSfx(AssetExtAudio):
     """External sound effect asset (kind 0)."""
 
+    @override
     @classmethod
-    def _type_globs(cls) -> col.Iterable[str]:
-        return ('*.wav',)
-
-    @classmethod
-    def _type_name(cls) -> str:
+    def type_name(cls) -> str:
         return 'DATA_SFX'
 
+    @override
     @classmethod
-    def _type_get_dir_rel(cls) -> Path:
+    def type_globs(cls) -> col.Iterable[str]:
+        return ('*.wav',)
+
+    @override
+    @classmethod
+    def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
 
 
@@ -102,17 +114,64 @@ class AssetExtSfx(AssetExtAudio):
 class AssetExtSfx3(AssetExtAudio):
     """External sound effect asset (kind 3)."""
 
+    @override
     @classmethod
-    def _type_globs(cls) -> col.Iterable[str]:
-        return '*.ogg', '*.mp3'
-
-    @classmethod
-    def _type_name(cls) -> str:
+    def type_name(cls) -> str:
         return 'DATA_SFX3'
 
+    @override
     @classmethod
-    def _type_get_dir_rel(cls) -> Path:
+    def type_globs(cls) -> col.Iterable[str]:
+        return '*.ogg', '*.mp3'
+
+    @override
+    @classmethod
+    def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
+
+
+def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
+    if isinstance(asset, my_asset.Object):
+        yield asset.get_object_metadata_file(project_root)
+        yield asset.get_object_gml_file(project_root)
+    elif isinstance(asset, my_asset.Room):
+        # easier to rglob
+        dir_room = asset.get_room_folder(project_root)
+        yield from dir_room.rglob('*.txt')
+        yield from dir_room.rglob('*.gml')
+    elif isinstance(asset, my_asset.Script):
+        yield asset.get_script_gml_file(project_root)
+    # add finders for new asset types
+
+def asset_str_linter(asset: Asset) -> str:
+    """Descriptive asset repr to be used in linters."""
+    if isinstance(asset, my_asset.AssetHasPath):
+        return (
+            f'[{type(asset).type_name():^10}]: '
+            f'{"/".join(asset.tree_path)}'
+            f'/{asset.name}'
+        )
+
+    return (
+        f'[{type(asset).type_name():^10}]: '
+        f'{asset.name}'
+    )
+
+def asset_sort_key(asset: Asset) -> tuple[str, ...]:
+    if isinstance(asset, my_asset.AssetHasPath):
+        return type(asset).type_name(), '/'.join(asset.tree_path), asset.name
+
+    return type(asset).type_name(), asset.name
+
+
+def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
+    return asset.tree_path[0]
+
+
+def asset_cluster(asset: my_asset.AssetHasPath) -> str:
+    cluster = asset_cluster_raw(asset)
+    alias = ALIAS_INV.get(cluster)
+    return cluster if alias is None else alias
 
 
 # --- COG_END: CLS_ASSET_EXT ---
@@ -131,7 +190,7 @@ def filter_type[TFilter](
 
 # --- COG_END: DEF_TYPE_FILTER ---
 # --- COG_START: CLUSTERABLE_BUILTINS ---
-CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
+CLUSTERABLE_BUILTINS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
     my_asset.Background,
     my_asset.Sound,
@@ -143,7 +202,7 @@ CLUSTERABLE_BUILTINS: tuple[type[my_asset.Asset], ...] = (
 )
 # --- COG_END: CLUSTERABLE_BUILTINS ---
 # --- COG_START: CLUSTERABLE_ASSETS ---
-CLUSTERABLE_ASSETS: tuple[type[my_asset.Asset], ...] = (
+CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     *CLUSTERABLE_BUILTINS,
     AssetExtBgm,
     AssetExtSfx,
@@ -172,6 +231,19 @@ ALIAS: dict[str, list[str]] = {
     ],
     # ...
 }
+
+
+def alias_invert() -> dict[str, str]:
+    inv: dict[str, str] = {}
+    for name, clusters in ALIAS.items():
+        for cluster in clusters:
+            if cluster in inv:
+                raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
+            inv[cluster] = name
+    return inv
+
+
+ALIAS_INV = alias_invert()
 # --- COG_END: ALIAS ---
 
 # --- COG_START: LINT_RULES_EXPLAIN ---
@@ -218,30 +290,9 @@ EXTRA_ROOTS: set[str] = {
 
 # --- COG_START: PROJECT ---
 PROJECT = Path('path/to/the/project')
+my_read.reg_root(PROJECT)
+LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
 # --- COG_END: PROJECT ---
-
-
-# --- COG_START: CLS_SCAN_JOB ---
-@dataclasses.dataclass(frozen=True, slots=True)
-class ScanJob:
-    """A lightweight payload sent over IPC to a worker process.
-
-    Uses frozen and slots to speed up transfer across processes.
-    """
-
-    asset_name: str
-    file_path: Path
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class ScanResult:
-    """Result of a scan."""
-
-    matches: list[my_analyze_scan_dep.DependencyMatch]
-    job: ScanJob
-
-
-# --- COG_END: CLS_SCAN_JOB ---
 
 
 # --- COG_START: CLS_DEPENDENCY ---
@@ -249,7 +300,7 @@ class ScanResult:
 class Dependency:
     """Full dependency data to be used in graph building."""
 
-    location: my_analyze_location.BoundLocation
+    location: my_location.Location
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
@@ -307,53 +358,11 @@ JUICER = ConfJuicer(
 # --- COG_END: CLS_JUICER_CONFIG ---
 
 
-# --- COG_START: REG_WORKERS_EXPLAIN ---
-# we can't send the compiled Aho-Corasick automaton across process boundaries
-#  safely; instead, we use a global variable inside the worker process and
-#  initialize it once when the process boots up
-# --- COG_END: REG_WORKERS_EXPLAIN ---
-# --- COG_START: REG_WORKERS ---
-_WORKER_AUTOMATON: Automaton | None = None
-
-
-def _worker_init(asset_names: list[str]) -> None:
-    """Initialize a worker process with its own local Aho-Corasick trie."""
-    global _WORKER_AUTOMATON
-    _WORKER_AUTOMATON = Automaton()
-    for name in asset_names:
-        _WORKER_AUTOMATON.add_word(name, name)
-    _WORKER_AUTOMATON.make_automaton()
-
-
-def _worker_scan(job: ScanJob) -> ScanResult:
-    """Process worker's job."""
-    assert _WORKER_AUTOMATON is not None
-
-    text = job.file_path.read_text(encoding='utf-8')
-
-    return ScanResult(
-        matches=list(
-            my_analyze_scan_dep.scan(
-                text,
-                _WORKER_AUTOMATON.iter(text),
-            )
-        ),
-        job=job,
-    )
-
-
-# --- COG_END: REG_WORKERS ---
-
-
 def main_ex_start() -> None:
     """Let's start with some simple scanning.
 
-    We want to check that assets get detected correctly.
-    Logic in provided ``clunkster.asset`` module already handles most of
-    the discovery of both builtin and external assets, as well as automatic
-    cluster assignment. However, it's likely that you'll want assets from
-    folders ``sprStageA`` and ``bgStageA`` to end up in a unified cluster
-    ``StageA``. This will be done a bit later.
+    We want to check that assets get detected correctly. We don't really do
+    clusters yet - that will be handled a bit later down the line.
     """
     # --- COG_START: MAIN_EX_START ---
 
@@ -364,11 +373,48 @@ def main_ex_start() -> None:
         if not asset_type.type_is_used(PROJECT):
             continue
 
-        assets.extend(asset_type.type_iter(PROJECT))
+        assets.extend(asset_type.type_discover_all(PROJECT))
 
     # you should investigate the resulting array for inconsistencies
     print(f'Discovered {len(assets)} total assets.')
     # --- COG_END: MAIN_EX_START ---
+
+
+class LintTreeDuplicateFolder(my_lint.LinterViolationBound):
+
+    rule = 'T100'
+    severity = my_lint.Severity.ERROR
+
+    def __init__(self, *, node: my_parse_tree.TreeNode, location: my_location.Location):
+        self.tree_node = node
+        self.loc = location
+        super().__init__()
+
+    @override
+    @property
+    def location(self) -> Location:
+        return self.loc
+
+    @override
+    @property
+    def message(self) -> str:
+        thing = "Folder" if self.tree_node.is_folder else "Asset???"
+        return f'Duplicate {thing}: \'{self.tree_node.name}\''
+
+
+class LintTreeDuplicateAsset(my_lint.LinterViolation):
+
+    rule = 'T101'
+    severity = my_lint.Severity.ERROR
+
+    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+        super().__init__()
+        self.dupes = dupes
+        self.message_pref = message_pref
+
+    @property
+    def message(self) -> str:
+        return f"{self.message_pref}: {' '.join(self.dupes)}"
 
 
 def main_ex_lint_tree() -> None:
@@ -380,16 +426,17 @@ def main_ex_lint_tree() -> None:
     Technically, before doing that you should also check that there are also
     no duplicate asset names via broom icon on IDE toolbar.
 
-    This code is quite large, however, most of it won't be relevant in later
-    steps.
+    Since any inconsistency will cause big issues in the pipeline, every
+    violation will be raised as an error and halt the pipline.
     """
 
     # --- COG_START: MAIN_EX_LINT_TREE ---
-    def lint_tree(tree_lines: col.Iterable[str]) -> None:
+    def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
+        tree_file = asset_cls.type_get_tree_file(PROJECT)
+        line_map = my_read.line_map(tree_file)
         seen_children: dict[str, set[str]] = {}
-        total_duplicates = 0
 
-        for node in my_parse_tree.nodes(tree_lines):
+        for node in my_parse_tree.nodes(my_read.lines(tree_file)):
             # format the tuple into path string (e.g., "/Player/SkinA")
             path_str = '/' + '/'.join(node.parent_path)
 
@@ -397,11 +444,17 @@ def main_ex_lint_tree() -> None:
                 seen_children[path_str] = set()
 
             if node.name in seen_children[path_str]:
-                print(
-                    f'Duplicate {"Folder" if node.is_folder else "Asset???"}: '
-                    f"'{node.name}' in {path_str} (Line {node.line_num})"
-                )
-                total_duplicates += 1
+                loc_line = node.line_num
+                loc_column = node.depth     # uses tab characters
+                LINT.push(LintTreeDuplicateFolder(
+                    node=node,
+                    location=my_location.Location(
+                        file=tree_file,
+                        loc_line=loc_line,
+                        loc_column=loc_column,
+                        loc_index=line_map.get_abs_index(loc_line, loc_column),
+                    )
+                ))
             else:
                 seen_children[path_str].add(node.name)
 
@@ -413,7 +466,7 @@ def main_ex_lint_tree() -> None:
             continue
 
         # populate namespace
-        assets_from_index = list(asset_type.type_iter_names(PROJECT))
+        assets_from_index = list(asset_type.type_discover_names(PROJECT))
         assets_set = set(assets_from_index)
         if len(assets_from_index) != len(assets_set):
             dupes = [
@@ -423,145 +476,128 @@ def main_ex_lint_tree() -> None:
                 ).items()
                 if count > 1
             ]
-            raise ValueError(
-                f'Duplicate assets in one type: {" ".join(dupes)}'
-            )
+            LINT.push(LintTreeDuplicateAsset(
+                dupes=dupes,
+                message_pref='Duplicate assets in one type'
+            ))
         inters = asset_names.intersection(assets_set)
         if inters:
-            raise ValueError(
-                f'Duplicate assets across multiple types: {" ".join(inters)}'
-            )
+            LINT.push(LintTreeDuplicateAsset(
+                dupes=inters,
+                message_pref='Duplicate assets across multiple types'
+            ))
         asset_names.update(assets_set)
+
+        # collect errors before parsing tree.yyd
+        LINT.consume()
 
         # check tree.yyd for builtin assets
         if not issubclass(asset_type, my_asset.AssetBuiltin):
             continue
 
         # get assets from index, validate uniqueness
+        asset_lint_tree(asset_type)
 
-        tree_file = asset_type.type_file_tree(PROJECT)
-        print(f'Checking {tree_file} ...')
-        lint_tree(tree_file.read_text(encoding='utf-8').splitlines())
+    # collect all errors
+    LINT.consume()
+
     # MD: If you got no duplicates messages in the output then you're all good.
     # --- COG_END: MAIN_EX_LINT_TREE ---
 
 
-def stage_discover_assets() -> list[Asset]:
-    """Asset discovery pipeline stage.
+class LintAliasMismatch(my_lint.LinterViolation):
 
-    Removed various outputs and other useless shims.
+    rule = 'A100'
+    severity = my_lint.Severity.WARNING
 
-    :return: List of found assets.
-    """
-    assets: list[Asset] = []
+    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+        super().__init__()
+        self.dupes = dupes
+        self.message_pref = message_pref
 
-    # --- COG_START: MAIN_EX_ALIAS_GIST_INVERT ---
-    # invert ALIAS
-    cluster_to_name: dict[str, str] = {}
-    for name, clusters in ALIAS.items():
-        for cluster in clusters:
-            if cluster in cluster_to_name:
-                raise ValueError('Invalid ALIAS (duplicate aliases)')
-            cluster_to_name[cluster] = name
-    # --- COG_END: MAIN_EX_ALIAS_GIST_INVERT ---
-
-    for asset_type in CLUSTERABLE_ASSETS:
-        if not asset_type.type_is_used(PROJECT):
-            continue
-
-        for asset in asset_type.type_iter(PROJECT):
-            # --- COG_START: MAIN_EX_ALIAS_GIST_ALIAS ---
-            # MD: Then we apply aliasing in the asset iteration loop.
-            alias = cluster_to_name.get(asset.cluster)
-            if alias is not None:
-                asset = dataclasses.replace(asset, cluster=alias)
-            # --- COG_END: MAIN_EX_ALIAS_GIST_ALIAS ---
-
-            assets.append(asset)
-    return assets
+    @property
+    def message(self) -> str:
+        return f"{self.message_pref}: {' '.join(self.dupes)}"
 
 
 def main_ex_aliases() -> list[Asset]:
-    """Manually fix inconsistencies in cluster map.
+    """Generate clusters and fix inconsistencies in cluster map.
 
-    After we did initial scan, you may encounter inconsistencies like different
-    clusters ``"StageA"`` and ``"stage_a"`` (project didn't follow strict
-    naming), as well as a bunch of things that should belong to Common cluster
+    We will autogenerate our clusters by their top level folder name. After
+    doing that, you may encounter things like different clusters ``"StageA"``
+    and ``"stage_a"`` (project didn't follow strict naming), as well as a
+    bunch of things that should belong to Common cluster
     (Backgrounds, Game, etc.).
 
-    Which is easily fixed by a simple alias system for clusters.
+    Which is easily fixed by a simple alias system for the clusters.
     """
     # --- COG_START: MAIN_EX_ALIASES ---
     assets: list[Asset] = []
 
-    # invert ALIAS
-    cluster_to_name: dict[str, str] = {}
-    existing_aliases: set[str] = set()
+    # ALIAS linter: find existing names in ALIAS
+    lint_existing_aliases: set[str] = set()
     for name, clusters in ALIAS.items():
         for cluster in clusters:
-            if cluster in cluster_to_name:
-                raise ValueError(
-                    f'Invalid ALIAS (duplicate aliases {cluster})'
-                )
-            cluster_to_name[cluster] = name
-            existing_aliases.add(cluster)
-            existing_aliases.add(name)
+            lint_existing_aliases.add(cluster)
+            lint_existing_aliases.add(name)
 
-    cluster_map: dict[str, list[str]] = {}
-    asset_to_cluster: dict[type[Asset], list[str]] = {}
-    used_aliases: set[str] = set()
-    asset_name_set: set[str] = set()  # clean asset name issues
+    # this will help us generate the table below
+    table_type_2_clusters: dict[type[Asset], list[str]] = {}
+
+    # ALIAS linter: find actually used names in ALIAS
+    lint_used_aliases: set[str] = set()
     for asset_type in CLUSTERABLE_ASSETS:
         if not asset_type.type_is_used(PROJECT):
             continue
 
         cluster_set: set[str] = set()
-        for asset in asset_type.type_iter(PROJECT):
-            alias = cluster_to_name.get(asset.cluster)
-            used_aliases.add(asset.cluster)
-            if alias is not None:
-                asset = dataclasses.replace(asset, cluster=alias)
-                used_aliases.add(alias)
+        for asset in asset_type.type_discover_all(PROJECT):
+            # add both generated cluster and its alias
+            cluster = asset_cluster(asset)
+            lint_used_aliases.add(asset_cluster_raw(asset))
+            lint_used_aliases.add(cluster)
 
-            cluster_set.add(asset.cluster)
-            cluster_map.setdefault(asset.cluster, []).append(asset.name)
-
-            if asset.name in asset_name_set:
-                raise ValueError(f'Duplicate asset name {asset.name}')
-            asset_name_set.add(asset.name)
+            cluster_set.add(cluster)
 
             assets.append(asset)
 
-        asset_to_cluster[asset_type] = list(cluster_set)
+        table_type_2_clusters[asset_type] = list(cluster_set)
 
+    # generate the table
     clusters_all = sorted(
-        {name for clusters in asset_to_cluster.values() for name in clusters}
+        {name for clusters in table_type_2_clusters.values() for name in clusters}
     )
     print('All clusters:', *clusters_all)
-    for asset_type, clusters in asset_to_cluster.items():
+    for asset_type, clusters in table_type_2_clusters.items():
         cluster_set = set(clusters)
         row = [
             clm if clm in cluster_set else ' ' * len(clm)
             for clm in clusters_all
         ]
-        print(f'{asset_type.type_to_str_linter()}:', '|'.join(row))
+        print(f'[{asset_type.type_name()}]:', '|'.join(row))
 
-    unused_aliases = existing_aliases - used_aliases
-    extra_aliases = used_aliases - existing_aliases
-    if unused_aliases:
-        warnings.warn(
-            f'Unused aliases: {" ".join(unused_aliases)}', stacklevel=2
-        )
-    if extra_aliases:
-        warnings.warn(
-            f'Extra aliases: {" ".join(extra_aliases)}', stacklevel=2
-        )
+    # lint
+    lint_unused_aliases = lint_existing_aliases - lint_used_aliases
+    lint_extra_aliases = lint_used_aliases - lint_existing_aliases
+    if lint_unused_aliases:
+        LINT.push(LintAliasMismatch(
+            dupes=lint_unused_aliases,
+            message_pref='Unused aliases'
+        ))
+    if lint_extra_aliases:
+        # after the initial project setup, I'd upgrade this to raise
+        LINT.push(LintAliasMismatch(
+            dupes=lint_extra_aliases,
+            message_pref='Extra aliases'
+        ))
+    LINT.consume()
+    LINT.assert_empty()
     # MD: Keep using the table thing until all aliases are gone.
     # --- COG_END: MAIN_EX_ALIASES ---
     return assets
 
 
-def main_ex_scan_sync(assets: list[Asset]) -> None:
+def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     """Simple scanner.
 
     Before running dependency builder we need to set up scanning
@@ -578,53 +614,10 @@ def main_ex_scan_sync(assets: list[Asset]) -> None:
 
     Also, for pure data registry scripts (like ``sound_balance``), which,
     technically reference every asset, but don't instantiate them,
-    we added a special directive: ``//!clunkster: ignore``. Add it any
+    we added a special directive: ``//!clunkster: ignore``. Add it in any
     GML scripts that should be skipped.
-
-    This is a simple synchronous code, but in real projects scanning
-    might take up 5-10 seconds.
-
-    Multiprocessing version is available in later examples.
     """
     # --- COG_START: MAIN_EX_SCAN_SYNC ---
-    automaton = Automaton()
-    for asset in assets:
-        automaton.add_word(asset.name, asset.name)
-    automaton.make_automaton()
-
-    total_matches = 0
-    for asset in assets:
-        for file_path in asset.get_scannables(PROJECT):
-            text = file_path.read_text(encoding='utf-8')
-            matches: list[my_analyze_scan_dep.DependencyMatch] = list(
-                my_analyze_scan_dep.scan(
-                    text,
-                    automaton.iter(text),
-                )
-            )
-
-            total_matches += len(matches)
-
-            # print the first few matches just to prove it works
-            if total_matches > 100:  # noqa: PLR2004
-                continue
-            for match in matches[:3]:
-                loc = match.location
-                print(
-                    f'[{asset.name}] -> {match.target_asset} '
-                    f'({file_path.name}:{loc.loc_line}:{loc.loc_column})'
-                )
-
-    print(f'\nDone! Found {total_matches} total dependency references.')
-    # --- COG_END: MAIN_EX_SCAN_SYNC ---
-
-
-def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
-    """Simple scanner with some extra stuff.
-
-    We can add a progress bar + robust struct for storing our dependencies.
-    """
-    # --- COG_START: MAIN_EX_SCAN_SYNC2 ---
     automaton = Automaton()
     for asset in assets:
         automaton.add_word(asset.name, asset.name)
@@ -637,12 +630,13 @@ def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
     scans = tuple(
         (asset, file_path)
         for asset in assets
-        for file_path in asset.get_scannables(PROJECT)
+        for file_path in asset_scannables(asset, PROJECT)
     )
     for asset, file_path in tqdm.tqdm(
-        scans, total=len(scans), desc='Scanning'
+            scans, total=len(scans), desc='Scanning'
     ):
-        text = file_path.read_text(encoding='utf-8')
+        text = my_read.read(file_path)
+        line_map = my_read.line_map(file_path)
         matches: list[my_analyze_scan_dep.DependencyMatch] = list(
             my_analyze_scan_dep.scan(
                 text,
@@ -652,18 +646,17 @@ def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
 
         total_matches += len(matches)
         for match in matches:
-            loc = match.location
+            line, column = line_map.get_line_col(match.idx)
             dependencies.append(
                 Dependency(
-                    location=my_analyze_location.BoundLocation(
-                        loc_line=loc.loc_line,
-                        loc_column=loc.loc_column,
-                        loc_index=loc.loc_index,
-                        asset_name=asset.name,
-                        file_name=file_path.name,
+                    location=my_location.Location(
+                        file=file_path,
+                        loc_index=match.idx,
+                        loc_line=line,
+                        loc_column=column,
                     ),
                     source_asset=asset,
-                    target_asset=name2asset[match.target_asset],
+                    target_asset=name2asset[match.target],
                     contexts=match.contexts,
                 )
             )
@@ -671,83 +664,11 @@ def main_ex_scan_sync2(assets: list[Asset]) -> list[Dependency]:
     print(f'\nDone! Found {total_matches} total dependency references.')
     # --- COG_END: MAIN_EX_SCAN_SYNC2 ---
     return dependencies
-
-
-def main_ex_scan_mp(assets: list[Asset]) -> list[Dependency]:
-    """Multiprocessing scanner.
-
-    Multiprocessing can speed up scanning (but in practice it didn't - we
-    left this sample moreso as a reference). To do this, we can divide
-    the scanning tasks across a pool of worker processes.
-
-    For this we must set up few additional methods - worker's "init" and
-    worker "work".
-    """
-    # --- COG_START: MAIN_EX_SCAN_MP ---
-
-    # generate list of atomic jobs
-    jobs = [
-        ScanJob(asset_name=asset.name, file_path=file_path)
-        for asset in assets
-        for file_path in asset.get_scannables(PROJECT)
-    ]
-
-    name2asset = {asset.name: asset for asset in assets}
-    total_matches = 0
-    dependencies: list[Dependency] = []
-
-    worker_count = mp.cpu_count()
-    print(f'Initializing executor pool with {worker_count} workers')
-
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=worker_count,
-        initializer=_worker_init,
-        initargs=(list(name2asset.keys()),),
-    ) as executor:
-        submits = {executor.submit(_worker_scan, job): job for job in jobs}
-
-        # feed into mp
-        for future in tqdm.tqdm(
-            concurrent.futures.as_completed(submits),
-            total=len(jobs),
-            desc='Scanning',
-        ):
-            result: ScanResult = future.result()
-            total_matches += len(result.matches)
-            # convert results
-            for match in result.matches:
-                loc = match.location
-                dependencies.append(
-                    Dependency(
-                        location=my_analyze_location.BoundLocation(
-                            loc_line=loc.loc_line,
-                            loc_column=loc.loc_column,
-                            loc_index=loc.loc_index,
-                            asset_name=result.job.asset_name,
-                            file_name=result.job.file_path.name,
-                        ),
-                        source_asset=name2asset[result.job.asset_name],
-                        target_asset=name2asset[match.target_asset],
-                        contexts=match.contexts,
-                    )
-                )
-
-    # print a few matches to verify the results
-    print(f'\nDone! Found {total_matches} total dependency references.')
-
-    for dep in dependencies[:3]:
-        loc = dep.location
-        print(
-            f'[{dep.source_asset.name}] -> {dep.target_asset.name} '
-            f'(Line {loc.loc_line}, Col {loc.loc_column})'
-        )
-
-    # --- COG_END: MAIN_EX_SCAN_MP ---
-    return dependencies
+    # --- COG_END: MAIN_EX_SCAN_SYNC ---
 
 
 def main_ex_lint_unused(
-    dependencies: list[Dependency], assets: list[Asset]
+    dependencies: list[Dependency], assets: list[Asset], name2cluster: dict[str, str]
 ) -> None:
     """Find and report assets that are never referenced by anything.
 
@@ -782,7 +703,7 @@ def main_ex_lint_unused(
     for name in orphan_names:
         asset = all_assets[name]
 
-        orphans_by_cluster.setdefault(asset.cluster, []).append(asset)
+        orphans_by_cluster.setdefault(name2cluster[asset.name], []).append(asset)
         total_orphans += 1
 
     if total_orphans == 0:
@@ -797,16 +718,14 @@ def main_ex_lint_unused(
             print(f'\n=== {cluster} ===')
 
             # sort
-            orphans.sort(
-                key=lambda a: (a.__class__.__name__, a.get_tree_path(), a.name)
-            )
+            orphans.sort(key=asset_sort_key)
 
             for asset in orphans:
-                print(asset.to_str_linter())
+                print(asset_str_linter(asset))
     # --- COG_END: MAIN_EX_LINT_UNUSED ---
 
 
-def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
+def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str, str]) -> bool:
     """Validate cluster boundaries.
 
     Simple check of clusters on both ends of dependency edge will filter
@@ -847,8 +766,11 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
     total_violations = 0
 
     for dep in dependencies:
-        target = dep.target_asset
         source = dep.source_asset
+        target = dep.target_asset
+
+        source_cluster = name2cluster[source.name]
+        target_cluster = name2cluster[target.name]
 
         # remove deps to room
         if isinstance(target, my_asset.Room):
@@ -856,7 +778,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
 
         # get permissions from lint rules
         allowed_targets = set(
-            LINT_RULES.get(source.cluster, {source.cluster, 'Common'})
+            LINT_RULES.get(source_cluster, {target_cluster, 'Common'})
         )
 
         # expand permissions based on script guards
@@ -872,7 +794,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
                     allowed_targets.update(expanded_permissions)
 
         # check for structural violations
-        if target.cluster not in allowed_targets:
+        if target_cluster not in allowed_targets:
             total_violations += 1
             loc = dep.location
 
@@ -883,12 +805,12 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
                 else ''
             )
             err_msg = (
-                f'{loc.file_name}({loc.loc_line:}:{loc.loc_column:}) -> '
-                f"'{target.name}' [{target.cluster}]"
+                f'{loc.file_path.name}({loc.loc_line:}:{loc.loc_column:}) -> '
+                f"'{target.name}' [{target_cluster}]"
                 f'{ctx_str}'
             )
 
-            cluster_errs = violations.setdefault(source.cluster, {})
+            cluster_errs = violations.setdefault(source_cluster, {})
             asset_errs = cluster_errs.setdefault(source.name, [])
             asset_errs.append(err_msg)
 
@@ -908,7 +830,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> bool:
                 print(f'[{asset_name}]')
                 for err in errors:
                     print(f'  |-- {err}')
-    # MD: Unlike the unused asset linter (which should be viewed more as a
+    # MD: Unlike the unused asset linter (which should be viewed more as
     # MD: "suggester"), the crossref linters are *required* to be happy,
     # MD: before you may start with the actually useful tools.
     # MD:

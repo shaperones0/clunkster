@@ -635,15 +635,23 @@ import tqdm
 from ahocorasick import Automaton
 
 from clunkster import asset as my_asset
-from clunkster.analyze import location as my_analyze_location
+from clunkster.text import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 
+
 # see Example 1.1 - Finding assets
 class AssetExtAudio: ...
+
+
 class AssetExtBgm: ...
+
+
 class AssetExtSfx: ...
+
+
 class AssetExtSfx3: ...
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
@@ -653,6 +661,7 @@ class Dependency:
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
+
 
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
@@ -674,7 +683,7 @@ scans = tuple(
     for file_path in asset.get_scannables(PROJECT)
 )
 for asset, file_path in tqdm.tqdm(
-    scans, total=len(scans), desc='Scanning'
+        scans, total=len(scans), desc='Scanning'
 ):
     text = file_path.read_text(encoding='utf-8')
     matches: list[my_analyze_scan_dep.DependencyMatch] = list(
@@ -724,15 +733,23 @@ import tqdm
 from ahocorasick import Automaton
 
 from clunkster import asset as my_asset
-from clunkster.analyze import location as my_analyze_location
+from clunkster.text import location as my_analyze_location
 from clunkster.analyze import scan_dep as my_analyze_scan_dep
 from clunkster.asset import Asset
 
+
 # see Example 1.1 - Finding assets
 class AssetExtAudio: ...
+
+
 class AssetExtBgm: ...
+
+
 class AssetExtSfx: ...
+
+
 class AssetExtSfx3: ...
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ScanJob:
@@ -752,6 +769,7 @@ class ScanResult:
     matches: list[my_analyze_scan_dep.DependencyMatch]
     job: ScanJob
 
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
@@ -760,6 +778,7 @@ class Dependency:
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
+
 
 # we can't send the compiled Aho-Corasick automaton across process boundaries
 #  safely; instead, we use a global variable inside the worker process and
@@ -793,6 +812,7 @@ def _worker_scan(job: ScanJob) -> ScanResult:
         job=job,
     )
 
+
 # see Example 1.3 - Cluster aliasing
 assets: list[Asset] = ...
 
@@ -813,17 +833,17 @@ worker_count = mp.cpu_count()
 print(f'Initializing executor pool with {worker_count} workers')
 
 with concurrent.futures.ProcessPoolExecutor(
-    max_workers=worker_count,
-    initializer=_worker_init,
-    initargs=(list(name2asset.keys()),),
+        max_workers=worker_count,
+        initializer=_worker_init,
+        initargs=(list(name2asset.keys()),),
 ) as executor:
     submits = {executor.submit(_worker_scan, job): job for job in jobs}
 
     # feed into mp
     for future in tqdm.tqdm(
-        concurrent.futures.as_completed(submits),
-        total=len(jobs),
-        desc='Scanning',
+            concurrent.futures.as_completed(submits),
+            total=len(jobs),
+            desc='Scanning',
     ):
         result: ScanResult = future.result()
         total_matches += len(result.matches)
