@@ -64,11 +64,6 @@ TER_RESET = '\033[0m'
 class AssetExtAudio(my_asset.AssetSingleFile, ABC):
     """Generic external audio asset."""
 
-    @override
-    def get_ref(self) -> str:
-        # wrap reference in quotes
-        return f"\"{self.name}\""
-
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtBgm(AssetExtAudio):
@@ -165,7 +160,7 @@ def asset_sort_key(asset: Asset) -> tuple[str, ...]:
 
 
 def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
-    return asset.tree_path[0]
+    return asset.tree_path[0] if asset.tree_path else 'Common'
 
 
 def asset_cluster(asset: my_asset.Asset) -> str:
@@ -235,17 +230,18 @@ ALIAS: dict[str, list[str]] = {
 }
 
 
-def alias_invert() -> dict[str, str]:
+def alias_invert() -> None:
+    global ALIAS_INV
     inv: dict[str, str] = {}
     for name, clusters in ALIAS.items():
         for cluster in clusters:
             if cluster in inv:
                 raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
             inv[cluster] = name
-    return inv
+    ALIAS_INV = inv
 
 
-ALIAS_INV = alias_invert()
+ALIAS_INV: dict[str, str]
 # --- COG_END: ALIAS ---
 
 # --- COG_START: LINT_RULES_EXPLAIN ---
@@ -292,8 +288,14 @@ EXTRA_ROOTS: set[str] = {
 
 # --- COG_START: PROJECT ---
 PROJECT = Path('path/to/the/project')
-my_read.reg_root(PROJECT)
-LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
+LINT: my_lint.LinterSession
+
+
+def set_project(project_root: Path) -> None:
+    global PROJECT, LINT
+    PROJECT = project_root
+    my_read.reg_root(PROJECT)
+    LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
 # --- COG_END: PROJECT ---
 
 
@@ -578,7 +580,7 @@ def main_ex_aliases() -> list[Asset]:
             clm if clm in cluster_set else ' ' * len(clm)
             for clm in clusters_all
         ]
-        print(f'[{asset_type.type_name()}]:', '|'.join(row))
+        print(f'[{asset_type.type_name():>10}]:', '|'.join(row))
 
     # lint
     lint_unused_aliases = lint_existing_aliases - lint_used_aliases
@@ -788,7 +790,7 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
         )
 
 
-def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str, str]) -> None:
+def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     """Validate cluster boundaries.
 
     Simple check of clusters on both ends of dependency edge will filter
@@ -826,8 +828,8 @@ def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str
         source = dep.source_asset
         target = dep.target_asset
 
-        source_cluster = name2cluster[source.name]
-        target_cluster = name2cluster[target.name]
+        source_cluster = asset_cluster(source)
+        target_cluster = asset_cluster(target)
 
         # remove deps to room
         if isinstance(target, my_asset.Room):
@@ -835,7 +837,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str
 
         # get permissions from lint rules
         allowed_targets = set(
-            LINT_RULES.get(source_cluster, {target_cluster, 'Common'})
+            LINT_RULES.get(source_cluster, {source_cluster, 'Common'})
         )
 
         # expand permissions based on script guards
@@ -3058,7 +3060,7 @@ def _load_private(config_dir: Path) -> None:
 
     _config = json.loads(_file_private_config.read_text())
 
-    PROJECT = config_dir.parent / 'source'
+    set_project(config_dir.parent / 'source')
     JUICER = ConfJuicer(
         is_prod=False,
         dir_out=config_dir.parent / '_build',
@@ -3071,6 +3073,7 @@ def _load_private(config_dir: Path) -> None:
 
     _file_private_alias = config_dir / 'alias.json'
     ALIAS = json.loads(_file_private_alias.read_text(encoding='utf-8'))
+    alias_invert()
 
     _file_private_lint_rules = config_dir / 'lint_rules.json'
     rules = json.loads(_file_private_lint_rules.read_text(encoding='utf-8'))
@@ -3095,7 +3098,7 @@ def main() -> None:
 
     # allow testing tutorials on private data as well
     is_test = False
-    is_check = False
+    is_check = True
     if len(sys.argv) > 2:  # noqa: PLR2004
         if sys.argv[2] == 'test':
             is_test = True
@@ -3110,21 +3113,16 @@ def main() -> None:
     assets = main_ex_aliases()
 
     if is_check:
-        deps = main_ex_scan_sync2(assets)
+        deps = main_ex_scan_sync(assets)
 
         # main_ex_lint_unused(deps, assets)
-        ok = main_ex_lint_crossref(deps)
-        if not ok:
-            print('\nLinting errors found - bailing out')
-            return
+        main_ex_lint_crossref(deps)
 
         room_data = main_ex_graph(assets, deps)
 
         # main_ex_lint_unused_graph(assets, room_data)
-        ok = main_ex_lint_crossref_graph(assets, room_data)
-        if not ok:
-            print('\nLinting errors found - bailing out')
-            return
+        main_ex_lint_crossref_graph(assets, room_data)
+
         print('All ok, exiting regardless :D')
         return
 

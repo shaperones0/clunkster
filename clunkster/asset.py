@@ -306,6 +306,7 @@ class RoomMetadata:
 class Asset(ABC):
     """Abstract asset."""
 
+    # name is the identifier by which the asset is referenced in code
     name: str
 
     @classmethod
@@ -332,11 +333,6 @@ class Asset(ABC):
         things like builtin should use ``index.yyd`` files.
         """
         return (asset.name for asset in cls.type_discover_all(project_root))
-
-    def get_ref(self) -> str:
-        """Get the identifier by which this asset may be referenced in code."""
-        # external asset are sometimes referenced only as strings: "snd_jump"
-        return self.name
 
 
 
@@ -418,8 +414,11 @@ class AssetSingleFile(AssetHasPath, AssetHasDir, ABC):
 
     @classmethod
     def type_file_to_asset_name(cls, file: pl.Path) -> str:
-        """Convert file path to asset name."""
-        return file.stem
+        """Convert file path to asset name.
+
+        Assumes string filename.
+        """
+        return f'"{file.stem}"'
 
     @classmethod
     def type_file_to_tree_path(cls, project_root: pl.Path, file: pl.Path) -> tuple[str, ...]:
