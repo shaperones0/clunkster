@@ -1,6 +1,7 @@
 """Linter-related shims."""
 
 from clunkster.text.location import Location
+from clunkster.asset import AssetHasPath, Asset
 from clunkster.text import read
 from abc import ABC, abstractmethod
 import collections.abc as col
@@ -35,15 +36,11 @@ class LinterViolation(ABC):
     def __init__(self) -> None:
         self.session: LinterSession | None = None
 
-    def _try_path_rel(self, path: Path) -> str:
+    def format_path(self, path: Path) -> str:
+        """Format given path."""
         if self.session is None:
             return str(path)
         return self.session.path_try_rel(path)
-
-    @property
-    @abstractmethod
-    def message(self) -> str:
-        """Get linter violation message."""
 
     @classmethod
     def format_many(cls: type[TError], errors: col.Iterable[TError], *, verbose: bool = False) -> str:
@@ -51,11 +48,15 @@ class LinterViolation(ABC):
 
         Default implementation uses ``<file>:<line>:<column>: <err>`` format.
         """
-        errors = list(errors)
+        errors = tuple(errors)
         if not errors:
             return f"=== {cls.rule}: no issues"
 
-        lines = [f"=== {cls.rule}: {len(errors)} issue(s)"]
+        lines = [f"=== {cls.rule}({cls.__name__}): {len(errors)} " + {
+            Severity.INFO: "note(s)",
+            Severity.WARNING: "warning(s)!",
+            Severity.ERROR: "ERROR(S)!!!",
+        }[cls.severity]]
         for err in errors:
             if verbose:
                 lines.append(err.format_verbose())
@@ -66,33 +67,77 @@ class LinterViolation(ABC):
     def format_li(self) -> str:
         """Compose an error message to appear in a standard error list.
 
-        Default implementation just outputs the error message.
+        Default implementation uses builtin formatter.
         """
-        return self.message
+        return linter_format_li(self)
 
     def format_verbose(self) -> str:
         """Compose verbose error message.
 
-        Linter bound to a location should output part of the file.
+        Default implementation falls back to list item format ``format_li``.
+        Linter bound to a location in a file should output part of the file.
         """
-        return self.message
+        return self.format_li()
 
     def sort_key(self) -> tuple[str, ...]:
         """Generate a sort key for this violation."""
         return (type(self).rule,)
 
 
-class GenericViolation(LinterViolation):
+class LinterViolationMessage(LinterViolation, ABC):
     @property
+    @abstractmethod
     def message(self) -> str:
-        return self.msg
+        """Get linter violation message."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__()
-        self.msg = message
+class LinterViolationFile(LinterViolation, ABC):
+    """Linter violation bound to a file."""
+
+    @property
+    @abstractmethod
+    def file(self) -> Path:
+        """Get a file for this linter violation."""
+
+    @override
+    def sort_key(self) -> tuple[str, ...]:
+        """Generate a sort key for this violation.
+
+        This one adds file path.
+        """
+        return type(self).rule, self.format_path(self.file),
+
+class LinterViolationAsset(LinterViolation, ABC):
+    """Linter violation bound to an asset."""
+
+    @property
+    @abstractmethod
+    def asset(self) -> Asset:
+        """Get an asset for this linter violation."""
+
+    def format_asset(self) -> str:
+        asset = self.asset
+        if isinstance(asset, AssetHasPath):
+            return '/'.join((
+                type(asset).type_name(),
+                *asset.tree_path,
+                asset.name
+            ))
+        else:
+            return '/'.join((
+                type(asset).type_name(),
+                asset.name
+            ))
+
+    @override
+    def sort_key(self) -> tuple[str, ...]:
+        """Generate a sort key for this violation.
+
+        This one adds asset name (or path).
+        """
+        return type(self).rule, self.format_asset()
 
 
-class LinterViolationBound(LinterViolation, ABC):
+class LinterViolationLocated(LinterViolationFile, ABC):
     """Linter violation bound to a location in a text file."""
 
     @property
@@ -101,16 +146,10 @@ class LinterViolationBound(LinterViolation, ABC):
         """Get linter violation location."""
 
     @override
-    def format_li(self) -> str:
-        """Compose an error message to appear in a standard error list.
-
-        Adds source file location info before the error message.
-        """
-        loc = self.location
-        base = f"{self.rule} - {self._try_path_rel(loc.file)}:{loc.loc_line}:{loc.loc_column}"
-        if self.message:
-            return base + f": {self.message}"
-        return base
+    @property
+    def file(self) -> Path:
+        """Get a file for this linter violation."""
+        return self.location.file
 
     @override
     def format_verbose(self) -> str:
@@ -119,7 +158,7 @@ class LinterViolationBound(LinterViolation, ABC):
         Adds few lines of the source file to the output.
         """
         loc = self.location
-        lines = list(enumerate(read.read_lines(loc.file), start=1))
+        lines = tuple(enumerate(read.lines(loc.file), start=1))
         lines_slice = lines[max(0, loc.loc_line - 3):min(len(lines), loc.loc_line + 3)]
         output_lines: list[str] = [
             self.format_li()
@@ -137,24 +176,36 @@ class LinterViolationBound(LinterViolation, ABC):
     def sort_key(self) -> tuple[str, ...]:
         """Generate a sort key for this violation.
 
-        This one adds location data.
+        This one adds location data, or asset path, if such is present.
         """
-        return type(self).rule, self._try_path_rel(self.location.file), f"{self.location.loc_line:>4}", f"{self.location.loc_column:>4}",
+
+        key = [type(self).rule, self.format_path(self.location.file), f"{self.location.loc_line:0>4}", f"{self.location.loc_column:0>4}",]
+        if isinstance(self, LinterViolationAsset):
+            key.insert(1, self.format_asset())
+        return tuple(key)
 
 
-class GenericBoundViolation(LinterViolationBound):
-    @property
-    def location(self) -> Location:
-        return self.location
+def linter_format_li(violation: LinterViolation) -> str:
+    """Formats linter list item representation, accounting for subclasses."""
 
-    @property
-    def message(self) -> str:
-        return self.msg
+    parts: list[str] = []
+    if isinstance(violation, LinterViolationFile):
+        v_file: Path = violation.file
+        fmt_path = violation.format_path(v_file)
+        parts.append(f" {fmt_path if fmt_path else '???'}")
+        if isinstance(violation, LinterViolationLocated):
+            v_line_col: tuple[int, int] = (violation.location.loc_line, violation.location.loc_column)
+            parts.append(f":{v_line_col[0]}:{v_line_col[1]}")
 
-    def __init__(self, message: str, location: Location) -> None:
-        super().__init__()
-        self.msg = message
-        self.loc = location
+    if isinstance(violation, LinterViolationAsset):
+        fmt_asset = violation.format_asset()
+        if fmt_asset:
+            parts.append(f' ({violation.format_asset()})')
+    if isinstance(violation, LinterViolationMessage):
+        message = violation.message
+        if message:
+            parts.append(f' - {violation.message}')
+    return ''.join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +213,9 @@ class DiagnosticBatch:
     infos: tuple[LinterViolation, ...]
     warnings: tuple[LinterViolation, ...]
     errors: tuple[LinterViolation, ...]
+
+    def len_total(self) -> int:
+        return len(self.infos) + len(self.warnings) + len(self.errors)
 
 
 class DiagnosticConsumer(ABC):
@@ -173,7 +227,7 @@ class DiagnosticConsumer(ABC):
 class LinterFoundErrors(RuntimeError):
     def __init__(self, message: str, errors: col.Iterable[LinterViolation]):
         super().__init__(message)
-        self.errors = list(errors)
+        self.errors = tuple(errors)
 
 
 class CliConsumer(DiagnosticConsumer):
@@ -213,21 +267,23 @@ class LinterSession:
             errors=tuple(err_severities.get(Severity.ERROR, []))
         )
 
-    def consume(self, *cls: type[LinterViolation], verbose: bool = False, flush: bool = True) -> None:
+    def consume(self, *cls: type[LinterViolation], verbose: bool = False, flush: bool = True) -> int:
         batch = self.collect(*cls, flush=flush)
         self.consumer.consume(batch, verbose=verbose)
+        return batch.len_total()
 
-    def flush(self, *cls: type[LinterViolation]) -> None:
+    def flush(self, *cls: type[LinterViolation]) -> bool:
         err_severities = self._classify(*cls)
-        self._flush(it.chain.from_iterable(err_severities.values()))
+        return self._flush(it.chain.from_iterable(err_severities.values()))
 
-    def _flush(self, errors: col.Iterable[LinterViolation]) -> None:
+    def _flush(self, errors: col.Iterable[LinterViolation]) -> bool:
         remove = {id(err) for err in errors}
         self.errors[:] = [
             err
             for err in self.errors
             if id(err) not in remove
         ]
+        return bool(remove)
 
     def _classify(self, *cls: type[LinterViolation]) -> dict[Severity, list[LinterViolation]]:
         """Filter violations into ones that should be raised or just warned."""

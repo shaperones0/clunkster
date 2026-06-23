@@ -15,7 +15,7 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import override
+from typing import override, Self
 
 import rustworkx as rx
 import tqdm
@@ -168,10 +168,12 @@ def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
     return asset.tree_path[0]
 
 
-def asset_cluster(asset: my_asset.AssetHasPath) -> str:
-    cluster = asset_cluster_raw(asset)
-    alias = ALIAS_INV.get(cluster)
-    return cluster if alias is None else alias
+def asset_cluster(asset: my_asset.Asset) -> str:
+    if isinstance(asset, my_asset.AssetHasPath):
+        cluster = asset_cluster_raw(asset)
+        alias = ALIAS_INV.get(cluster)
+        return cluster if alias is None else alias
+    return "Unknown?"
 
 
 # --- COG_END: CLS_ASSET_EXT ---
@@ -312,7 +314,7 @@ class Dependency:
 class RoomGraph:
     """Bundle of room graph data."""
 
-    room_name: str
+    room: my_asset.Room
     reachable_names: set[str]
     graph: rx.PyDiGraph
     name2index: dict[str, int]
@@ -380,7 +382,7 @@ def main_ex_start() -> None:
     # --- COG_END: MAIN_EX_START ---
 
 
-class LintTreeDuplicateFolder(my_lint.LinterViolationBound):
+class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
 
     rule = 'T100'
     severity = my_lint.Severity.ERROR
@@ -402,16 +404,17 @@ class LintTreeDuplicateFolder(my_lint.LinterViolationBound):
         return f'Duplicate {thing}: \'{self.tree_node.name}\''
 
 
-class LintTreeDuplicateAsset(my_lint.LinterViolation):
+class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
 
     rule = 'T101'
     severity = my_lint.Severity.ERROR
 
     def __init__(self, dupes: col.Iterable[str], message_pref: str):
         super().__init__()
-        self.dupes = dupes
+        self.dupes = tuple(dupes)
         self.message_pref = message_pref
 
+    @override
     @property
     def message(self) -> str:
         return f"{self.message_pref}: {' '.join(self.dupes)}"
@@ -505,16 +508,17 @@ def main_ex_lint_tree() -> None:
     # --- COG_END: MAIN_EX_LINT_TREE ---
 
 
-class LintAliasMismatch(my_lint.LinterViolation):
+class LintAliasMismatch(my_lint.LinterViolationMessage):
 
     rule = 'A100'
     severity = my_lint.Severity.WARNING
 
     def __init__(self, dupes: col.Iterable[str], message_pref: str):
         super().__init__()
-        self.dupes = dupes
+        self.dupes = tuple(dupes)
         self.message_pref = message_pref
 
+    @override
     @property
     def message(self) -> str:
         return f"{self.message_pref}: {' '.join(self.dupes)}"
@@ -667,8 +671,53 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     # --- COG_END: MAIN_EX_SCAN_SYNC ---
 
 
+class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
+    """Group linter list output by assets' clusters."""
+
+    @override
+    @classmethod
+    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+        errors = list(errors)
+        if not errors:
+            return f"=== {cls.rule}: no issues"
+
+        # group by clusters
+        cluster_errors: dict[str, list[Self]] = {}
+        for err in errors:
+            asset = err.asset
+            cluster_errors.setdefault(asset_cluster(asset), []).append(err)
+
+        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        for cluster, errors in sorted(cluster_errors.items()):
+            lines.append(f'\n=== {cluster} ===')
+
+            # sort
+            errors.sort(key=lambda e: asset_sort_key(e.asset))
+            for err in errors:
+                if verbose:
+                    lines.append(err.format_verbose())
+                else:
+                    lines.append(f"  {err.format_li()}")
+
+        return "\n".join(lines)
+
+
+class LintUnused(LintAssetCluster):
+    rule = 'U100'
+    severity = my_lint.Severity.WARNING
+
+    def __init__(self, asset: Asset) -> None:
+        super().__init__()
+        self._asset = asset
+
+    @override
+    @property
+    def asset(self) -> Asset:
+        return self._asset
+
+
 def main_ex_lint_unused(
-    dependencies: list[Dependency], assets: list[Asset], name2cluster: dict[str, str]
+    dependencies: list[Dependency], assets: list[Asset]
 ) -> None:
     """Find and report assets that are never referenced by anything.
 
@@ -696,36 +745,50 @@ def main_ex_lint_unused(
         used_asset_names.add(dep.target_asset.name)
 
     orphan_names = set(all_assets.keys()) - used_asset_names
-
-    orphans_by_cluster: dict[str, list[Asset]] = {}
-    total_orphans = 0
-
     for name in orphan_names:
-        asset = all_assets[name]
+        LINT.push(LintUnused(all_assets[name]))
 
-        orphans_by_cluster.setdefault(name2cluster[asset.name], []).append(asset)
-        total_orphans += 1
-
-    if total_orphans == 0:
-        print('\nProject is somehow clean - no orphaned assets found')
+    # unwrap
+    violations_cnt = LINT.consume(LintUnused)
+    if violations_cnt:
+        print(f"\nFound {violations_cnt} violations.")
     else:
-        print(
-            f'\nFound {total_orphans} orphaned assets across '
-            f'{len(orphans_by_cluster)} clusters:'
-        )
-
-        for cluster, orphans in sorted(orphans_by_cluster.items()):
-            print(f'\n=== {cluster} ===')
-
-            # sort
-            orphans.sort(key=asset_sort_key)
-
-            for asset in orphans:
-                print(asset_str_linter(asset))
+        print("\nSomehow all clear...")
     # --- COG_END: MAIN_EX_LINT_UNUSED ---
 
 
-def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str, str]) -> bool:
+class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.LinterViolationMessage):
+    rule = 'C100'
+    severity = my_lint.Severity.ERROR
+
+    def __init__(self, dependency: Dependency) -> None:
+        super().__init__()
+        self._dependency = dependency
+
+    @override
+    @property
+    def location(self) -> Location:
+        return self._dependency.location
+
+    @override
+    @property
+    def asset(self) -> Asset:
+        return self._dependency.source_asset
+
+    @override
+    @property
+    def message(self) -> str:
+        # hack: use message (appended to the end) for dep repr.
+        target = self._dependency.target_asset
+        ctx = self._dependency.contexts
+        ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
+        return (
+            f"{target.name} [{asset_cluster(target)}]"
+            f'{ctx_str}'
+        )
+
+
+def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str, str]) -> None:
     """Validate cluster boundaries.
 
     Simple check of clusters on both ends of dependency edge will filter
@@ -759,12 +822,6 @@ def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str
     be used by future linters.
     """
     # --- COG_START: MAIN_EX_LINT_CROSSREF ---
-    violations: dict[
-        str,
-        dict[str, list[str]],
-    ] = {}
-    total_violations = 0
-
     for dep in dependencies:
         source = dep.source_asset
         target = dep.target_asset
@@ -795,41 +852,14 @@ def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str
 
         # check for structural violations
         if target_cluster not in allowed_targets:
-            total_violations += 1
-            loc = dep.location
+            LINT.push(LintCrossref(dep))
 
-            # format the contexts for the error log
-            ctx_str = (
-                f' [Contexts: {", ".join(dep.contexts)}]'
-                if dep.contexts
-                else ''
-            )
-            err_msg = (
-                f'{loc.file_path.name}({loc.loc_line:}:{loc.loc_column:}) -> '
-                f"'{target.name}' [{target_cluster}]"
-                f'{ctx_str}'
-            )
-
-            cluster_errs = violations.setdefault(source_cluster, {})
-            asset_errs = cluster_errs.setdefault(source.name, [])
-            asset_errs.append(err_msg)
-
-    # output linting report
-    if total_violations == 0:
-        print('\nClear!!!')
+    violations_cnt = LINT.consume(LintCrossref)
+    if violations_cnt:
+        print(f"\nFound {violations_cnt} violations.")
     else:
-        print(
-            f'\nFound {total_violations} dependency violations '
-            f'across {len(violations)} clusters:'
-        )
+        print("\nClear!!!")
 
-        for cluster, asset_errs in sorted(violations.items()):
-            print(f'\n=== {cluster} ===')
-
-            for asset_name, errors in sorted(asset_errs.items()):
-                print(f'[{asset_name}]')
-                for err in errors:
-                    print(f'  |-- {err}')
     # MD: Unlike the unused asset linter (which should be viewed more as
     # MD: "suggester"), the crossref linters are *required* to be happy,
     # MD: before you may start with the actually useful tools.
@@ -838,7 +868,6 @@ def main_ex_lint_crossref(dependencies: list[Dependency], name2cluster: dict[str
     # MD: clear out the dependency linter, are about trimming
     # MD: more unused assets via dependency graph.
     # --- COG_END: MAIN_EX_LINT_CROSSREF ---
-    return total_violations == 0
 
 
 def main_ex_graph(
@@ -915,21 +944,22 @@ def main_ex_graph(
         return g, asset_name2index
 
     # group rooms by their allowed clusters
-    cluster_groups: dict[frozenset[str], list[str]] = {}
+    cluster_groups: dict[frozenset[str], list[my_asset.Room]] = {}
 
     for asset_room in filter_type(my_asset.Room, assets):
+        room_cluster = asset_cluster(asset_room)
         allowed_clusters = LINT_RULES.get(
-            asset_room.cluster, {asset_room.cluster, 'Common'}
+            room_cluster, {room_cluster, 'Common'}
         )
         cluster_groups.setdefault(frozenset(allowed_clusters), []).append(
-            asset_room.name
+            asset_room
         )
 
     print('Clusterset to rooms:')
     for cluster_set, rooms in cluster_groups.items():
         print(*cluster_set)
         for room in rooms:
-            print(' ', room)
+            print(' ', room.name)
         print()
 
     room_graph_data: dict[str, RoomGraph] = {}
@@ -949,9 +979,10 @@ def main_ex_graph(
 
         task_name = ' '.join(sorted(cluster_set)).rjust(clusterset_names_len)
 
-        for room_name in tqdm.tqdm(
+        for room in tqdm.tqdm(
             rooms, desc=task_name, leave=True, file=sys.stdout
         ):
+            room_name = room.name
             if room_name not in name_to_index:
                 continue
 
@@ -969,7 +1000,7 @@ def main_ex_graph(
 
             reachable_names = {graph[idx] for idx in reachable_indices}
             room_graph_data[room_name] = RoomGraph(
-                room_name=room_name,
+                room=room,
                 reachable_names=reachable_names,
                 graph=graph,
                 name2index=name_to_index,
@@ -1010,41 +1041,83 @@ def main_ex_lint_unused_graph(
         asset.name for asset in assets if isinstance(asset, my_asset.Room)
     )
 
-    unused_assets: list[Asset] = [
-        asset for asset in assets if asset.name not in all_used_names
-    ]
+    # detect unuseds
+    for asset in assets:
+        if asset.name in all_used_names:
+            continue
+        LINT.push(LintUnused(asset))
 
-    if not unused_assets:
-        print('\nOmg Clear?!!')
+    violations_cnt = LINT.consume(LintUnused)
+    if violations_cnt:
+        print(f'\nFound {violations_cnt} unreachable assets.')
     else:
-        print(f'Found {len(unused_assets)} unreachable assets!')
-
-        # group by cluster
-        grouped_unused: dict[str, list[Asset]] = collections.defaultdict(list)
-        for asset in unused_assets:
-            grouped_unused[asset.cluster].append(asset)
-
-        for cluster, dead_assets in sorted(grouped_unused.items()):
-            print(f'=== {cluster} ===')
-
-            for asset in sorted(
-                dead_assets,
-                key=lambda a: (
-                    a.__class__.__name__,
-                    a.get_tree_path(),
-                    a.name,
-                ),
-            ):
-                print(asset.to_str_linter())
-
-            print()
+        print("\nClear??? omg")
     # --- COG_END: MAIN_EX_LINT_UNUSED_GRAPH ---
+
+
+class LintCrossrefGraph(my_lint.LinterViolationAsset):
+    rule = 'C101'
+    severity = my_lint.Severity.ERROR
+
+    def __init__(self, room: my_asset.Room, room_allowed_clusters: set[str], target_name: str, target_cluster: str, trace: str) -> None:
+        super().__init__()
+        self.room = room
+        self.room_allowed_clusters = room_allowed_clusters
+        self.target_name = target_name
+        self.target_cluster = target_cluster
+        self.trace = trace
+
+    @override
+    @property
+    def asset(self) -> Asset:
+        return self.room
+
+    @override
+    @classmethod
+    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+        errors = list(errors)
+        if not errors:
+            return f"=== {cls.rule}: no issues"
+
+        # group by clusters
+        cluster_errors: dict[str, list[Self]] = {}
+        rooms_allowed_clusters: dict[str, set[str]] = {}
+        for err in errors:
+            room = err.room
+            cluster_errors.setdefault(asset_cluster(room), []).append(err)
+            if room.name not in rooms_allowed_clusters:
+                rooms_allowed_clusters[room.name] = err.room_allowed_clusters
+
+        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        for cluster, errors in sorted(cluster_errors.items()):
+            lines.append(f'\n=== {cluster} ===')
+            # sort
+            errors.sort(key=lambda e: asset_sort_key(e.room))
+            # group by room
+            room_errors: dict[str, list[Self]] = {}
+            for err in errors:
+                room = err.room
+                room_errors.setdefault(room.name, []).append(err)
+            for room, errors in sorted(room_errors.items()):
+                lines.append(f'Violations in Room: {room}')
+                lines.append(f'-- Allowed Clusters: {" ".join(rooms_allowed_clusters[room])}')
+
+                # group by target
+                target_errors: dict[str, list[Self]] = {}
+                for err in errors:
+                    target_errors.setdefault(err.target_name, []).append(err)
+                for target, errors in sorted(target_errors.items()):
+                    lines.append(f'  [{errors[0].target_cluster}] {target}')
+                    for err in errors:
+                        lines.append(f'    {err.trace}')
+
+        return "\n".join(lines)
 
 
 def main_ex_lint_crossref_graph(
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
-) -> bool:
+) -> None:
     """Validate room and their dependencies clustering boundaries.
 
     Final step of linting process before the project would be qualified for
@@ -1055,20 +1128,20 @@ def main_ex_lint_crossref_graph(
     issue raised by simpler crossref linter.
 
     Note 2: this tool will output a lot of violations for each offending
-    dependency edge, therefore some attention is required in order to pinpoint
+    dependency edge, therefore some deduction is required in order to pinpoint
     the exact offenders. Also, I recommend re-running the tool after each fix.
     """
-    ok = True
+
     # --- COG_START: MAIN_EX_LINT_CROSSREF_GRAPH ---
 
     # asset clusters lookup
     asset_to_cluster: dict[str, str] = {
-        asset.name: asset.cluster for asset in assets
+        asset.name: asset_cluster(asset) for asset in assets
     }
     total_violations = 0
 
     for rg in room_graph_data.values():
-        room_cluster = asset_to_cluster.get(rg.room_name)
+        room_cluster = asset_to_cluster.get(rg.room.name)
         if not room_cluster:
             continue
 
@@ -1085,11 +1158,7 @@ def main_ex_lint_crossref_graph(
         if not illegal_assets:
             continue
 
-        ok = False
-        print(f'Boundary Violation in Room: {rg.room_name}')
-        print(f'-- Allowed Clusters: {" ".join(allowed_clusters)}')
-
-        room_idx = rg.name2index[rg.room_name]
+        room_idx = rg.name2index[rg.room.name]
         illegal_assets.sort(key=lambda name: asset_to_cluster.get(name, ''))
 
         # pre-resolve active persistent root ids
@@ -1104,18 +1173,21 @@ def main_ex_lint_crossref_graph(
             target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
             total_violations += 1
 
-            print(f'  [{target_cluster}] {illegal_name}')
             path_found = False
 
-            # trace 1 - structural contamination from the room
+            # trace 1 - room contamination
             room_paths = rx.dijkstra_shortest_paths(
                 rg.graph, room_idx, target_idx
             )
             if target_idx in room_paths:
                 path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
-                print(
-                    f'    Traceback via Room Root: {" -> ".join(path_names)}'
-                )
+                LINT.push(LintCrossrefGraph(
+                    room=rg.room,
+                    room_allowed_clusters=allowed_clusters,
+                    target_name=illegal_name,
+                    target_cluster=target_cluster,
+                    trace=f'Traceback via Room Root: {" -> ".join(path_names)}'
+                ))
                 path_found = True
 
             # trace 2 - implicit contamination via global controllers
@@ -1125,28 +1197,39 @@ def main_ex_lint_crossref_graph(
                 )
                 if target_idx in p_paths:
                     path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
-                    print(
-                        f'    Traceback via Persistent Root ({p_name}): '
-                        f'{" -> ".join(path_names)}'
-                    )
+                    LINT.push(LintCrossrefGraph(
+                        room=rg.room,
+                        room_allowed_clusters=allowed_clusters,
+                        target_name=illegal_name,
+                        target_cluster=target_cluster,
+                        trace=f'Traceback via Persistent Root ({p_name}): {" -> ".join(path_names)}'
+                    ))
+
                     path_found = True
                     break
 
             if not path_found:
-                print(
-                    '    Traceback: Path unknown (Check structural edge '
-                    'configurations)'
-                )
+                LINT.push(LintCrossrefGraph(
+                    room=rg.room,
+                    room_allowed_clusters=allowed_clusters,
+                    target_name=illegal_name,
+                    target_cluster=target_cluster,
+                    trace='Traceback: Path unknown (Possibly misconfigured structure)'
+                ))
 
         if total_violations > 1000:  # noqa: PLR2004
             print('\nLinter exceeded 1000 violations, bailing out')
             break
+    violations_cnt = LINT.consume(LintCrossrefGraph)
+    if violations_cnt:
+        print(f'Found {violations_cnt} violations')
+    else:
+        print('Awesome!')
     # MD: Once you've cleared this one, you may call the game qualified
     # MD: for using the dangerous toys down the line.
     # MD:
     # MD: Congrats on defeating the tutorial boss.
     # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
-    return ok
 
 
 def main_juicer_copy(assets: list[Asset]) -> None:
