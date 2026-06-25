@@ -18,18 +18,18 @@ def str_to_anchor(text: str) -> str:
 
 
 class Header(ABC):
-    @abstractmethod
     @property
+    @abstractmethod
     def header_full(self) -> str:
         """Full header."""
 
-    @abstractmethod
     @property
+    @abstractmethod
     def header_mini(self) -> str:
         """Minified header."""
 
-    @abstractmethod
     @property
+    @abstractmethod
     def level(self) -> int:
         """Header's level."""
 
@@ -138,7 +138,7 @@ class ExampleHeaderGenerator(HeaderGenerator):
         self.current_idx_minor = self.idx_minor_start
         return HeaderSimple(
             level=2,
-            header=title,
+            header=f'{self.current_idx_major} - {title}',
         )
 
     def next_header(self, title: str) -> ExampleHeader:

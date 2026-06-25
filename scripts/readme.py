@@ -1,17 +1,25 @@
 """Readme generator."""
 
 from pathlib import Path
-from scripts import doc_parse, doc_extract, doc_patch, doc_toc, doc_headers, doc_code
+from scripts import doc_parse, doc_extract, doc_patch, doc_toc, doc_headers, doc_code, doc_docstring
+from doc_code import shad
+
+
+class MockRend:
+    def href(self, *_):
+        return ""
 
 
 @doc_patch.template()
 def readme_txt():
     file_main = Path(__file__).parent.parent / 'main.py'
+    file_readme = Path(__file__).parent.parent / 'README.md'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
     snips = doc_extract.extract(doc_parse.parse(lines_main))
     head = doc_headers.ExampleHeaderGenerator()
-
+    rend = MockRend()
+    docs = doc_docstring.extract(txt_main)
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
         header_generator=head,
@@ -48,7 +56,7 @@ Super destructive tools:
 
 # TOC
 
-{'\n'.join(doc_toc.generate_toc())}
+{'\n'.join(doc_toc.generate_toc(str(file_readme)))}
 
 # Rationale
 
@@ -1091,9 +1099,10 @@ Following examples represent parts of the workflow for the game this tool was in
 {head.next_section("Reading project").render_header()}
 
 {exs.code_begin("ex_start", "Finding assets")}
+
+{docs['main_ex_start']}
 {exs.render((
         snips['CLS_ASSET_EXT'],
-        snips['CLUSTERABLE_BUILTINS'],
         snips['CLUSTERABLE_ASSETS'],
         snips['PROJECT'],
         snips['MAIN_EX_START'],
