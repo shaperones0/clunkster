@@ -238,7 +238,7 @@ class CliConsumer(DiagnosticConsumer):
         if batch.warnings:
             warnings.warn(err_format(batch.warnings, verbose=verbose))
         if batch.errors:
-            raise LinterFoundErrors(err_format(batch.errors, verbose=verbose), batch.errors)
+            raise LinterFoundErrors('\n'+err_format(batch.errors, verbose=verbose), batch.errors)
 
 class LinterSession:
     """Linter session."""

@@ -1229,7 +1229,7 @@ def main_ex_lint_crossref_graph(
     if violations_cnt:
         print(f'Found {violations_cnt} violations')
     else:
-        print('Awesome!')
+        print('No errors! Awesome!')
     # MD: Once you've cleared this one, you may call the game qualified
     # MD: for using the dangerous toys down the line.
     # MD:
