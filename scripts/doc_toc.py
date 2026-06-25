@@ -4,14 +4,7 @@ import collections.abc as col
 import re
 from pathlib import Path
 
-
-def str_to_anchor(text: str) -> str:
-    """Convert string to Markdown anchor.
-
-    :param text: Text to convert.
-    :return: Safe anchor.
-    """
-    return re.sub(r'\s+', '-', re.sub(r'[^\w\-\s]', '', text.lower()))
+from scripts.doc_headers import str_to_anchor
 
 
 def generate_toc(filepath: str = 'README.md') -> col.Iterator[str]:
@@ -57,8 +50,4 @@ def generate_toc(filepath: str = 'README.md') -> col.Iterator[str]:
             level = len(level_chars)
             indent = '  ' * (level - 1)
 
-            # compatible anchor (please work)
-            anchor = title.lower()
-            anchor = re.sub(r'[^\w\-\s]', '', anchor)
-            anchor = re.sub(r'\s+', '-', anchor)
-            yield f'{indent}* [{title}](#{anchor})'
+            yield f'{indent}* [{title}](#{str_to_anchor(title)})'

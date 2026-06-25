@@ -127,10 +127,16 @@ def template[**P](max_iterations: int = 10) -> Callable[[Callable[P, str]], Call
                         resolved_snippets.append(s_py("???"))
                     else:
                         snippets: list[Snippet] = []
-                        for element in result:
-                            # assert isinstance(element, Snippet)
-                            snippets.append(element)
-                        resolved_snippets.extend(result)
+                        if result is None:
+                            # don't do anything
+                            pass
+                        elif isinstance(result, str):
+                            snippets.append(s_md(result))
+                        else:
+                            for element in result:
+                                # assert isinstance(element, Snippet)
+                                snippets.append(element)
+                        resolved_snippets.extend(snippets)
                         snippet_states[i] = SnippetState.RESOLVED
                         last_exceptions.pop(i, None)
                 if not needs_another_pass:
