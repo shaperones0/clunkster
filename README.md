@@ -4306,6 +4306,8 @@ To elaborate:
     - heavy tasks (audio compression, image encoding) should be multiprocessed
     - copy tasks (numerous but IO-bound) can be put into threading
 
+The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Those are elaborated in the Juicer classes example (TODO link).
+
 With that said, the project building strategy becomes:
 - do an `iterdir` on project root
     - if element is a folder
