@@ -4279,14 +4279,45 @@ ____
 ____
 **Sounds**: very impactful, TODO.
 ____
-**Data**: Sounds and Music: impactful, high priority.
+**External (audio)**: impactful, high priority.
 - prepare:
   - put sounds from same cluster into their folders,
   - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
   - convert ogg into compressed (level 2 or 3)
-  - convert wav into [ADPCM](https://learn.microsoft.com/en-us/windows/win32/xaudio2/adpcm-overview)
+  - wav is mostly unchanged
 - store-dry-dev: `buzz.wav` for sounds and `fiddlesticks.mp3` for music.
 - store-dry-prod: `null.wav` files.
 - store-wet: just files sitting in their folders.
 - hydrate: run the loader script.
 - dehydrate: replace back with stubs.
+
+# Juicing
+
+For the Project Juicer our goal is to "build" a game maker project. The goal is, simply put, to copy most of the project, apply dehydration to the assets that require it.
+
+To elaborate:
+- we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
+- dynamic loading of sprites and backgrounds presents us with a few new game maker bugs that we need to address:
+    - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
+    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code
+- since for some projects Juicing is the only way to run the project, builds must be fast:
+    - processing tasks must support caching
+    - asset dirs without processing can be symlinked
+    - heavy tasks (audio compression, image encoding) should be multiprocessed
+    - copy tasks (numerous but IO-bound) can be put into threading
+
+With that said, the project building strategy becomes:
+- do an `iterdir` on project root
+    - if element is a folder
+        - if it belongs to an asset type that needs processing (smartly handle data folder)
+            - generate processing/copy tasks
+        - otherwise
+            - check if this folder is allowed to exist in the project
+            - symlink
+    - if element is a file
+        - check if this file is allowed to exist in the project
+        - copy (without a task)
+- execute the tasks (notice which things are tasks and which aren't)
+    - multiprocessing for processing tasks (image encoding, audio compression)
+    - threading for copy tasks
+    - the rest can happen synchronously right at the task generation
