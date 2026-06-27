@@ -39,10 +39,8 @@ from clunkster.text import location as my_location, read as my_read
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
-from clunkster.project import cache as my_proj_cache
-from clunkster.project import (
-    task as my_proj_task,
-)
+from clunkster.project import cache as my_cache
+from clunkster.project.task import Task, TaskCopy, TaskGeneric, TaskCopyTree
 
 # terminal color for output
 TER_RED = '\033[91m'
@@ -167,6 +165,19 @@ def asset_cluster(asset: my_asset.Asset) -> str:
         return cluster if alias is None else alias
     return "Unknown?"
 # </snip DEF_ASSET_CLUSTERS>
+
+# <snip DEF_ASSET_WET_FNAME>
+def asset_wet_fname(asset: my_asset.Asset) -> str:
+    if isinstance(asset, AssetExtSfx):
+        return f'{asset.name_clean}.wav'
+    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
+        return f'{asset.name_clean}.ogg'
+    elif isinstance(asset, my_asset.Sprite):
+        return f'{asset.name}.gmspr'
+    elif isinstance(asset, my_asset.Background):
+        return f'{asset.name}.gmbck'
+    raise NotImplementedError('Asset type not supported')
+# </snip DEF_ASSET_WET_FNAME>
 
 
 # <snip DEF_TYPE_FILTER>
@@ -1260,22 +1271,22 @@ def main_ex_lint_crossref_graph(
 
 # <snip DEFS_JUICE>
 def juice_sprite(
-    sprite: my_asset.Sprite, project_root: Path, out_file: Path
+        *,
+        meta: my_asset.SpriteMetadata,
+        images: col.Iterable[Path],
+        out_file: Path
 ) -> None:
     """Juice a sprite into external ``.gmspr`` file.
 
-    :param sprite: Sprite object.
-    :param project_root: Project root directory.
+    :param meta: Sprite metadata.
+    :param images: Sprite images.
     :param out_file: File to write resulting ``.gmspr`` bytes to.
     """
-    # read original metadata
-    meta = sprite.get_sprite_metadata(project_root)
 
     frames_bgra: list[bytes] = []
     width, height = 0, 0
 
-    for image_index in range(meta.frames):
-        img_path = sprite.get_sprite_image(project_root, image_index)
+    for img_path in images:
         with Image.open(img_path) as img:
             img = img.convert('RGBA')
             if width == 0:
@@ -1309,20 +1320,18 @@ def juice_sprite(
 
 
 def juice_background(
-    bg: my_asset.Background, project_root: Path, out_file: Path
+        *,
+        meta: my_asset.BackgroundMetadata,
+        image: Path,
+        out_file: Path
 ) -> None:
     """Juice a background into external ``.gmbck`` file.
 
-    :param bg: Background object.
-    :param project_root: Project root directory.
+    :param meta: Background metadata (``exists`` flag must be 1).
+    :param image: Background image.
     :param out_file: File to write resulting ``.gmbck`` bytes to.
     """
-    # read the original metadata
-    meta = bg.get_background_metadata(project_root)
-
-    # meta.exists == 0 was already filtered out
-    img_path = bg.get_background_image(project_root)
-    with Image.open(img_path) as img:
+    with Image.open(image) as img:
         img = img.convert('RGBA')
         width, height = img.size
         pixel_data = img.tobytes('raw', 'BGRA')
@@ -1397,8 +1406,20 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
         )
 
 
-def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
-    """Fix objects masks not updating when replacing sprites."""
+def juice_obj_fix_mask(
+        *,
+        obj_name: str,
+        obj_has_parent: bool,
+        input_gml: str,
+        output_gml_path: Path,
+) -> None:
+    """Fix objects masks not updating when replacing sprites.
+
+    :param obj_name: Object name.
+    :param obj_has_parent: Whether the object has parent.
+    :param input_gml: Input GML text.
+    :param output_gml_path: Output GML path.
+    """
     # exact action blocks, we'll validate against that;
     #  notice that endings are deliberately LF, that's how .gm82 save
     #  format works
@@ -1423,30 +1444,29 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
     # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
     #  being just children of SpikeUp with no alterations other than
     #  sprite) should have their code created
-    if not gml_path.exists():
-        gml_path.touch()
+    if not output_gml_path.exists():
+        output_gml_path.touch()
 
-    gml_text = gml_path.read_text(encoding='utf-8')
     # check that the text was properly saved with LFs
-    assert '\r\n' not in gml_text
+    assert '\r\n' not in input_gml, 'Object was saved with CRLF'
 
     # check different cases
-    if target_event in gml_text:
+    if target_event in input_gml:
         # CASE A: Room Start already exists
 
         # split event at event declaration and its trailing newline
-        parts = gml_text.split(target_event + '\n')
+        parts = input_gml.split(target_event + '\n')
 
         if len(parts) != 2:  # noqa: PLR2004
             # handle edge case where the event is at the very end of
             #  the file with no trailing newline
-            if gml_text.endswith(target_event):
-                parts = gml_text.split(target_event)
+            if input_gml.endswith(target_event):
+                parts = input_gml.split(target_event)
                 parts[1] = '\n'
             else:
                 raise ValueError(
                     f'Validation Error: Multiple Room Start events or '
-                    f"malformed structure found in '{obj.name}.gml'."
+                    f"malformed structure found in '{obj_name}.gml'."
                 )
 
         event_body = parts[1]
@@ -1457,7 +1477,7 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
             new_event_body = (
                 event_body[:offset] + injection_code + event_body[offset:]
             )
-            print(obj.name, '- A1: starts with a code block')
+            print(obj_name, '- A1: starts with a code block')
 
         elif event_body.startswith(block_604 + block_603):
             # CASE A2: starts with call parent, followed by a code block
@@ -1466,7 +1486,7 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
                 event_body[:offset] + injection_code + event_body[offset:]
             )
             print(
-                obj.name,
+                obj_name,
                 '- A2: starts with call parent, followed by a code block',
             )
 
@@ -1481,12 +1501,12 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
                 + event_body[offset:]
             )
             print(
-                obj.name,
+                obj_name,
                 '- A3: starts with call parent without code block '
                 'afterward???',
             )
             warnings.warn(
-                f'Object {obj.name} starts with call parent without '
+                f'Object {obj_name} starts with call parent without '
                 f'code block??? Investigate.',
                 stacklevel=2,
             )
@@ -1494,44 +1514,42 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
             # idk
             raise ValueError(
                 f'Validation Error: YYD ACTION match '
-                f"failed in '{obj.name}.gml'. The block immediately "
+                f"failed in '{obj_name}.gml'. The block immediately "
                 f"following '{target_event}' does not match YYD ACTION "
                 f'603 or 604 patterns.'
             )
 
         # rebuild, maintain LF
         new_text = parts[0] + target_event + '\n' + new_event_body
-        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+        output_gml_path.write_text(new_text, encoding='utf-8', newline='\n')
     else:
         # CASE B: Room Start doesn't exist
-        meta = obj.get_object_metadata(dir_out)
         # objects with no parent have this string blank
-        has_parent = bool(meta.parent)
 
         # append the event into the file
 
         # check newline
         #  since we could've just created the file, it is allowed
         #  to be empty
-        if gml_text and not gml_text.endswith('\n'):
-            gml_text += '\n'
+        if input_gml and not input_gml.endswith('\n'):
+            input_gml += '\n'
 
         new_block = target_event + '\n'
-        if has_parent:
+        if obj_has_parent:
             # CASE B1: use the "Call parent event" block
             new_block += block_604
             print(
-                obj.name,
+                obj_name,
                 '- B1: no room start + has parent, must add Call parent event',
             )
         else:
-            print(obj.name, '- B2: no room start')
+            print(obj_name, '- B2: no room start')
 
         # add the code block and injection
         new_block += block_603 + injection_code
-        gml_text += new_block
+        input_gml += new_block
 
-        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+        output_gml_path.write_text(input_gml, encoding='utf-8', newline='\n')
 # <md>
 # Now, I didn't add any code for you to test those functions. Those can be
 # "tested" in the fully assembling the pipeline at the end.
@@ -1568,11 +1586,296 @@ def main_ex_juicer_processing() -> None:
     """
 
 
+class TaskEncodeSprite(TaskGeneric):
+    """Encode sprite into an external ``.gmspr`` file."""
+
+    def __init__(
+            self,
+            *,
+            sprite: my_asset.Sprite,
+            dir_input_root: Path,
+            dir_wet_root: Path,
+    ) -> None:
+        file_metadata = sprite.get_sprite_metadata_file(dir_input_root)
+        self.sprite_meta = sprite.get_sprite_metadata(dir_input_root)
+        self.sprite_images = tuple(
+            sprite.get_sprite_image(dir_input_root, frame)
+            for frame in range(self.sprite_meta.frames)
+        )
+
+        self.file_output_gmspr = dir_wet_root / type(sprite).type_get_dir_rel() / asset_wet_fname(sprite)
+
+        super().__init__(
+            task_id=f'proc_spr_{sprite.name}',
+            inputs=(
+                file_metadata,
+                *self.sprite_images
+            ),
+            outputs=(self.file_output_gmspr,)
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_sprite(
+            meta=self.sprite_meta,
+            images=self.sprite_images,
+            out_file=self.file_output_gmspr,
+        )
+        pass
+
+
+class TaskEncodeBackground(TaskGeneric):
+    """Encode background into an external ``.gmbck`` file."""
+
+    def __init__(
+            self,
+            *,
+            background: my_asset.Background,
+            dir_input_root: Path,
+            dir_wet_root: Path,
+    ) -> None:
+        file_metadata = background.get_background_metadata_file(dir_input_root)
+        self.background_meta = background.get_background_metadata(dir_input_root)
+        self.background_image = background.get_background_image(dir_input_root)
+
+        self.file_output_gmbck = dir_wet_root / type(background).type_get_dir_rel() / asset_wet_fname(background)
+
+        super().__init__(
+            task_id=f'proc_bg_{background.name}',
+            inputs=(
+                file_metadata,
+                self.background_image
+            ),
+            outputs=(self.file_output_gmbck,)
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_background(
+            meta=self.background_meta,
+            image=self.background_image,
+            out_file=self.file_output_gmbck,
+        )
+
+
+class TaskCompressAudio(TaskGeneric):
+    """Compress audio."""
+
+    def __init__(
+            self,
+            *,
+            audio: AssetExtAudio,
+            dir_wet_root: Path,
+    ) -> None:
+        self.audio = audio
+        self.file_output = dir_wet_root / type(audio).type_get_dir_rel() / asset_wet_fname(audio)
+
+        super().__init__(
+            task_id=f'compress_{audio.name_clean}',
+            inputs=(audio.file,),
+            outputs=(self.file_output,)
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_audio(self.audio, self.file_output)
+
+
+class TaskFixMaskObjects(TaskGeneric):
+    """Copy object and inject mask fix."""
+
+    def __init__(
+            self,
+            *,
+            obj: my_asset.Object,
+            dir_input_root: Path,
+            dir_out_root: Path,
+    ) -> None:
+        self.file_input_meta = obj.get_object_metadata_file(dir_input_root)
+        self.file_input_gml = obj.get_object_gml_file(dir_input_root)
+
+        self.file_output_meta = dir_out_root / self.file_input_meta.relative_to(dir_input_root)
+        self.file_output_gml = dir_out_root / self.file_input_gml.relative_to(dir_input_root)
+
+        meta = obj.get_object_metadata(dir_input_root)
+        self.obj_name = obj.name
+        self.obj_has_parent = bool(meta.parent)
+        # objects gml files are guaranteed to exist
+        # using read module because this gml was likely already read before
+        self.obj_input_gml = my_read.read(obj.get_object_gml_file(dir_input_root))
+        self.obj_output_gml_file = dir_out_root / obj.get_object_gml_file(dir_input_root).relative_to(dir_input_root)
+
+        super().__init__(
+            task_id=f'fixmasks_{obj.name}',
+            inputs=(self.file_input_meta, self.file_input_gml),
+            outputs=(self.file_output_meta, self.file_output_gml),
+        )
+
+    @override
+    def execute(self) -> None:
+        shutil.copy2(self.file_input_meta, self.file_output_meta)
+        shutil.copy2(self.file_input_gml, self.file_output_gml)
+        juice_obj_fix_mask(
+            obj_name=self.obj_name,
+            obj_has_parent=self.obj_has_parent,
+            input_gml=self.obj_input_gml,
+            output_gml_path=self.obj_output_gml_file,
+        )
+
+
 def main_juicer_classes() -> None:
-    """Wrap asset processing in Tasks.
+    """Wrap asset processing into Tasks.
 
+    Few design notes:
 
+    1. make sure tasks contents stay lightweight enough to be sent over IPC
+    2. make sure task's execute method stays pure (doesn't rely on global
+       variables or other pre-initialized state)
+    3. use keyword-only arguments for constructors because those paths are
+       easy to mess up
     """
+
+
+
+
+
+def main_juicer_run(assets: list[Asset]) -> None:
+    """Run the thing.
+
+    This stage is responsible for mapping out source project, generating
+    tasks, and sending tasks to executors.
+
+    While the logic was outlined in [Juicing](#juicing), few things make
+    this process a bit messy:
+
+    1. External audio is not a top level folder.
+    2. We must also account for Common assets, and make sure they get copied
+       just so.
+
+    Therefore, I've made logic of task generation very explicit.
+    """
+
+    # filter assets by their juiceable type
+    asset_sprites: list[my_asset.Sprite] = []
+    asset_backgrounds: list[my_asset.Background] = []
+    asset_objects: list[my_asset.Object] = []
+    asset_audio: list[AssetExtAudio] = []
+    for asset in assets:
+        if isinstance(asset, my_asset.Sprite):
+            asset_sprites.append(asset)
+        if isinstance(asset, my_asset.Background):
+            asset_backgrounds.append(asset)
+        if isinstance(asset, my_asset.Object):
+            asset_objects.append(asset)
+        if isinstance(asset, AssetExtAudio):
+            asset_audio.append(asset)
+
+    tasks_threaded: list[Task] = []
+    tasks_objects: list[Task] = []  # special list to not fix twice
+    tasks_mp: list[Task] = []
+
+    # create build folder
+    JUICER.dir_out.mkdir(parents=True, exist_ok=True)
+
+    # them functions
+    def pth_symlink(pth: Path) -> None:
+        """Create a symlink from input project root to build output."""
+        # this ain't IO bound operation so do it in-place
+        pth.symlink_to(
+            JUICER.dir_out / pth.relative_to(PROJECT),
+            target_is_directory=True
+        )
+
+    def map_root(dir_root: Path) -> None:
+        """Map project root."""
+        for pth in dir_root.iterdir():
+            if pth.is_file():
+                if pth.suffix == '.gm82':
+                    tasks_threaded.append(TaskCopy(
+                        file=pth,
+                        dir_input_root=PROJECT,
+                        dir_output_root=JUICER.dir_out
+                    ))
+                else:
+                    raise NotImplementedError("Unknown file in project root")
+                continue
+            assert pth.is_dir()
+            match pth.name:
+                case 'backgrounds':
+                    # process backgrounds
+                    pass
+                case 'cache':
+                    # cache is not needed for building
+                    pass
+                case 'data':
+                    # multicase handle
+                    map_data(pth)
+                case 'fonts':
+                    # symlink
+                    pth_symlink(pth)
+                case 'objects':
+                    # process fix masks
+                    map_objects()
+                case 'paths':
+                    # symlink
+                    pth_symlink(pth)
+                case 'rooms':
+                    # symlink
+                    pth_symlink(pth)
+                case 'save':
+                    # symlink
+                    pth_symlink(pth)
+                case 'scripts':
+                    # copy (we'll have to dynamically change a few scripts)
+                    tasks_threaded.append(TaskCopyTree(
+                        pth,
+                        JUICER.dir_out / pth.relative_to(PROJECT),
+                    ))
+                case 'settings':
+                    # symlink
+                    pth_symlink(pth)
+                case 'sprites':
+                    # process sprites
+                    pass
+                case 'triggers':
+                    # symlink
+                    pth_symlink(pth)
+                case _:
+                    raise NotImplementedError('Unknown folder in project root')
+
+    def map_data(dir_data: Path) -> None:
+        """Map data folder."""
+
+        # you wanna change names to reflect paths in AssetExtAudio classes
+        for pth in dir_data.iterdir():
+            if pth.is_file():
+                tasks_threaded.append(TaskCopy(
+                    file=pth,
+                    dir_input_root=PROJECT,
+                    dir_output_root=JUICER.dir_out
+                ))
+                continue
+            match pth.name:
+                case 'music':
+                    # process bgm
+                    pass
+                case 'sounds':
+                    # process sfx + sfx3
+                    pass
+                case _:
+                    # copy idk
+                    pass
+
+    def map_objects() -> None:
+        """Map objects."""
+        for obj in asset_objects:
+            # add all regardless of cluster
+            tasks_threaded.append(TaskFixMaskObjects(
+                obj=obj,
+                dir_input_root=PROJECT,
+                dir_out_root=JUICER.dir_out
+            ))
+
 
 
 def main_juicer_copy(assets: list[Asset]) -> None:
@@ -2408,7 +2711,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
 
 # --- COG_START: CLS_TASKS ---
-class TaskAsset[TAsset: my_asset.AssetFile](my_proj_task.Task, ABC):
+class TaskAsset[TAsset: my_asset.AssetFile](my_task.Task, ABC):
     """Generic asset-based task."""
 
     @abstractmethod
@@ -2767,7 +3070,7 @@ class ProcessorGeneric[TAsset: my_asset.AssetFile](
 
     def generate_tasks(
         self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
-    ) -> col.Iterable[my_proj_task.Task]:
+    ) -> col.Iterable[my_task.Task]:
         """Generate tasks for converting all assets of this type."""
         for asset in filter_type(self.cls_asset, assets):
             yield self.cls_task(
@@ -2805,7 +3108,7 @@ class ProcessorRoomsPatch(my_proj_processor.Processor):
 
     def generate_tasks(
         self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
-    ) -> col.Iterable[my_proj_task.Task]:
+    ) -> col.Iterable[my_task.Task]:
         """Generate room fix tasks."""
         for room in filter_type(my_asset.Room, assets):
             yield TaskFixBgStretchRooms(
@@ -2821,7 +3124,7 @@ class ProcessorRoomsPatch(my_proj_processor.Processor):
 
 
 def main_juicer2_cls() -> tuple[
-    my_proj_cache.FileBuildCache,
+    my_cache.FileBuildCache,
     my_proj_ignore.FileIgnore,
     tuple[my_proj_processor.Processor, ...],
 ]:
@@ -2855,7 +3158,7 @@ def main_juicer2_cls() -> tuple[
     """
     # --- COG_START: MAIN_EX_JUICER2_CLS ---
     # setup build cache and ignore file while we're at it
-    cl_cache = my_proj_cache.FileBuildCache(JUICER.file_cache)
+    cl_cache = my_cache.FileBuildCache(JUICER.file_cache)
     cl_ignore = my_proj_ignore.FileIgnore.from_file(JUICER.file_ignore)
     dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
     cl_processors = (
@@ -2889,7 +3192,7 @@ def main_juicer2_cls() -> tuple[
 
 
 def main_juicer2_copy(
-    cl_cache: my_proj_cache.FileBuildCache,
+    cl_cache: my_cache.FileBuildCache,
     cl_ignore: my_proj_ignore.FileIgnore,
     cl_processors: col.Iterable[my_proj_processor.Processor],
 ) -> None:
@@ -2938,7 +3241,7 @@ def main_juicer2_copy(
         # check cache
         dest_path = JUICER.dir_out / rel_path
         task_id = f'copy_{rel_posix}'
-        current_hash = my_proj_cache.file_hash(src_path)
+        current_hash = my_cache.file_hash(src_path)
         if cl_cache.is_fresh(
             task_id=task_id,
             current_hash=current_hash,
@@ -2961,14 +3264,14 @@ def main_juicer2_copy(
 
 def main_juicer2_mp(
     assets: list[Asset],
-    cl_cache: my_proj_cache.FileBuildCache,
+    cl_cache: my_cache.FileBuildCache,
     cl_processors: col.Iterable[my_proj_processor.Processor],
 ) -> None:
     """This is it Luigi."""
     # --- COG_START: MAIN_EX_JUICER2_MP ---
     print('Generating tasks...')
 
-    tasks: list[my_proj_task.Task] = []
+    tasks: list[my_task.Task] = []
     stat_cached = 0
 
     for proc in cl_processors:
@@ -2996,7 +3299,7 @@ def main_juicer2_mp(
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # submit to wrapper
             futures = [
-                executor.submit(my_proj_task.worker_exec_task, task)
+                executor.submit(my_task.worker_exec_task, task)
                 for task in tasks
             ]
 

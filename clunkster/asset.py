@@ -6,6 +6,7 @@ import pathlib as pl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self, override
+import functools as ft
 
 from clunkster.parse import index as my_parse_index
 from clunkster.parse import kv as my_parse_kv
@@ -426,6 +427,10 @@ class AssetSingleFile(AssetHasPath, AssetHasDir, ABC):
         """
         return f'"{file.stem}"'
 
+    @property
+    def name_clean(self) -> str:
+        return self.name[1:-1]
+
     @classmethod
     def type_file_to_tree_path(cls, project_root: pl.Path, file: pl.Path) -> tuple[str, ...]:
         """Convert file to path."""
@@ -467,6 +472,7 @@ class Background(AssetBuiltin):
         """Get background's metadata (``.txt``) file."""
         return type(self).type_get_dir(project_root) / f'{self.name}.txt'
 
+    @ft.lru_cache()
     def get_background_metadata(
         self, project_root: pl.Path
     ) -> BackgroundMetadata:
@@ -528,6 +534,7 @@ class Object(AssetBuiltin):
         """Get object's metadata (``.txt``) file."""
         return type(self).type_get_dir(project_root) / f'{self.name}.txt'
 
+    @ft.lru_cache()
     def get_object_metadata(self, project_root: pl.Path) -> ObjectMetadata:
         """Get object's metadata."""
         file = self.get_object_metadata_file(project_root)
@@ -576,6 +583,7 @@ class Room(AssetBuiltin):
         """Get room's metadata (``.txt``) file."""
         return self.get_room_folder(project_root) / 'room.txt'
 
+    @ft.lru_cache()
     def get_room_metadata(self, project_root: pl.Path) -> RoomMetadata:
         """Get room's metadata."""
         file = self.get_room_metadata_file(project_root)
@@ -626,6 +634,7 @@ class Sprite(AssetBuiltin):
         """Get sprite's metadata file."""
         return self.get_sprite_folder(project_root) / 'sprite.txt'
 
+    @ft.lru_cache()
     def get_sprite_metadata(self, project_root: pl.Path) -> SpriteMetadata:
         """Get sprite's metadata."""
         file = self.get_sprite_metadata_file(project_root)

@@ -754,7 +754,13 @@ To elaborate:
 - we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
 - dynamic loading of sprites and backgrounds presents us with a few new game maker bugs that we need to address:
     - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
-    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code
+    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+```gml
+if background_width0>0 && background_height0>0 {{
+    background_xscale0=room_width/background_width0
+    background_yscale0=room_height/background_height0
+}}
+```
 - since for some projects Juicing is the only way to run the project, builds must be fast:
     - processing tasks must support caching
     - asset dirs without processing can be symlinked
@@ -778,6 +784,9 @@ With that said, the project building strategy becomes:
     - multiprocessing for processing tasks (image encoding, audio compression)
     - threading for copy tasks
     - the rest can happen synchronously right at the task generation
+
+Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their 
+original path relative to the project root>`
 
 ## Integration into the project
 
