@@ -5,20 +5,16 @@ from scripts import doc_parse, doc_extract, doc_patch, doc_toc, doc_headers, doc
 from doc_code import shad, gen_stub_func, gen_stub_cls, gen_stub_var
 
 
-class MockRend:
-    def href(self, *_):
-        return ""
+FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
 @doc_patch.template()
 def readme_txt():
     file_main = Path(__file__).parent.parent / 'main.py'
-    file_readme = Path(__file__).parent.parent / 'README.md'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
     snips = doc_extract.extract(doc_parse.parse(lines_main))
     head = doc_headers.ExampleHeaderGenerator()
-    rend = MockRend()
     docs = doc_docstring.extract(txt_main)
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
@@ -27,7 +23,7 @@ def readme_txt():
 
     # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
-{exs.reset()}    
+{exs.reset()}
 
 # Clunkster
 
@@ -37,14 +33,14 @@ Most of the tools depend heavily on asset clustering (i.e. assigning each asset 
 
 Given the architectural differences across GameMaker projects, Clunkster is organized as a set of "[examples](#examples)" that you can copy and modify. The library itself provides functions that facilitate the core logic and handle non-obvious edge cases.
 
-Please refer to [Rationale](#rationale) and [Prerequisites](#prerequsities) to see it these tools fit your project's needs.
+Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see it these tools fit your project's needs.
 
 Non-destructive tools:
 - Linter: `tree.yyd` validator
-- Linter: unused assets detector (see {rend.href('ex_lint_unused')} and {rend.href('ex_lint_unused_graph')})
+- Linter: unused assets detector (see {exs.href('ex_lint_unused')} and {exs.href('ex_lint_unused_graph')})
 - (TODO) Linter: heavy assets detector (RAM & disk size)
-- Linter: cross-cluster reference boundary validator (see {rend.href('ex_lint_crossref')})
-- Linter: room indirect reference validator via dependency graph (see {rend.href('ex_lint_crossref_graph')})
+- Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})
+- Linter: room indirect reference validator via dependency graph (see {exs.href('ex_lint_crossref_graph')})
 
 Lightly destructive tools:
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
@@ -56,7 +52,7 @@ Super destructive tools:
 
 # TOC
 
-{'\n'.join(doc_toc.generate_toc(str(file_readme)))}
+{'\n'.join(doc_toc.generate_toc(str(FILE_README)))}
 
 # Rationale
 
@@ -115,7 +111,7 @@ Following sections elaborate on prerequisites, reasons behind them, antipatterns
 
 ### [HowTo] Prerequisites - Project & Asset organization
 
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{rend.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{exs.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
 
 ❌ Bad:
 
@@ -253,7 +249,7 @@ if place_meeting(x, y, SpikeIce) {{
 }}
 ```
 
-Now the Player directly references `SpikeIce`. The {rend.href("ex_lint_crossref", "analyzer")} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
+Now the Player directly references `SpikeIce`. The {exs.href("ex_lint_crossref", "analyzer")} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
 
 This can be solved in a few ways.
 
@@ -1113,7 +1109,8 @@ Following examples represent parts of the workflow for the game this tool was in
                 'AssetExtBgm', 
                 'AssetExtSfx', 
                 'AssetExtSfx3',
-            )
+            ),
+        'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession')
     })}
 
 {exs.code_begin('ex_lint_tree', 'Lint: `tree.yyd` files')}
@@ -1122,7 +1119,8 @@ Following examples represent parts of the workflow for the game this tool was in
 {exs.render((
         exs.stub('CLS_ASSET_EXT'),
         snips['CLS_LINT_TREE'],
-        snips['PROJECT'],
+        snips['CLUSTERABLE_ASSETS'],
+        exs.stub('PROJECT'),
         snips['MAIN_EX_LINT_TREE'],
     ))}
 
@@ -1132,8 +1130,9 @@ Following examples represent parts of the workflow for the game this tool was in
         snips['ALIAS'],
         snips['CLS_ASSET_EXT'],
         snips['DEF_ASSET_CLUSTERS'],
+        snips['CLS_LINT_ALIAS'],
         snips['CLUSTERABLE_ASSETS'],
-        snips['PROJECT'],
+        exs.stub('PROJECT'),
         snips['MAIN_EX_ALIASES'],
     ))}
 
@@ -1148,24 +1147,30 @@ Following examples represent parts of the workflow for the game this tool was in
 {docs['main_ex_scan_sync']}
 {exs.render((
         exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
+        snips['DEF_ASSET_SCANNABLES'],
         snips['CLS_DEPENDENCY'],
+        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
-        snips['PROJECT'],
         snips['MAIN_EX_SCAN_SYNC'],
     ))}
 
 {exs.code_reg_stub_src({
         'CLS_DEPENDENCY': gen_stub_cls('Dependency'),
         'VAR_DEPS': gen_stub_var('dependencies: list[Dependency]'),
+        'DEF_ASSET_SCANNABLES': gen_stub_func('asset_scannables')
     })}
 
 {exs.code_begin('ex_lint_unused', 'Lint: unused assets')}
 {docs['main_ex_lint_unused']}
 {exs.render((
         exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
+        snips['DEF_ASSET_SORT_KEY'],
         exs.stub('CLS_DEPENDENCY'),
         snips['CLS_LINT_ASSET_CLUSTER'],
         snips['CLS_LINT_UNUSED'],
+        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         snips['MAIN_EX_LINT_UNUSED'],
@@ -1174,6 +1179,7 @@ Following examples represent parts of the workflow for the game this tool was in
 {exs.code_reg_stub_src({
         'CLS_LINT_ASSET_CLUSTER': gen_stub_cls('LintAssetCluster'),
         'CLS_LINT_UNUSED': gen_stub_cls('LintUnused'),
+        'DEF_ASSET_SORT_KEY': gen_stub_func('asset_sort_key'),
     })}
 
 {exs.code_begin('ex_lint_crossref', 'Lint: cross-cluster references')}
@@ -1182,9 +1188,11 @@ Following examples represent parts of the workflow for the game this tool was in
         snips['LINT_RULES'],
         snips['CONTEXT_RULES'],
         exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_LINT_ASSET_CLUSTER'),
         snips['CLS_LINT_CROSSREF'],
+        exs.stub('PROJECT'),
         exs.stub('VAR_DEPS'),
         snips['MAIN_EX_LINT_CROSSREF'],
     ))}
@@ -1204,6 +1212,7 @@ Following examples represent parts of the workflow for the game this tool was in
         snips['EXTRA_ROOTS'],
         snips['DEF_TYPE_FILTER'],
         exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
         exs.stub('CLS_DEPENDENCY'),
         snips['CLS_ROOM_GRAPH'],
         exs.stub('VAR_ASSETS'),
@@ -1227,6 +1236,7 @@ Following examples represent parts of the workflow for the game this tool was in
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_ROOM_GRAPH'),
         exs.stub('CLS_LINT_UNUSED'),
+        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         exs.stub('VAR_ROOM_DATA'),
@@ -1240,9 +1250,12 @@ Following examples represent parts of the workflow for the game this tool was in
         exs.stub('CONTEXT_RULES'),
         exs.stub('EXTRA_ROOTS'),
         exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
+        exs.stub('DEF_ASSET_SORT_KEY'),
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_ROOM_GRAPH'),
         snips['CLS_LINT_CROSSREF_GRAPH'],
+        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         exs.stub('VAR_ROOM_DATA'),
@@ -1251,6 +1264,9 @@ Following examples represent parts of the workflow for the game this tool was in
 
 """
 
+def main() -> None:
+    FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
+
 
 if __name__ == '__main__':
-    print(readme_txt())
+    main()

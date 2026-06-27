@@ -93,6 +93,8 @@ def template[**P](max_iterations: int = 10) -> Callable[[Callable[P, str]], Call
                 if isinstance(part, FstringPartCode)}
             last_exceptions: dict[int, Exception] = {}
 
+            exec(setup_code, global_scope, local_scope)
+
             iterations = 0
             while iterations < max_iterations:
                 iterations += 1
@@ -100,7 +102,7 @@ def template[**P](max_iterations: int = 10) -> Callable[[Callable[P, str]], Call
                 resolved_snippets: list[Snippet] = []  # resulting string parts
 
                 # probably reset the local scope here
-                exec(setup_code, global_scope, local_scope)
+                # exec(setup_code, global_scope, local_scope)
 
                 for i, part in enumerate(fstring_parts):
                     if isinstance(part, str):

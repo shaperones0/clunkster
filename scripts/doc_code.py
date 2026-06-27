@@ -104,6 +104,10 @@ class CodeGenerator:
         stub = self.snippet_stub[snippet_name]
         return f'# see {header.header_mini}\n{stub}'
 
+    def href(self, code_name: CodeName, text: str | None = None) -> str:
+        header = self.code_header[code_name]
+        return header.render_href(text=text)
+
     def reg_head(self, code_name: CodeName, header: doc_headers.Header) -> None:
         self.code_header[code_name] = header
 

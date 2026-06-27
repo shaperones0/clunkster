@@ -14,7 +14,7 @@ def str_to_anchor(text: str) -> str:
     :param text: Text to convert.
     :return: Safe anchor.
     """
-    return re.sub(r'\s+', '-', re.sub(r'[^\w\-\s]', '', text.lower()))
+    return re.sub(r'[^\w\-]', '', re.sub(r'[\s]+', '-', re.sub(r'^[\s#]*', '', text).strip().lower()))
 
 
 class Header(ABC):
