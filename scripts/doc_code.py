@@ -25,6 +25,35 @@ def shad(_) -> str:
     return ""
 
 
+
+def gen_stub_cls(*names: str) -> str:
+    """Generate stub classes.
+
+    :param names: Class names.
+    :return: Python code with stub classes.
+    """
+    return '\n'.join(f'class {name}: ...' for name in names)
+
+
+def gen_stub_var(*names: str) -> str:
+    """Generate stub variables.
+
+    :param names: Variable names (can include type hints).
+    :return: Python code with stub variables.
+    """
+    return '\n'.join(f'{name} = ...' for name in names)
+
+
+def gen_stub_func(*names: str) -> str:
+    """Generate stub variables.
+
+    :param names: Variable names (can include type hints).
+    :return: Python code with stub variables.
+    """
+    return '\n'.join(f'def {name}(): ...' for name in names)
+
+
+
 class CodeGenerator:
     """Code generator."""
 
@@ -62,12 +91,13 @@ class CodeGenerator:
         return header.render_header()
 
     @_none_to_empty_str
-    def code_reg_stub_src(self, *stub_snippet_names: SnippetName) -> None:
+    def code_reg_stub_src(self, stub_name_to_stub: dict[SnippetName, str]) -> None:
         assert self.current_code_name
-        for name in stub_snippet_names:
-            self.snippet_owner[name] = self.current_code_name
+        for stub_name, stub_code in stub_name_to_stub.items():
+            self.reg_stub_src(self.current_code_name, stub_name)
+            self.reg_stub_code(stub_name, stub_code)
 
-    def rend_stub(self, snippet_name: SnippetName) -> str:
+    def stub(self, snippet_name: SnippetName) -> str:
         # keep KeyError
         name = self.snippet_owner[snippet_name]
         header = self.code_header[name]
@@ -82,6 +112,9 @@ class CodeGenerator:
         if existing is not None and existing != code_name:
             raise KeyError(f'Several codes ({self.snippet_owner[stub_snippet_name]}, {code_name}) registered as owners of {stub_snippet_name}')
         self.snippet_owner[stub_snippet_name] = code_name
+
+    def reg_stub_code(self, stub_snippet_name: SnippetName, stub_code: str) -> None:
+        self.snippet_stub[stub_snippet_name] = stub_code
 
     def render(self, seq: col.Iterable[InputJunk], *, render_imports: bool = True, render_code: bool = True) -> list[Snippet]:
         snips_code, snips = _sep_seq(seq)
@@ -101,12 +134,12 @@ def _sep_seq(seq: col.Iterable[InputJunk]) -> tuple[list[str], list[Snippet]]:
             snips_code.append(thing)
             snips.append(s_py(thing))
         elif isinstance(thing, Snippet):
-            if thing.type == SnippetType.PYTHON:
+            if thing.type.name == 'PYTHON':     # why do you make me do this
                 snips_code.append(thing.content)
             snips.append(thing)
         else:
             for snip in thing:
                 snips.append(snip)
-                if snip.type == SnippetType.PYTHON:
+                if snip.type.name == 'PYTHON':
                     snips_code.append(snip.content)
     return snips_code, snips

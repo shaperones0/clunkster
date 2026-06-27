@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from scripts import doc_parse, doc_extract, doc_patch, doc_toc, doc_headers, doc_code, doc_docstring
-from doc_code import shad
+from doc_code import shad, gen_stub_func, gen_stub_cls, gen_stub_var
 
 
 class MockRend:
@@ -1107,7 +1107,38 @@ Following examples represent parts of the workflow for the game this tool was in
         snips['PROJECT'],
         snips['MAIN_EX_START'],
     ))}
-{exs.code_reg_stub_src('CLS_ASSET_EXT')}
+{exs.code_reg_stub_src({
+        'CLS_ASSET_EXT': gen_stub_cls(
+                'AssetExtAudio', 
+                'AssetExtBgm', 
+                'AssetExtSfx', 
+                'AssetExtSfx3',
+            )
+    })}
+
+{exs.code_begin('ex_lint_tree', 'Lint: `tree.yyd` files')}
+
+{docs['main_ex_lint_tree']}
+{exs.render((
+        exs.stub('CLS_ASSET_EXT'),
+        snips['PROJECT'],
+        snips['MAIN_EX_LINT_TREE'],
+    ))}
+
+{exs.code_begin('ex_aliases', 'Clusters')}
+{exs.render((
+        snips['ALIAS'],
+        snips['CLS_ASSET_EXT'],
+        snips['DEF_ASSET_CLUSTERS'],
+        snips['CLUSTERABLE_ASSETS'],
+        snips['PROJECT'],
+        snips['MAIN_EX_ALIASES'],
+    ))}
+
+{exs.code_reg_stub_src({
+        'VAR_ASSETS': gen_stub_var('assets: list[Asset]'),
+        'DEF_ASSET_CLUSTERS': gen_stub_func('asset_cluster_raw', 'asset_cluster')
+    })}
 
 """
 

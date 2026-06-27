@@ -21,10 +21,10 @@ def render(inp: col.Iterable[Snippet], delim_same_type: dict[str, str] | None = 
     fence = chr(96) * 3
     for snippet in _snip_rle(inp, delim_type=delim_same_type):
         # guaranteed to be surrounded with not same type blocks
-        match snippet.type:
-            case SnippetType.MD:
+        match snippet.type.name:      # what the fuck
+            case 'MD':
                 blocks.append(snippet.content.strip('\n'))
-            case SnippetType.PYTHON:
+            case 'PYTHON':
                 blocks.append(f"{fence}py\n{snippet.content.strip('\n')}\n{fence}")
     return delim_diff.join(blocks)
 
@@ -46,20 +46,19 @@ def _snip_rle(inp: col.Iterable[Snippet], delim_type: dict[str, str] | None = No
     cur_type: SnippetType = SnippetType.MD
     cur_parts: list[str] = []
     for snippet in inp:
-        if snippet.type.name == cur_type.name:  # what the fuck
+        if snippet.type.name == cur_type.name:
             cur_parts.append(snippet.content)
             continue
 
         # new type: yield new snippet
-        non_empty = bool(''.join(cur_parts).strip())
-        if non_empty:
+        if bool(''.join(cur_parts).strip()):
             yield Snippet(
                 type=cur_type,
                 content=delim_type[cur_type.name].join(cur_parts),
             )
         cur_parts[:] = [snippet.content]
         cur_type = snippet.type
-    if cur_parts:
+    if bool(''.join(cur_parts).strip()):
         yield Snippet(
             type=cur_type,
             content=delim_type[cur_type.name].join(cur_parts),
