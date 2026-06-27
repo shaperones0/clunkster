@@ -1094,6 +1094,9 @@ Following examples represent parts of the workflow for the game this tool was in
 
 {head.next_section("Reading project").render_header()}
 
+This section is about discovering assets from project files, doing initial 
+validations and assigning clusters to the assets.
+
 {exs.code_begin("ex_start", "Finding assets")}
 
 {docs['main_ex_start']}
@@ -1142,6 +1145,9 @@ Following examples represent parts of the workflow for the game this tool was in
     })}
 
 {head.next_section("References").render_header()}
+
+This section is about finding asset references in `.gml` files, and running 
+validations based on them.
 
 {exs.code_begin('ex_scan_sync', 'Reference scanning')}
 {docs['main_ex_scan_sync']}
@@ -1203,6 +1209,9 @@ Following examples represent parts of the workflow for the game this tool was in
     })}
 
 {head.next_section('Dependency Graph').render_header()}
+
+This section is about building a graph out of dependencies, and running 
+checks based on more advanced usage tracing.
 
 {exs.code_begin('ex_graph', 'Generate dependency graphs')}
 {docs['main_ex_graph']}

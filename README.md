@@ -1091,12 +1091,25 @@ Following examples represent parts of the workflow for the game this tool was in
 
 ## 1 - Reading project
 
+This section is about discovering assets from project files, doing initial 
+validations and assigning clusters to the assets.
+
 ### Example 1.1 - Finding assets
 
 Let's start with some simple scanning.
 
-We want to check that assets get detected correctly. We don't really do
-clusters yet - that will be handled a bit later down the line.
+Clunkster already provides utils for scanning builtin assets and
+single-file external assets (such as audio for `gm82snd`). However,
+registering those external assets is left as a task for the user.
+
+Also notice the global variables:
+
+- `PROJECT` should point at the folder where project's `.gm82` file
+  is located.
+- `LINT` is the error accumulator that is used by tools down the line.
+
+The convenience function `global_set_project` is provided to set up
+given path as the source project root.
 
 ```py
 import collections.abc as col
@@ -1187,7 +1200,7 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     AssetExtSfx3,
 )
 
-PROJECT = Path('path/to/the/project')
+PROJECT: Path
 LINT: my_lint.LinterSession
 
 
@@ -1206,11 +1219,16 @@ for asset_type in CLUSTERABLE_ASSETS:
     if not asset_type.type_is_used(PROJECT):
         continue
 
+    # type_discover_all handles the discovery of all assets per
+    #  asset type.
     assets.extend(asset_type.type_discover_all(PROJECT))
 
-# you should investigate the resulting array for inconsistencies
 print(f'Discovered {len(assets)} total assets.')
 ```
+
+I recommend checking the resulting `assets` array for any weirdness in
+debug before going further.
+
 
 ### Example 1.2 - Lint: `tree.yyd` files
 
@@ -1219,11 +1237,33 @@ Now we must check integrity of `tree.yyd` files and asset names.
 Asset discovery and clusterization is based on scanning `tree.yyd`
 files, so we have to ensure that they have no duplicate folders.
 
-Technically, before doing that you should also check that there are also
-no duplicate asset names via broom icon on IDE toolbar.
+This example also serves as an introduction to Clunkster's linter system.
+It implements things like accumulating errors to printed in a list view,
+sorting and grouping them by type, verbose output, etc.
+
+In order to make reports as thorough as possible, Clunkster provides
+various classes and mixins for customizing violation scope:
+
+- `LinterViolation`: base violation, not bound to any file or asset
+- `LinterViolationMessage`: adds a short error message
+- `LinterViolationFile`: binds error to a specific file
+- `LinterViolationLocated`: binds error to a location in the file
+- `LinterViolationAsset`: mixin that binds error to a specific asset
+
+For linting `tree.yyd` files we want to check that:
+1. all asset names are unique: handled by `LintTreeDuplicateAsset`, this
+  violation is abstract and isn't really bound to a specific file,
+  since duplicate assets can exist across multiple types.
+2. no duplicate folders in tree: handled by `LintTreeDuplicateFolder`,
+  this violation is done only within same asset type and is bound to a
+  location in specific `tree.yyd` file.
+
+All the linter violations should have their ID (like A100) and severity.
+Default violation processor would print info messages, turn warn messages
+into warnings and raise errors.
 
 Since any inconsistency will cause big issues in the pipeline, every
-violation will be raised as an error and halt the pipline.
+violation is marked as error.
 
 ```py
 import collections
@@ -1367,18 +1407,19 @@ for asset_type in CLUSTERABLE_ASSETS:
 LINT.consume()
 ```
 
-If you got no duplicates messages in the output then you're all good.
-
 ### Example 1.3 - Clusters
-Generate clusters and fix inconsistencies in cluster map.
+Generate clusters.
 
-We will autogenerate our clusters by their top level folder name. After
-doing that, you may encounter things like different clusters `"StageA"`
-and `"stage_a"` (project didn't follow strict naming), as well as a
-bunch of things that should belong to Common cluster
-(Backgrounds, Game, etc.).
+Once we validated assets and trees, we can do cluster generation. We'll
+look at the top level folder name. In order to merge things like
+`"StageA"` and `"stage_a"` into single cluster `"StageA"`, we'll
+use the alias system.
 
-Which is easily fixed by a simple alias system for the clusters.
+Now, the alias dictioanry can become quite large, so I added additional
+validation. Now we detect unused or extra names.
+
+Also, this script has a neat table output for clusters per asset type,
+It can be useful to discern where exactly any extra names are located.
 
 ```py
 import collections.abc as col
@@ -1542,7 +1583,7 @@ for name, clusters in ALIAS.items():
         lint_existing_aliases.add(name)
 
 # this will help us generate the table below
-table_type_2_clusters: dict[type[Asset], list[str]] = {}
+table_type_to_clusters: dict[type[Asset], list[str]] = {}
 
 # ALIAS linter: find actually used names in ALIAS
 lint_used_aliases: set[str] = set()
@@ -1561,14 +1602,14 @@ for asset_type in CLUSTERABLE_ASSETS:
 
         assets.append(asset)
 
-    table_type_2_clusters[asset_type] = list(cluster_set)
+    table_type_to_clusters[asset_type] = list(cluster_set)
 
 # generate the table
 clusters_all = sorted(
-    {name for clusters in table_type_2_clusters.values() for name in clusters}
+    {name for clusters in table_type_to_clusters.values() for name in clusters}
 )
 print('All clusters:', *clusters_all)
-for asset_type, clusters in table_type_2_clusters.items():
+for asset_type, clusters in table_type_to_clusters.items():
     cluster_set = set(clusters)
     row = [
         clm if clm in cluster_set else ' ' * len(clm)
@@ -1600,20 +1641,19 @@ Keep using the table thing until all aliases are gone.
 
 ## 2 - References
 
+This section is about finding asset references in `.gml` files, and running 
+validations based on them.
+
 ### Example 2.1 - Reference scanning
-Simple scanner.
+Reference scanner.
 
-Before running dependency builder we need to set up scanning
-for the actual dependencies.
+In order to run dependency linters, we need to scan the actual references.
+We'll use [`pyahocorasick`](github.com/WojciechMula/pyahocorasick)
+library to make it decently fast.
 
-We compile Aho-Corasick automaton to quickly scan every text
-(script or metadata file) in the project for asset references.
-
-Found asset references precisely reflect occurences in static code.
-In later steps we will artificially add some unreflected dependencies
-(such as persistent object existing potentially in every room). But
-such manipulations should not be done on resulting dependency list,
-but rather later, by injecting edges inside graph build process.
+Text occurences found like this reflect occurrences in static code,
+but with some exceptions (strings, comments). Filtering through
+such is implemented in Clunkster.
 
 Also, for pure data registry scripts (like `sound_balance`), which,
 technically reference every asset, but don't instantiate them,
@@ -1723,10 +1763,8 @@ Find and report assets that are never referenced by anything.
 
 Removing unused assets is a quick way to clean up a project.
 We can do this with a simple set difference: Total Assets
-minus Used Assets.
-
-This will not catch isolated reference loops (e.g., A references B,
-B references A, but neither is used by the main game).
+minus Used Assets. However, this will not catch isolated reference loops
+(e.g., A references B, B references A, but neither is used by the game).
 
 Also, some things that are indirectly referenced by the engine (like
 with rooms and `room_goto_next()`) might still get reported.
@@ -1845,7 +1883,7 @@ out the majority of "stageA object referenced stageB asset" cases.
 However, this iteration (and following linters) have a few special rules:
 
 1. Most clusters are allowed to reference only themselves and Common
-cluster, but some may need to reference certain more localized "common"
+cluster, but some may need to reference certain more localized "nonlocal"
 cluster. Such as when one collab maker creates multiple stages, and has
 many common scripts and util objects shared between them, but, technically,
 not between the rest of the collab. Such rules should be defined in
@@ -1859,14 +1897,20 @@ if room_is_stageA() {
 }
 ```
 Those guards allow references to any foreign cluster inside them. Such
-guards must be defined in `CONTEXT_RULES`.
+guards must be defined in `CONTEXT_RULES`. Read more on those in the
+[GML chapter](#integration-into-the-project).
 
 3. References to rooms are severed. Since the only way to meaningfully
-"reference" a room is to go there, for all intents and purposes reference
+"instantiate" a room is to go there, for all intents and purposes
 whatever references a room doesn't really depend on it.
 
 Make sure to fill in the `LINT_RULES` and `CONTEXT_RULES` - they'll
-be used by future linters.
+be used by future linters as well.
+
+Note: I strongly advise clearing out the project to satisfy this linter
+(even though this might take a lot of effort). Skipping it would make
+using Project Juicer and other project-transforming tools a nightmare of
+hidden bugs.
 
 ```py
 from pathlib import Path
@@ -1983,38 +2027,45 @@ else:
     print("\nClear!!!")
 ```
 
-Unlike the unused asset linter (which should be viewed more as
-"suggester"), the crossref linters are *required* to be happy, before
-you may start with the actually useful tools.
-
-
-
 ## 3 - Dependency Graph
+
+This section is about building a graph out of dependencies, and running 
+checks based on more advanced usage tracing.
 
 ### Example 3.1 - Generate dependency graphs
 Build dependency graph.
 
-Now that we have all dependency edges we may now do more complicated
-tracing via building graphs (for which I use rustworkx). Our main
-application of this graph would be finding a set of used assets in
-each room, to feed into linters.
+Reference scanner gave us a set of dependency edges, from which we can
+build a dependency graph. Graphs are done via
+[`rustworkx`](https://github.com/Qiskit/rustworkx).
 
-There's one limitation, however. Our context guards depend on the current
-room being processed. This means that we would have to modify the edges
-to match each room. To do this cleanly, we group rooms by their cluster
-sets.
+Our main application of this graph would be finding a set of used assets in
+each room, and feeding that info into linters.
 
-Also notice that World object (which is typically spawned only in
-the first room of the game, but persists for all rooms) might get
-only considered to exist in their spawn room. You should mark such
-ubiquitous assets as `EXTRA_ROOTS`, so they get artificially added into
+There's two thing that makes this entire process a bit messy.
+
+First, our context guards depend on the current room being processed.
+This means, that rooms have slightly different graphs from each other. The
+cleanest (but far not optimal) way of doing this is to create different
+graphs for different sets of clusters.
+
+Second, persistent objects. We can't cleanly trace where those objects
+travel through the game, so we have to make a few compromises. We'll allow
+only 2 types of persistent objects:
+
+1. Highly localized objects (like room transitions), that don't instantiate
+  state-specific assets beyong their spawn room. I think it'd be wise
+  to validate that those objects are in Common cluster, for safety.
+
+2. Ubiqitous `World` object, which is present in every room. We mark
+  those objectsi in `EXTRA_ROOTS`, so they get artificially added into
 the reachability sets.
 
-You might also notice that, along with reachability sets, we are saving
-graphs and data to translate graph output. This is only used for
-better output in some of the latter tools, so if such data ever becomes
-a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
-`reachability_map:dict[str,set[str]]`
+Note: even though we calculate graphs for each room, saving them is
+optional. Beyond reachability set generation, they are only used in
+better output of second cross-reference linter down the line. If saving
+graphs ever becomes a bottleneck you may omit those and only calculate the
+`reachability_map: dict[str, set[str]]`
 
 ```py
 import collections.abc as col
@@ -2190,7 +2241,7 @@ Identify unreachable assets.
 
 With our newly build reachability map we can indentify which assets are
 never referenced in any room. This would solve closed loops we've
-been skipping over in simpler linter.
+been skipping over in the simpler linter.
 
 ```py
 from pathlib import Path
@@ -2270,8 +2321,7 @@ else:
 ### Example 3.3 - Lint: room cluster boundaries
 Validate room and their dependencies clustering boundaries.
 
-Final step of linting process before the project would be qualified for
-destructive (and actually useful) tools in validating cluster boundaries
+Final step of linting process is validating cluster boundaries
 on rooms as a whole.
 
 Note 1: this tool is intended to be used only after resolved every
