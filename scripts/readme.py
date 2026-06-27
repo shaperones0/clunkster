@@ -1121,11 +1121,13 @@ Following examples represent parts of the workflow for the game this tool was in
 {docs['main_ex_lint_tree']}
 {exs.render((
         exs.stub('CLS_ASSET_EXT'),
+        snips['CLS_LINT_TREE'],
         snips['PROJECT'],
         snips['MAIN_EX_LINT_TREE'],
     ))}
 
 {exs.code_begin('ex_aliases', 'Clusters')}
+{docs['main_ex_aliases']}
 {exs.render((
         snips['ALIAS'],
         snips['CLS_ASSET_EXT'],
@@ -1139,6 +1141,113 @@ Following examples represent parts of the workflow for the game this tool was in
         'VAR_ASSETS': gen_stub_var('assets: list[Asset]'),
         'DEF_ASSET_CLUSTERS': gen_stub_func('asset_cluster_raw', 'asset_cluster')
     })}
+
+{head.next_section("References").render_header()}
+
+{exs.code_begin('ex_scan_sync', 'Reference scanning')}
+{docs['main_ex_scan_sync']}
+{exs.render((
+        exs.stub('CLS_ASSET_EXT'),
+        snips['CLS_DEPENDENCY'],
+        exs.stub('VAR_ASSETS'),
+        snips['PROJECT'],
+        snips['MAIN_EX_SCAN_SYNC'],
+    ))}
+
+{exs.code_reg_stub_src({
+        'CLS_DEPENDENCY': gen_stub_cls('Dependency'),
+        'VAR_DEPS': gen_stub_var('dependencies: list[Dependency]'),
+    })}
+
+{exs.code_begin('ex_lint_unused', 'Lint: unused assets')}
+{docs['main_ex_lint_unused']}
+{exs.render((
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('CLS_DEPENDENCY'),
+        snips['CLS_LINT_ASSET_CLUSTER'],
+        snips['CLS_LINT_UNUSED'],
+        exs.stub('VAR_ASSETS'),
+        exs.stub('VAR_DEPS'),
+        snips['MAIN_EX_LINT_UNUSED'],
+    ))}
+
+{exs.code_reg_stub_src({
+        'CLS_LINT_ASSET_CLUSTER': gen_stub_cls('LintAssetCluster'),
+        'CLS_LINT_UNUSED': gen_stub_cls('LintUnused'),
+    })}
+
+{exs.code_begin('ex_lint_crossref', 'Lint: cross-cluster references')}
+{docs['main_ex_lint_crossref']}
+{exs.render((
+        snips['LINT_RULES'],
+        snips['CONTEXT_RULES'],
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('CLS_DEPENDENCY'),
+        exs.stub('CLS_LINT_ASSET_CLUSTER'),
+        snips['CLS_LINT_CROSSREF'],
+        exs.stub('VAR_DEPS'),
+        snips['MAIN_EX_LINT_CROSSREF'],
+    ))}
+
+{exs.code_reg_stub_src({
+        'LINT_RULES': gen_stub_var('LINT_RULES: dict[str, set[str]]'),
+        'CONTEXT_RULES': gen_stub_var('CONTEXT_RULES: dict[str, set[str]]'),
+    })}
+
+{head.next_section('Dependency Graph').render_header()}
+
+{exs.code_begin('ex_graph', 'Generate dependency graphs')}
+{docs['main_ex_graph']}
+{exs.render((
+        exs.stub('LINT_RULES'),
+        exs.stub('CONTEXT_RULES'),
+        snips['EXTRA_ROOTS'],
+        snips['DEF_TYPE_FILTER'],
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('CLS_DEPENDENCY'),
+        snips['CLS_ROOM_GRAPH'],
+        exs.stub('VAR_ASSETS'),
+        exs.stub('VAR_DEPS'),
+        snips['MAIN_EX_GRAPH'],
+    ))}
+
+{exs.code_reg_stub_src({
+        'VAR_ROOM_DATA': gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
+        'EXTRA_ROOTS': gen_stub_var('EXTRA_ROOTS: set[str]'),
+        'CLS_ROOM_GRAPH': gen_stub_cls('RoomGraph')
+    })}
+
+{exs.code_begin('ex_lint_unused_graph', 'Lint: unreachable assets')}
+{docs['main_ex_lint_unused_graph']}
+{exs.render((
+        exs.stub('LINT_RULES'),
+        exs.stub('CONTEXT_RULES'),
+        exs.stub('EXTRA_ROOTS'),
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('CLS_DEPENDENCY'),
+        exs.stub('CLS_ROOM_GRAPH'),
+        exs.stub('CLS_LINT_UNUSED'),
+        exs.stub('VAR_ASSETS'),
+        exs.stub('VAR_DEPS'),
+        exs.stub('VAR_ROOM_DATA'),
+        snips['MAIN_EX_LINT_UNUSED_GRAPH'],
+    ))}
+
+{exs.code_begin('ex_lint_crossref_graph', 'Lint: room cluster boundaries')}
+{docs['main_ex_lint_crossref_graph']}
+{exs.render((
+        exs.stub('LINT_RULES'),
+        exs.stub('CONTEXT_RULES'),
+        exs.stub('EXTRA_ROOTS'),
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('CLS_DEPENDENCY'),
+        exs.stub('CLS_ROOM_GRAPH'),
+        snips['CLS_LINT_CROSSREF_GRAPH'],
+        exs.stub('VAR_ASSETS'),
+        exs.stub('VAR_DEPS'),
+        exs.stub('VAR_ROOM_DATA'),
+        snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
+    ))}
 
 """
 

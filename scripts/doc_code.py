@@ -25,7 +25,6 @@ def shad(_) -> str:
     return ""
 
 
-
 def gen_stub_cls(*names: str) -> str:
     """Generate stub classes.
 
@@ -83,6 +82,7 @@ class CodeGenerator:
     @_none_to_empty_str
     def reset(self) -> None:
         self.head.reset()
+        self.current_code_name = ""
 
     def code_begin(self, code_name: CodeName, header_title: str) -> str:
         self.current_code_name = code_name
