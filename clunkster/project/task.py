@@ -4,75 +4,55 @@ import collections.abc as col
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+import functools as ft
+import hashlib
 
-from clunkster.project.cache import file_hash
+
+def file_hash(*paths: Path) -> str:
+    """Calculate MD5 hash of all input files."""
+    hasher = hashlib.md5()
+    for filepath in sorted(paths):
+        if filepath.exists():
+            assert filepath.is_file()
+            with filepath.open('rb') as f:
+                for chunk in iter(lambda: f.read(4096), b''):
+                    hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 class Task(ABC):
     """Base class for project processing tasks."""
 
-    def __init__(
-        self,
-        task_id: str,
-        inputs: col.Iterable[Path],
-        outputs: col.Iterable[Path],
-    ) -> None:
-        """Initialize processing task.
-
-        The task is skipped all output files exist, and input hashes match
-        recorded hashes.
-        :param task_id: Task ID.
-        :param inputs: Input files (used in hashes).
-        :param outputs: Output files (checked existence).
-        """
-        self.task_id = task_id
-        self.inputs = list(inputs)
-        self.outputs = list(outputs)
-
-    def get_input_hash(self) -> str:
-        """Calculate MD5 hash of all input files."""
-        return file_hash(*self.inputs)
-
     @abstractmethod
     def execute(self) -> None:
         """Specific processing logic."""
 
+    @property
+    @abstractmethod
+    def task_id(self) -> str:
+        """Task ID."""
 
-@dataclass(frozen=True, slots=True)
-class ExecuteTaskResult:
-    """Result of task execution."""
+    @property
+    @abstractmethod
+    def inputs(self) -> col.Iterable[Path]:
+        """Input files."""
 
-    task_id: str
-    new_hash: str
-    success: bool
-    error: str
+    @ft.cached_property
+    def inputs_cached(self) -> col.Iterable[Path]:
+        """Input files."""
+        return self.inputs
 
+    @abstractmethod
+    @property
+    def outputs(self) -> col.Iterable[Path]:
+        """Output files."""
 
-def worker_exec_task(task: Task) -> ExecuteTaskResult:
-    """Execute the task in mp-friendly way and return task result.
+    @ft.cached_property
+    def outputs_cached(self) -> col.Iterable[Path]:
+        """Output files."""
+        return self.outputs
 
-    :param task: Task to execute.
-    :return: Task result.
-    """
-    hsh = task.get_input_hash()
-    try:
-        # ensure output directories exist
-        for out in task.outputs:
-            out.parent.mkdir(parents=True, exist_ok=True)
-
-        task.execute()
-
-        return ExecuteTaskResult(
-            task_id=task.task_id,
-            new_hash=hsh,
-            success=True,
-            error='',
-        )
-
-    except Exception as err:  # noqa: BLE001
-        return ExecuteTaskResult(
-            task_id=task.task_id,
-            new_hash=hsh,
-            success=False,
-            error=str(err),
-        )
+    @ft.cached_property
+    def inputs_hash(self) -> str:
+        """Calculate MD5 hash of all input files."""
+        return file_hash(*self.inputs_cached)

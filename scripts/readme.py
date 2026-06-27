@@ -1271,10 +1271,36 @@ checks based on more advanced usage tracing.
         snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
     ))}
 
+{head.next_section('Project Juicer').render_header()}
+
+In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
+
+We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you 
+won't get to run them individually until everything is done.
+
+Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
+
+{exs.code_begin('ex_juicer_processing', 'Juicer: processing routines')}
+{docs['main_ex_juicer_processing']}
+{exs.render((
+        exs.stub('CLS_ASSET_EXT'),
+        snips['DEFS_JUICE']
+    ))}
+
+{exs.code_reg_stub_src({
+        'DEFS_JUICE': gen_stub_func(
+            'juice_sprite',
+            'juice_background',
+            'juice_audio',
+            'juice_obj_fix_mask'
+        )
+    })}
 """
 
 def main() -> None:
-    FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
+    for _ in range(2):
+        # twice because um
+        FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
 
 
 if __name__ == '__main__':

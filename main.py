@@ -40,25 +40,19 @@ from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
 from clunkster.project import cache as my_proj_cache
-from clunkster.project import ignore as my_proj_ignore
-from clunkster.project import (
-    processor as my_proj_processor,
-)
 from clunkster.project import (
     task as my_proj_task,
 )
 
-# --- COG_START: TERMINAL_COLORS ---
 # terminal color for output
 TER_RED = '\033[91m'
 TER_GREEN = '\033[92m'
 TER_YELLOW = '\033[93m'
 TER_CYAN = '\033[96m'
 TER_RESET = '\033[0m'
-# --- COG_END: TERMINAL_COLORS ---
 
 
-# --- COG_START: CLS_ASSET_EXT ---
+# <snip CLS_ASSET_EXT>
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtAudio(my_asset.AssetSingleFile, ABC):
     """Generic external audio asset."""
@@ -122,8 +116,9 @@ class AssetExtSfx3(AssetExtAudio):
     @classmethod
     def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
+# </snip CLS_ASSET_EXT>
 
-
+# <snip DEF_ASSET_SCANNABLES>
 def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
     if isinstance(asset, my_asset.Object):
         yield asset.get_object_metadata_file(project_root)
@@ -136,6 +131,7 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
     elif isinstance(asset, my_asset.Script):
         yield asset.get_script_gml_file(project_root)
     # add finders for new asset types
+# </snip DEF_ASSET_SCANNABLES>
 
 def asset_str_linter(asset: Asset) -> str:
     """Descriptive asset repr to be used in linters."""
@@ -151,13 +147,15 @@ def asset_str_linter(asset: Asset) -> str:
         f'{asset.name}'
     )
 
+# <snip DEF_ASSET_SORT_KEY>
 def asset_sort_key(asset: Asset) -> tuple[str, ...]:
     if isinstance(asset, my_asset.AssetHasPath):
         return type(asset).type_name(), '/'.join(asset.tree_path), asset.name
 
     return type(asset).type_name(), asset.name
+# </snip DEF_ASSET_SORT_KEY>
 
-
+# <snip DEF_ASSET_CLUSTERS>
 def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
     return asset.tree_path[0] if asset.tree_path else 'Common'
 
@@ -168,10 +166,10 @@ def asset_cluster(asset: my_asset.Asset) -> str:
         alias = ALIAS_INV.get(cluster)
         return cluster if alias is None else alias
     return "Unknown?"
+# </snip DEF_ASSET_CLUSTERS>
 
 
-# --- COG_END: CLS_ASSET_EXT ---
-# --- COG_START: DEF_TYPE_FILTER ---
+# <snip DEF_TYPE_FILTER>
 def filter_type[TFilter](
     f_type: type[TFilter], items: col.Iterable[object]
 ) -> col.Iterator[TFilter]:
@@ -182,11 +180,9 @@ def filter_type[TFilter](
     :return: Iterator of items of type ``f_type``.
     """
     return (item for item in items if isinstance(item, f_type))
-
-
-# --- COG_END: DEF_TYPE_FILTER ---
-# --- COG_START: CLUSTERABLE_BUILTINS ---
-CLUSTERABLE_BUILTINS: tuple[type[my_asset.AssetHasPath], ...] = (
+# </snip DEF_TYPE_FILTER>
+# <snip CLUSTERABLE_ASSETS>
+CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
     my_asset.Background,
     my_asset.Sound,
@@ -195,18 +191,13 @@ CLUSTERABLE_BUILTINS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Font,
     my_asset.Object,
     my_asset.Room,
-)
-# --- COG_END: CLUSTERABLE_BUILTINS ---
-# --- COG_START: CLUSTERABLE_ASSETS ---
-CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
-    *CLUSTERABLE_BUILTINS,
     AssetExtBgm,
     AssetExtSfx,
     AssetExtSfx3,
 )
-# --- COG_END: CLUSTERABLE_ASSETS ---
+# </snip>
 
-# --- COG_START: ALIAS ---
+# <snip ALIAS>
 ALIAS: dict[str, list[str]] = {
     'StageA': [
         'stage_a',
@@ -240,54 +231,35 @@ def global_set_alias(alias: dict[str, list[str]]) -> None:
             if cluster in ALIAS_INV:
                 raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
             ALIAS_INV[cluster] = name
+# </snip ALIAS>
 
-
-# --- COG_END: ALIAS ---
-
-# --- COG_START: LINT_RULES_EXPLAIN ---
-# MD: To validate the architecture, we must define strict boundary rules.
-# MD: For this, we implement this dictionary, which maps "Source Cluster" to
-# MD: a set of allowed "Target Clusters".
-# MD:
-# MD: Default value for clusters is themselves and "Common" cluster.
-# --- COG_END: LINT_RULES_EXPLAIN ---
-# --- COG_START: LINT_RULES ---
+# <snip LINT_RULES>
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
     # example of a stage that shares assets with another
     # "StageB": {"StageB", "StageA", "Common"},
 }
-# --- COG_END: LINT_RULES ---
+# </snip LINT_RULES>
 
-# --- COG_START: CONTEXT_RULES_EXPLAIN ---
-# MD: Global controllers often check conditions (like `if room_is_StageA()`)
-# MD: before referencing stage-specific assets. We map those context strings to
-# MD: the additional clusters they temporarily grant access to.
-# --- COG_END: CONTEXT_RULES_EXPLAIN ---
-# --- COG_START: CONTEXT_RULES ---
+# <snip CONTEXT_RULES>
 CONTEXT_RULES: dict[str, set[str]] = {
     'room_is_stageA': {'StageA'},
     'room_is_stageB': {'StageB'},
     'room_is_final': {'StageX', 'StageY', 'StageZ'},
     # ...
 }
-# --- COG_END: CONTEXT_RULES ---
-# --- COG_START: EXTRA_ROOTS_EXPLAIN ---
-# MD: Some things exist throughout the entire game, but reachability
-# MD: builder will only consider them existing only in the room they were
-# MD: spawned in. Which might severe connections defined in World objects.
-# MD: You should address such cases below.
-# --- COG_END: EXTRA_ROOTS_EXPLAIN ---
-# --- COG_START: EXTRA_ROOTS ---
+# </snip CONTEXT_RULES>
+
+# <snip EXTRA_ROOTS>
 EXTRA_ROOTS: set[str] = {
     'World'
     # ...
 }
-# --- COG_END: EXTRA_ROOTS ---
+# </snip EXTRA_ROOTS>
 
-# --- COG_START: PROJECT ---
-PROJECT = Path('path/to/the/project')
+# <snip PROJECT>
+PROJECT: Path
 LINT: my_lint.LinterSession
 
 
@@ -298,10 +270,10 @@ def global_set_project(project_root: Path) -> None:
     PROJECT = project_root
     my_read.reg_root(PROJECT)
     LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
-# --- COG_END: PROJECT ---
+# </snip PROJECT>
 
 
-# --- COG_START: CLS_DEPENDENCY ---
+# <snip CLS_DEPENDENCY>
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
@@ -312,8 +284,9 @@ class Dependency:
     contexts: tuple[str, ...]
 
 
-# --- COG_END: CLS_DEPENDENCY ---
-# --- COG_START: CLS_ROOM_GRAPH ---
+# </snip CLS_DEPENDENCY>
+
+# <snip CLS_ROOM_GRAPH>
 @dataclasses.dataclass
 class RoomGraph:
     """Bundle of room graph data."""
@@ -322,10 +295,9 @@ class RoomGraph:
     reachable_names: set[str]
     graph: rx.PyDiGraph
     name2index: dict[str, int]
+# </snip CLS_ROOM_GRAPH>
 
-
-# --- COG_END: CLS_ROOM_GRAPH ---
-# --- COG_START: CLS_JUICER_CONFIG ---
+# <snip CLS_JUICER_CONFIG>
 @dataclasses.dataclass(frozen=True, slots=True)
 class ConfJuicer:
     """Configuration for Project Juicer."""
@@ -341,8 +313,6 @@ class ConfJuicer:
 
     # cache.json file
     file_cache: Path
-    # .clunksterignore file
-    file_ignore: Path
 
     # filename of the gm82 project
     fname_gm82: str
@@ -358,19 +328,28 @@ JUICER = ConfJuicer(
     dir_dry=Path(__file__).parent / 'data' / 'dry',
     rel_dir_wet=Path('data') / 'chunks',
     file_cache=Path(__file__).parent / 'cache.json',
-    file_ignore=Path('path/to/project/.clunksterignore'),
     fname_gm82='projectidk.gm82',
 )
-# --- COG_END: CLS_JUICER_CONFIG ---
+# </snip CLS_JUICER_CONFIG>
 
 
 def main_ex_start() -> None:
     """Let's start with some simple scanning.
 
-    We want to check that assets get detected correctly. We don't really do
-    clusters yet - that will be handled a bit later down the line.
+    Clunkster already provides utils for scanning builtin assets and
+    single-file external assets (such as audio for ``gm82snd``). However,
+    registering those external assets is left as a task for the user.
+
+    Also notice the global variables:
+
+    - ``PROJECT`` should point at the folder where project's ``.gm82`` file
+      is located.
+    - ``LINT`` is the error accumulator that is used by tools down the line.
+
+    The convenience function ``global_set_project`` is provided to set up
+    given path as the source project root.
     """
-    # --- COG_START: MAIN_EX_START ---
+    # <snip MAIN_EX_START>
 
     assets: list[Asset] = []
 
@@ -379,13 +358,19 @@ def main_ex_start() -> None:
         if not asset_type.type_is_used(PROJECT):
             continue
 
+        # type_discover_all handles the discovery of all assets per
+        #  asset type.
         assets.extend(asset_type.type_discover_all(PROJECT))
 
-    # you should investigate the resulting array for inconsistencies
     print(f'Discovered {len(assets)} total assets.')
-    # --- COG_END: MAIN_EX_START ---
+    # <md>
+    # I recommend checking the resulting `assets` array for any weirdness in
+    # debug before going further.
+    # </md>
+    # </snip MAIN_EX_START>
 
 
+# <snip CLS_LINT_TREE>
 class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
 
     rule = 'T100'
@@ -422,6 +407,7 @@ class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
     @property
     def message(self) -> str:
         return f"{self.message_pref}: {' '.join(self.dupes)}"
+# </snip CLS_LINT_TREE>
 
 
 def main_ex_lint_tree() -> None:
@@ -430,14 +416,36 @@ def main_ex_lint_tree() -> None:
     Asset discovery and clusterization is based on scanning ``tree.yyd``
     files, so we have to ensure that they have no duplicate folders.
 
-    Technically, before doing that you should also check that there are also
-    no duplicate asset names via broom icon on IDE toolbar.
+    This example also serves as an introduction to Clunkster's linter system.
+    It implements things like accumulating errors to printed in a list view,
+    sorting and grouping them by type, verbose output, etc.
+
+    In order to make reports as thorough as possible, Clunkster provides
+    various classes and mixins for customizing violation scope:
+
+    - ``LinterViolation``: base violation, not bound to any file or asset
+    - ``LinterViolationMessage``: adds a short error message
+    - ``LinterViolationFile``: binds error to a specific file
+    - ``LinterViolationLocated``: binds error to a location in the file
+    - ``LinterViolationAsset``: mixin that binds error to a specific asset
+
+    For linting ``tree.yyd`` files we want to check that:
+    1. all asset names are unique: handled by ``LintTreeDuplicateAsset``, this
+      violation is abstract and isn't really bound to a specific file,
+      since duplicate assets can exist across multiple types.
+    2. no duplicate folders in tree: handled by ``LintTreeDuplicateFolder``,
+      this violation is done only within same asset type and is bound to a
+      location in specific ``tree.yyd`` file.
+
+    All the linter violations should have their ID (like A100) and severity.
+    Default violation processor would print info messages, turn warn messages
+    into warnings and raise errors.
 
     Since any inconsistency will cause big issues in the pipeline, every
-    violation will be raised as an error and halt the pipline.
+    violation is marked as error.
     """
 
-    # --- COG_START: MAIN_EX_LINT_TREE ---
+    # <snip MAIN_EX_LINT_TREE>
     def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
         tree_file = asset_cls.type_get_tree_file(PROJECT)
         line_map = my_read.line_map(tree_file)
@@ -452,7 +460,7 @@ def main_ex_lint_tree() -> None:
 
             if node.name in seen_children[path_str]:
                 loc_line = node.line_num
-                loc_column = node.depth     # uses tab characters
+                loc_column = node.depth+1     # uses tab characters
                 LINT.push(LintTreeDuplicateFolder(
                     node=node,
                     location=my_location.Location(
@@ -507,11 +515,9 @@ def main_ex_lint_tree() -> None:
 
     # collect all errors
     LINT.consume()
+    # </snip MAIN_EX_LINT_TREE>
 
-    # MD: If you got no duplicates messages in the output then you're all good.
-    # --- COG_END: MAIN_EX_LINT_TREE ---
-
-
+# <snip CLS_LINT_ALIAS>
 class LintAliasMismatch(my_lint.LinterViolationMessage):
 
     rule = 'A100'
@@ -526,20 +532,24 @@ class LintAliasMismatch(my_lint.LinterViolationMessage):
     @property
     def message(self) -> str:
         return f"{self.message_pref}: {' '.join(self.dupes)}"
+# </snip CLS_LINT_ALIAS>
 
 
 def main_ex_aliases() -> list[Asset]:
-    """Generate clusters and fix inconsistencies in cluster map.
+    """Generate clusters.
 
-    We will autogenerate our clusters by their top level folder name. After
-    doing that, you may encounter things like different clusters ``"StageA"``
-    and ``"stage_a"`` (project didn't follow strict naming), as well as a
-    bunch of things that should belong to Common cluster
-    (Backgrounds, Game, etc.).
+    Once we validated assets and trees, we can do cluster generation. We'll
+    look at the top level folder name. In order to merge things like
+    ``"StageA"`` and ``"stage_a"`` into single cluster ``"StageA"``, we'll
+    use the alias system.
 
-    Which is easily fixed by a simple alias system for the clusters.
+    Now, the alias dictioanry can become quite large, so I added additional
+    validation. Now we detect unused or extra names.
+
+    Also, this script has a neat table output for clusters per asset type,
+    It can be useful to discern where exactly any extra names are located.
     """
-    # --- COG_START: MAIN_EX_ALIASES ---
+    # <snip MAIN_EX_ALIASES>
     assets: list[Asset] = []
 
     # ALIAS linter: find existing names in ALIAS
@@ -550,7 +560,7 @@ def main_ex_aliases() -> list[Asset]:
             lint_existing_aliases.add(name)
 
     # this will help us generate the table below
-    table_type_2_clusters: dict[type[Asset], list[str]] = {}
+    table_type_to_clusters: dict[type[Asset], list[str]] = {}
 
     # ALIAS linter: find actually used names in ALIAS
     lint_used_aliases: set[str] = set()
@@ -569,14 +579,14 @@ def main_ex_aliases() -> list[Asset]:
 
             assets.append(asset)
 
-        table_type_2_clusters[asset_type] = list(cluster_set)
+        table_type_to_clusters[asset_type] = list(cluster_set)
 
     # generate the table
     clusters_all = sorted(
-        {name for clusters in table_type_2_clusters.values() for name in clusters}
+        {name for clusters in table_type_to_clusters.values() for name in clusters}
     )
     print('All clusters:', *clusters_all)
-    for asset_type, clusters in table_type_2_clusters.items():
+    for asset_type, clusters in table_type_to_clusters.items():
         cluster_set = set(clusters)
         row = [
             clm if clm in cluster_set else ' ' * len(clm)
@@ -600,32 +610,30 @@ def main_ex_aliases() -> list[Asset]:
         ))
     LINT.consume()
     LINT.assert_empty()
-    # MD: Keep using the table thing until all aliases are gone.
-    # --- COG_END: MAIN_EX_ALIASES ---
+    # <md>
+    # Keep using the table thing until all aliases are gone.
+    # </md>
+    # </snip MAIN_EX_ALIASES>
     return assets
 
 
 def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
-    """Simple scanner.
+    """Reference scanner.
 
-    Before running dependency builder we need to set up scanning
-    for the actual dependencies.
+    In order to run dependency linters, we need to scan the actual references.
+    We'll use [``pyahocorasick``](github.com/WojciechMula/pyahocorasick)
+    library to make it decently fast.
 
-    We compile Aho-Corasick automaton to quickly scan every text
-    (script or metadata file) in the project for asset references.
-
-    Found asset references precisely reflect occurences in static code.
-    In later steps we will artificially add some unreflected dependencies
-    (such as persistent object existing potentially in every room). But
-    such manipulations should not be done on resulting dependency list,
-    but rather later, by injecting edges inside graph build process.
+    Text occurences found like this reflect occurrences in static code,
+    but with some exceptions (strings, comments). Filtering through
+    such is implemented in Clunkster.
 
     Also, for pure data registry scripts (like ``sound_balance``), which,
     technically reference every asset, but don't instantiate them,
     we added a special directive: ``//!clunkster: ignore``. Add it in any
     GML scripts that should be skipped.
     """
-    # --- COG_START: MAIN_EX_SCAN_SYNC ---
+    # <snip MAIN_EX_SCAN_SYNC>
     automaton = Automaton()
     for asset in assets:
         automaton.add_word(asset.name, asset.name)
@@ -670,11 +678,11 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
             )
 
     print(f'\nDone! Found {total_matches} total dependency references.')
-    # --- COG_END: MAIN_EX_SCAN_SYNC2 ---
+    # </snip MAIN_EX_SCAN_SYNC>
     return dependencies
-    # --- COG_END: MAIN_EX_SCAN_SYNC ---
 
 
+# <snip CLS_LINT_ASSET_CLUSTER>
 class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
     """Group linter list output by assets' clusters."""
 
@@ -704,8 +712,9 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
                     lines.append(f"  {err.format_li()}")
 
         return "\n".join(lines)
+# </snip CLS_LINT_ASSET_CLUSTER>
 
-
+# <snip CLS_LINT_UNUSED>
 class LintUnused(LintAssetCluster):
     rule = 'U100'
     severity = my_lint.Severity.WARNING
@@ -718,6 +727,7 @@ class LintUnused(LintAssetCluster):
     @property
     def asset(self) -> Asset:
         return self._asset
+# </snip CLS_LINT_UNUSED>
 
 
 def main_ex_lint_unused(
@@ -727,17 +737,15 @@ def main_ex_lint_unused(
 
     Removing unused assets is a quick way to clean up a project.
     We can do this with a simple set difference: Total Assets
-    minus Used Assets.
-
-    This will not catch isolated reference loops (e.g., A references B,
-    B references A, but neither is used by the main game).
+    minus Used Assets. However, this will not catch isolated reference loops
+    (e.g., A references B, B references A, but neither is used by the game).
 
     Also, some things that are indirectly referenced by the engine (like
     with rooms and ``room_goto_next()``) might still get reported.
 
     Take the output of this with a grain of salt.
     """
-    # --- COG_START: MAIN_EX_LINT_UNUSED ---
+    # <snip MAIN_EX_LINT_UNUSED>
     all_assets = {asset.name: asset for asset in assets}
 
     # populate used set from dependencies
@@ -758,9 +766,10 @@ def main_ex_lint_unused(
         print(f"\nFound {violations_cnt} violations.")
     else:
         print("\nSomehow all clear...")
-    # --- COG_END: MAIN_EX_LINT_UNUSED ---
+    # </snip MAIN_EX_LINT_UNUSED>
 
 
+# <snip CLS_LINT_CROSSREF>
 class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.LinterViolationMessage):
     rule = 'C100'
     severity = my_lint.Severity.ERROR
@@ -790,6 +799,7 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
             f"{target.name} [{asset_cluster(target)}]"
             f'{ctx_str}'
         )
+# </snip CLS_LINT_CROSSREF>
 
 
 def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
@@ -801,7 +811,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     However, this iteration (and following linters) have a few special rules:
 
     1. Most clusters are allowed to reference only themselves and Common
-    cluster, but some may need to reference certain more localized "common"
+    cluster, but some may need to reference certain more localized "nonlocal"
     cluster. Such as when one collab maker creates multiple stages, and has
     many common scripts and util objects shared between them, but, technically,
     not between the rest of the collab. Such rules should be defined in
@@ -816,16 +826,22 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
         }
 
     Those guards allow references to any foreign cluster inside them. Such
-    guards must be defined in ``CONTEXT_RULES``.
+    guards must be defined in ``CONTEXT_RULES``. Read more on those in the
+    [GML chapter](#integration-into-the-project).
 
     3. References to rooms are severed. Since the only way to meaningfully
-    "reference" a room is to go there, for all intents and purposes reference
+    "instantiate" a room is to go there, for all intents and purposes
     whatever references a room doesn't really depend on it.
 
     Make sure to fill in the ``LINT_RULES`` and ``CONTEXT_RULES`` - they'll
-    be used by future linters.
+    be used by future linters as well.
+
+    Note: I strongly advise clearing out the project to satisfy this linter
+    (even though this might take a lot of effort). Skipping it would make
+    using Project Juicer and other project-transforming tools a nightmare of
+    hidden bugs.
     """
-    # --- COG_START: MAIN_EX_LINT_CROSSREF ---
+    # <snip MAIN_EX_LINT_CROSSREF>
     for dep in dependencies:
         source = dep.source_asset
         target = dep.target_asset
@@ -865,14 +881,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     else:
         print("\nClear!!!")
 
-    # MD: Unlike the unused asset linter (which should be viewed more as
-    # MD: "suggester"), the crossref linters are *required* to be happy,
-    # MD: before you may start with the actually useful tools.
-    # MD:
-    # MD: From the following examples, the only useful ones until you
-    # MD: clear out the dependency linter, are about trimming
-    # MD: more unused assets via dependency graph.
-    # --- COG_END: MAIN_EX_LINT_CROSSREF ---
+    # </snip MAIN_EX_LINT_CROSSREF>
 
 
 def main_ex_graph(
@@ -880,29 +889,39 @@ def main_ex_graph(
 ) -> dict[str, RoomGraph]:
     """Build dependency graph.
 
-    Now that we have all dependency edges we may now do more complicated
-    tracing via building graphs (for which I use rustworkx). Our main
-    application of this graph would be finding a set of used assets in
-    each room, to feed into linters.
+    Reference scanner gave us a set of dependency edges, from which we can
+    build a dependency graph. Graphs are done via
+    [``rustworkx``](https://github.com/Qiskit/rustworkx).
 
-    There's one limitation, however. Our context guards depend on the current
-    room being processed. This means that we would have to modify the edges
-    to match each room. To do this cleanly, we group rooms by their cluster
-    sets.
+    Our main application of this graph would be finding a set of used assets in
+    each room, and feeding that info into linters.
 
-    Also notice that World object (which is typically spawned only in
-    the first room of the game, but persists for all rooms) might get
-    only considered to exist in their spawn room. You should mark such
-    ubiquitous assets as ``EXTRA_ROOTS``, so they get artificially added into
+    There's two thing that makes this entire process a bit messy.
+
+    First, our context guards depend on the current room being processed.
+    This means, that rooms have slightly different graphs from each other. The
+    cleanest (but far not optimal) way of doing this is to create different
+    graphs for different sets of clusters.
+
+    Second, persistent objects. We can't cleanly trace where those objects
+    travel through the game, so we have to make a few compromises. We'll allow
+    only 2 types of persistent objects:
+
+    1. Highly localized objects (like room transitions), that don't instantiate
+      state-specific assets beyong their spawn room. I think it'd be wise
+      to validate that those objects are in Common cluster, for safety.
+
+    2. Ubiqitous ``World`` object, which is present in every room. We mark
+      those objectsi in ``EXTRA_ROOTS``, so they get artificially added into
     the reachability sets.
 
-    You might also notice that, along with reachability sets, we are saving
-    graphs and data to translate graph output. This is only used for
-    better output in some of the latter tools, so if such data ever becomes
-    a bottleneck (which I HIGHLY doubt) you may omit those and only calculate
-    ``reachability_map:dict[str,set[str]]``
+    Note: even though we calculate graphs for each room, saving them is
+    optional. Beyond reachability set generation, they are only used in
+    better output of second cross-reference linter down the line. If saving
+    graphs ever becomes a bottleneck you may omit those and only calculate the
+    ``reachability_map: dict[str, set[str]]``
     """
-    # --- COG_START: MAIN_EX_GRAPH ---
+    # <snip MAIN_EX_GRAPH>
 
     def build_graph(
         active_clusters: set[str],
@@ -1011,7 +1030,7 @@ def main_ex_graph(
                 name2index=name_to_index,
             )
 
-    # --- COG_END: MAIN_EX_GRAPH ---
+    # </snip MAIN_EX_GRAPH>
 
     return room_graph_data
 
@@ -1023,9 +1042,9 @@ def main_ex_lint_unused_graph(
 
     With our newly build reachability map we can indentify which assets are
     never referenced in any room. This would solve closed loops we've
-    been skipping over in simpler linter.
+    been skipping over in the simpler linter.
     """
-    # --- COG_START: MAIN_EX_LINT_UNUSED_GRAPH ---
+    # <snip MAIN_EX_LINT_UNUSED_GRAPH>
 
     # master set
     all_used_names: set[str] = set()
@@ -1057,9 +1076,10 @@ def main_ex_lint_unused_graph(
         print(f'\nFound {violations_cnt} unreachable assets.')
     else:
         print("\nClear??? omg")
-    # --- COG_END: MAIN_EX_LINT_UNUSED_GRAPH ---
+    # </snip MAIN_EX_LINT_UNUSED_GRAPH>
 
 
+# <snip CLS_LINT_CROSSREF_GRAPH>
 class LintCrossrefGraph(my_lint.LinterViolationAsset):
     rule = 'C101'
     severity = my_lint.Severity.ERROR
@@ -1117,7 +1137,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                         lines.append(f'    {err.trace}')
 
         return "\n".join(lines)
-
+# </snip CLS_LINT_CROSSREF_GRAPH>
 
 def main_ex_lint_crossref_graph(
     assets: list[Asset],
@@ -1125,8 +1145,7 @@ def main_ex_lint_crossref_graph(
 ) -> None:
     """Validate room and their dependencies clustering boundaries.
 
-    Final step of linting process before the project would be qualified for
-    destructive (and actually useful) tools in validating cluster boundaries
+    Final step of linting process is validating cluster boundaries
     on rooms as a whole.
 
     Note 1: this tool is intended to be used only after resolved every
@@ -1137,7 +1156,7 @@ def main_ex_lint_crossref_graph(
     the exact offenders. Also, I recommend re-running the tool after each fix.
     """
 
-    # --- COG_START: MAIN_EX_LINT_CROSSREF_GRAPH ---
+    # <snip MAIN_EX_LINT_CROSSREF_GRAPH>
 
     # asset clusters lookup
     asset_to_cluster: dict[str, str] = {
@@ -1230,334 +1249,16 @@ def main_ex_lint_crossref_graph(
         print(f'Found {violations_cnt} violations')
     else:
         print('No errors! Awesome!')
-    # MD: Once you've cleared this one, you may call the game qualified
-    # MD: for using the dangerous toys down the line.
-    # MD:
-    # MD: Congrats on defeating the tutorial boss.
-    # --- COG_END: MAIN_EX_LINT_CROSSREF_GRAPH ---
+    # <md>
+    # Once you've cleared this one, you may call the game qualified for using
+    # the dangerous toys down the line.
+    #
+    # Congrats on defeating the tutorial boss.
+    # </md>
+    # </snip MAIN_EX_LINT_CROSSREF_GRAPH>
 
 
-def main_juicer_copy(assets: list[Asset]) -> None:
-    """Copy project's folder into build dir.
-
-    Once you get all the cross-cluster linters happy, we can start optimizing
-    the project. We will start with Project Juicer, and our first step
-    is to copy the project into a build directory, and replace every asset
-    from it with dry stubs, save for ones that are in Common cluster.
-
-    The dry stubs that I used for my project are provided in repo's
-    ``data/dry`` folder.
-
-    I should note that we will only be "juicing" backgrounds, sprites and
-    external audio (from gm82snd). Other assets don't impact RAM enough
-    to worry about them.
-
-    Once you run this tool, check that: your project gets successfully coped,
-    projects opens in Game Maker, and all the non-Common assets get replaced
-    with stubs. If all of these checks out, then you can do the next step.
-
-    Btw, the project will open, but it won't be ready for playing, because
-    we deleted all the audio. When you run the game, it will very soon crash
-    due to unknown sound. This issue will be solved at the end of the Juicer
-    pipeline... for now you'll have to live with it.
-    """
-    # --- COG_START: MAIN_EX_JUICER_COPY ---
-    # clear build folder
-    if JUICER.dir_out.exists():
-        # check that JUICER's out dir is part of the project just to be safe
-        # remove this check if necessary
-        # assert PROJECT in JUICER.dir_out.parents
-        shutil.rmtree(JUICER.dir_out)
-
-    # exclude Common assets from ignoring audio copy
-    paths_unignore: set[Path] = set()
-    for asset in assets:
-        if asset.cluster != 'Common':
-            continue
-        # hardcode this for now (we'll fix later)
-        if not isinstance(asset, (AssetExtSfx, AssetExtSfx3, AssetExtBgm)):
-            continue
-        paths_unignore.add(asset.file)
-
-    sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
-    sfx3_dir = AssetExtSfx3.type_get_dir(PROJECT)
-    bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
-
-    def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
-        """Callback for copytree to skip copying audio, except Common."""
-        path = Path(dir_path)
-
-        if (
-            path.is_relative_to(sfx_dir)
-            or path.is_relative_to(bgm_dir)
-            or path.is_relative_to(sfx3_dir)
-        ):
-            ignored_items = []
-
-            for content in dir_contents:
-                content_path = path / content
-
-                # ignore files outside unignore whitelist
-                if (
-                    content_path.is_file()
-                    and content_path not in paths_unignore
-                ):
-                    ignored_items.append(content)
-
-            return ignored_items
-
-        # ignore nothing
-        return []
-
-    print('Copying project...')
-    shutil.copytree(PROJECT, JUICER.dir_out, ignore=_ignore_audio)
-
-    stub_img = JUICER.dir_dry / (
-        'img_prod.png' if JUICER.is_prod else 'img_dev.png'
-    )
-
-    print('Injecting dry stubs...')
-    # inject dry stubs
-    for asset in assets:
-        if asset.cluster == 'Common':
-            continue
-
-        if isinstance(asset, my_asset.Sprite):
-            meta = asset.get_sprite_metadata(JUICER.dir_out)
-            for image_index in range(meta.frames):
-                img = asset.get_sprite_image(JUICER.dir_out, image_index)
-                shutil.copyfile(stub_img, img)
-        elif isinstance(asset, my_asset.Background):
-            meta = asset.get_background_metadata(JUICER.dir_out)
-            if not meta.exists:
-                raise ValueError('Empty backgrounds are not allowed')
-            shutil.copyfile(
-                stub_img, asset.get_background_image(JUICER.dir_out)
-            )
-
-    # --- COG_END: MAIN_EX_JUICER_COPY ---
-
-
-# --- COG_START: DEF_OBJ_FIX_MASK ---
-def obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
-    """Fix objects masks not updating when replacing sprites."""
-    # exact action blocks, we'll validate against that;
-    #  notice that endings are deliberately LF, that's how .gm82 save
-    #  format works
-
-    target_event = '#define Other_4'  # Room Start
-
-    # "Execute a piece of code"
-    block_603 = (
-        '/*"/*\'/**//* YYD ACTION\n'
-        'lib_id=1\n'
-        'action_id=603\n'
-        'applies_to=self\n'
-        '*/\n'
-    )
-
-    # "Call the parent's event"
-    block_604 = (
-        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
-    )
-    injection_code = 'mask_index=mask_index\n'
-
-    # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
-    #  being just children of SpikeUp with no alterations other than
-    #  sprite) should have their code created
-    if not gml_path.exists():
-        gml_path.touch()
-
-    gml_text = gml_path.read_text(encoding='utf-8')
-    # check that the text was properly saved with LFs
-    assert '\r\n' not in gml_text
-
-    # check different cases
-    if target_event in gml_text:
-        # CASE A: Room Start already exists
-
-        # split event at event declaration and its trailing newline
-        parts = gml_text.split(target_event + '\n')
-
-        if len(parts) != 2:  # noqa: PLR2004
-            # handle edge case where the event is at the very end of
-            #  the file with no trailing newline
-            if gml_text.endswith(target_event):
-                parts = gml_text.split(target_event)
-                parts[1] = '\n'
-            else:
-                raise ValueError(
-                    f'Validation Error: Multiple Room Start events or '
-                    f"malformed structure found in '{obj.name}.gml'."
-                )
-
-        event_body = parts[1]
-
-        if event_body.startswith(block_603):
-            # CASE A1: starts with a code block
-            offset = len(block_603)
-            new_event_body = (
-                event_body[:offset] + injection_code + event_body[offset:]
-            )
-            print(obj.name, '- A1: starts with a code block')
-
-        elif event_body.startswith(block_604 + block_603):
-            # CASE A2: starts with call parent, followed by a code block
-            offset = len(block_604) + len(block_603)
-            new_event_body = (
-                event_body[:offset] + injection_code + event_body[offset:]
-            )
-            print(
-                obj.name,
-                '- A2: starts with call parent, followed by a code block',
-            )
-
-        elif event_body.startswith(block_604):
-            # CASE A3: starts with call parent, without any code blocks
-            # append a new code block
-            offset = len(block_604)
-            new_event_body = (
-                event_body[:offset]
-                + block_603
-                + injection_code
-                + event_body[offset:]
-            )
-            print(
-                obj.name,
-                '- A3: starts with call parent without code block '
-                'afterward???',
-            )
-            warnings.warn(
-                f'Object {obj.name} starts with call parent without '
-                f'code block??? Investigate.',
-                stacklevel=2,
-            )
-        else:
-            # idk
-            raise ValueError(
-                f'Validation Error: YYD ACTION match '
-                f"failed in '{obj.name}.gml'. The block immediately "
-                f"following '{target_event}' does not match YYD ACTION "
-                f'603 or 604 patterns.'
-            )
-
-        # rebuild, maintain LF
-        new_text = parts[0] + target_event + '\n' + new_event_body
-        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
-    else:
-        # CASE B: Room Start doesn't exist
-        meta = obj.get_object_metadata(dir_out)
-        # objects with no parent have this string blank
-        has_parent = bool(meta.parent)
-
-        # append the event into the file
-
-        # check newline
-        #  since we could've just created the file, it is allowed
-        #  to be empty
-        if gml_text and not gml_text.endswith('\n'):
-            gml_text += '\n'
-
-        new_block = target_event + '\n'
-        if has_parent:
-            # CASE B1: use the "Call parent event" block
-            new_block += block_604
-            print(
-                obj.name,
-                '- B1: no room start + has parent, must add Call parent event',
-            )
-        else:
-            print(obj.name, '- B2: no room start')
-
-        # add the code block and injection
-        new_block += block_603 + injection_code
-        gml_text += new_block
-
-        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
-
-
-# --- COG_END: DEF_OBJ_FIX_MASK ---
-
-
-def main_juicer_fix_masks(assets: list[Asset]) -> None:
-    """Before we continue, we must fix one annoying GameMaker bug.
-
-    If you replace a sprite via ``sprite_replace_sprite``, it will not update
-    collision data for objects that use sprite. We'll have to do it manually
-    by injecting ``mask_index=mask_index`` into Room Start event of
-    every object.
-
-    Now, this fix isn't as trivial, since we have to inject code into objects,
-    making sure we solve every configuration preciely, without generating
-    unintended cases.
-
-    For this reason, we validate against specific action definitions, and raise
-    errors at a sight of any inconsistency. If your project frequently  uses
-    some substandard Room Start pattern than the ones we handle in this script,
-    feel free to modify it.
-
-    To elaborate on exact cases solved:
-
-    - A. Object already has Room Start event (line "#define Other_4" found)
-        - A1. Room Start starts with a code block (block 603)
-            - append the injected code after the action signature
-        - A2. Room Start starts with "Call parent's event" (block 604),
-            followed by a code block
-            - inject into the code block (tehcnically, the right
-              thing would be to inject it before "Call parent's event",
-              but, since this fix is applied to ALL objects, parent's
-              Room Start also has the mask fix)
-        - A3. Room Start starts with "Call parent's event", but not followed
-            by a code block (for whatever reason)
-            - create a new code block and inject right there (though I added
-              a warning for such cases, and you should investigate them)
-    - B. Object has no Room Start event
-        - B1. Object has a parent
-            - add "Call parent's event" block and a code block with inject
-              afterward
-        - B2. Object has no parent
-            - add just a code blck with inject
-
-    """
-    # --- COG_START: MAIN_EX_JUICER_FIX_MASKS ---
-    print('Injecting collision mask fixes into objects...')
-
-    objects = filter_type(my_asset.Object, assets)
-    for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
-        # use output dir, since that's where we'll be writing
-        gml_path = obj.get_object_gml_file(JUICER.dir_out)
-        obj_fix_mask(obj, gml_path, JUICER.dir_out)
-    # --- COG_END: MAIN_EX_JUICER_FIX_MASKS ---
-
-
-# --- COG_START: DEF_PTH_GET_WET ---
-def pth_get_wet(dir_wet_cluster: Path, asset: my_asset.AssetFile) -> Path:
-    """Gen wet file location.
-
-    :param dir_wet_cluster: Wet root directory, including cluster name
-      (e.g. data/chunks/StageA/)
-    :param asset: Asset to get wet filename of.
-    :return: Resulting wet filename.
-    """
-    if isinstance(asset, AssetExtSfx):
-        fname = f'{asset.name[1:-1]}.wav'
-    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
-        fname = f'{asset.name[1:-1]}.ogg'
-    elif isinstance(asset, my_asset.Sprite):
-        fname = f'{asset.name}.gmspr'
-    elif isinstance(asset, my_asset.Background):
-        fname = f'{asset.name}.gmbck'
-    else:
-        raise NotImplementedError('Asset type not supported')
-
-    wet_type_dir = dir_wet_cluster / type(asset).type_get_dir_rel()
-    return wet_type_dir / fname
-
-
-# --- COG_END: DEF_PTH_GET_WET ---
-
-
-# --- COG_START: DEFS_JUICE ---
+# <snip DEFS_JUICE>
 def juice_sprite(
     sprite: my_asset.Sprite, project_root: Path, out_file: Path
 ) -> None:
@@ -1696,7 +1397,369 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
         )
 
 
-# --- COG_END: DEFS_JUICE ---
+def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
+    """Fix objects masks not updating when replacing sprites."""
+    # exact action blocks, we'll validate against that;
+    #  notice that endings are deliberately LF, that's how .gm82 save
+    #  format works
+
+    target_event = '#define Other_4'  # Room Start
+
+    # "Execute a piece of code"
+    block_603 = (
+        '/*"/*\'/**//* YYD ACTION\n'
+        'lib_id=1\n'
+        'action_id=603\n'
+        'applies_to=self\n'
+        '*/\n'
+    )
+
+    # "Call the parent's event"
+    block_604 = (
+        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+    )
+    injection_code = 'mask_index=mask_index\n'
+
+    # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
+    #  being just children of SpikeUp with no alterations other than
+    #  sprite) should have their code created
+    if not gml_path.exists():
+        gml_path.touch()
+
+    gml_text = gml_path.read_text(encoding='utf-8')
+    # check that the text was properly saved with LFs
+    assert '\r\n' not in gml_text
+
+    # check different cases
+    if target_event in gml_text:
+        # CASE A: Room Start already exists
+
+        # split event at event declaration and its trailing newline
+        parts = gml_text.split(target_event + '\n')
+
+        if len(parts) != 2:  # noqa: PLR2004
+            # handle edge case where the event is at the very end of
+            #  the file with no trailing newline
+            if gml_text.endswith(target_event):
+                parts = gml_text.split(target_event)
+                parts[1] = '\n'
+            else:
+                raise ValueError(
+                    f'Validation Error: Multiple Room Start events or '
+                    f"malformed structure found in '{obj.name}.gml'."
+                )
+
+        event_body = parts[1]
+
+        if event_body.startswith(block_603):
+            # CASE A1: starts with a code block
+            offset = len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(obj.name, '- A1: starts with a code block')
+
+        elif event_body.startswith(block_604 + block_603):
+            # CASE A2: starts with call parent, followed by a code block
+            offset = len(block_604) + len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A2: starts with call parent, followed by a code block',
+            )
+
+        elif event_body.startswith(block_604):
+            # CASE A3: starts with call parent, without any code blocks
+            # append a new code block
+            offset = len(block_604)
+            new_event_body = (
+                event_body[:offset]
+                + block_603
+                + injection_code
+                + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A3: starts with call parent without code block '
+                'afterward???',
+            )
+            warnings.warn(
+                f'Object {obj.name} starts with call parent without '
+                f'code block??? Investigate.',
+                stacklevel=2,
+            )
+        else:
+            # idk
+            raise ValueError(
+                f'Validation Error: YYD ACTION match '
+                f"failed in '{obj.name}.gml'. The block immediately "
+                f"following '{target_event}' does not match YYD ACTION "
+                f'603 or 604 patterns.'
+            )
+
+        # rebuild, maintain LF
+        new_text = parts[0] + target_event + '\n' + new_event_body
+        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+    else:
+        # CASE B: Room Start doesn't exist
+        meta = obj.get_object_metadata(dir_out)
+        # objects with no parent have this string blank
+        has_parent = bool(meta.parent)
+
+        # append the event into the file
+
+        # check newline
+        #  since we could've just created the file, it is allowed
+        #  to be empty
+        if gml_text and not gml_text.endswith('\n'):
+            gml_text += '\n'
+
+        new_block = target_event + '\n'
+        if has_parent:
+            # CASE B1: use the "Call parent event" block
+            new_block += block_604
+            print(
+                obj.name,
+                '- B1: no room start + has parent, must add Call parent event',
+            )
+        else:
+            print(obj.name, '- B2: no room start')
+
+        # add the code block and injection
+        new_block += block_603 + injection_code
+        gml_text += new_block
+
+        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+# <md>
+# Now, I didn't add any code for you to test those functions. Those can be
+# "tested" in the fully assembling the pipeline at the end.
+# </md>
+# </snip DEFS_JUICE>
+
+
+def main_ex_juicer_processing() -> None:
+    """Now that the project is cleared out, time for the useful tools.
+
+    Mechanism behind most of the following tools is the Juicer system. This
+    system copies the project, changes some of the assets, and boom - you
+    have lowered RAM usage from 2.5 GB down to 1 GB.
+
+    Now, I trust you've already looked at [dehydration](#dehydration) and
+    [juicing](#juicing), that's what we'll be implementing.
+
+    Let's start with processing (or "prepare" as called in Dehydration) logic.
+
+    As it's outlined in Juicing, processing will be applied only to sprites,
+    backgrounds and external audio. However, according to Juicing, we'll need
+    to fix a couple of things: object's masks and room's stretch backgrounds.
+
+    Object's masks require doing changes to every object, so this thing belongs
+    in the processing stage.
+
+    Room's stretch backgrounds, however, are a bit too expensive to be put into
+    processing stage. Rooms are good candidates for simply symlinking their
+    folders (gazillion tiny files), and sacrificing that for some lousy
+    stretching backgrounds is not the play. Plus, those are usually very rare,
+    and it makes more sense to just pre-bake correct scale manually.
+
+    Use the regex ``bg_stretch.=1`` to find all the offenders with ``grep``.
+    """
+
+
+def main_juicer_classes() -> None:
+    """Wrap asset processing in Tasks.
+
+
+    """
+
+
+def main_juicer_copy(assets: list[Asset]) -> None:
+    """Copy project's folder into build dir.
+
+    Once you get all the cross-cluster linters happy, we can start optimizing
+    the project. We will start with Project Juicer, and our first step
+    is to copy the project into a build directory, and replace every asset
+    from it with dry stubs, save for ones that are in Common cluster.
+
+    The dry stubs that I used for my project are provided in repo's
+    ``data/dry`` folder.
+
+    I should note that we will only be "juicing" backgrounds, sprites and
+    external audio (from gm82snd). Other assets don't impact RAM enough
+    to worry about them.
+
+    Once you run this tool, check that: your project gets successfully coped,
+    projects opens in Game Maker, and all the non-Common assets get replaced
+    with stubs. If all of these checks out, then you can do the next step.
+
+    Btw, the project will open, but it won't be ready for playing, because
+    we deleted all the audio. When you run the game, it will very soon crash
+    due to unknown sound. This issue will be solved at the end of the Juicer
+    pipeline... for now you'll have to live with it.
+    """
+    # --- COG_START: MAIN_EX_JUICER_COPY ---
+    # clear build folder
+    if JUICER.dir_out.exists():
+        # check that JUICER's out dir is part of the project just to be safe
+        # remove this check if necessary
+        # assert PROJECT in JUICER.dir_out.parents
+        shutil.rmtree(JUICER.dir_out)
+
+    # exclude Common assets from ignoring audio copy
+    paths_unignore: set[Path] = set()
+    for asset in assets:
+        if asset.cluster != 'Common':
+            continue
+        # hardcode this for now (we'll fix later)
+        if not isinstance(asset, (AssetExtSfx, AssetExtSfx3, AssetExtBgm)):
+            continue
+        paths_unignore.add(asset.file)
+
+    sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
+    sfx3_dir = AssetExtSfx3.type_get_dir(PROJECT)
+    bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
+
+    def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
+        """Callback for copytree to skip copying audio, except Common."""
+        path = Path(dir_path)
+
+        if (
+            path.is_relative_to(sfx_dir)
+            or path.is_relative_to(bgm_dir)
+            or path.is_relative_to(sfx3_dir)
+        ):
+            ignored_items = []
+
+            for content in dir_contents:
+                content_path = path / content
+
+                # ignore files outside unignore whitelist
+                if (
+                    content_path.is_file()
+                    and content_path not in paths_unignore
+                ):
+                    ignored_items.append(content)
+
+            return ignored_items
+
+        # ignore nothing
+        return []
+
+    print('Copying project...')
+    shutil.copytree(PROJECT, JUICER.dir_out, ignore=_ignore_audio)
+
+    stub_img = JUICER.dir_dry / (
+        'img_prod.png' if JUICER.is_prod else 'img_dev.png'
+    )
+
+    print('Injecting dry stubs...')
+    # inject dry stubs
+    for asset in assets:
+        if asset.cluster == 'Common':
+            continue
+
+        if isinstance(asset, my_asset.Sprite):
+            meta = asset.get_sprite_metadata(JUICER.dir_out)
+            for image_index in range(meta.frames):
+                img = asset.get_sprite_image(JUICER.dir_out, image_index)
+                shutil.copyfile(stub_img, img)
+        elif isinstance(asset, my_asset.Background):
+            meta = asset.get_background_metadata(JUICER.dir_out)
+            if not meta.exists:
+                raise ValueError('Empty backgrounds are not allowed')
+            shutil.copyfile(
+                stub_img, asset.get_background_image(JUICER.dir_out)
+            )
+
+    # --- COG_END: MAIN_EX_JUICER_COPY ---
+
+
+# --- COG_START: DEF_OBJ_FIX_MASK ---
+
+# --- COG_END: DEF_OBJ_FIX_MASK ---
+
+
+def main_juicer_fix_masks(assets: list[Asset]) -> None:
+    """Before we continue, we must fix one annoying GameMaker bug.
+
+    If you replace a sprite via ``sprite_replace_sprite``, it will not update
+    collision data for objects that use sprite. We'll have to do it manually
+    by injecting ``mask_index=mask_index`` into Room Start event of
+    every object.
+
+    Now, this fix isn't as trivial, since we have to inject code into objects,
+    making sure we solve every configuration preciely, without generating
+    unintended cases.
+
+    For this reason, we validate against specific action definitions, and raise
+    errors at a sight of any inconsistency. If your project frequently  uses
+    some substandard Room Start pattern than the ones we handle in this script,
+    feel free to modify it.
+
+    To elaborate on exact cases solved:
+
+    - A. Object already has Room Start event (line "#define Other_4" found)
+        - A1. Room Start starts with a code block (block 603)
+            - append the injected code after the action signature
+        - A2. Room Start starts with "Call parent's event" (block 604),
+            followed by a code block
+            - inject into the code block (tehcnically, the right
+              thing would be to inject it before "Call parent's event",
+              but, since this fix is applied to ALL objects, parent's
+              Room Start also has the mask fix)
+        - A3. Room Start starts with "Call parent's event", but not followed
+            by a code block (for whatever reason)
+            - create a new code block and inject right there (though I added
+              a warning for such cases, and you should investigate them)
+    - B. Object has no Room Start event
+        - B1. Object has a parent
+            - add "Call parent's event" block and a code block with inject
+              afterward
+        - B2. Object has no parent
+            - add just a code blck with inject
+
+    """
+    # --- COG_START: MAIN_EX_JUICER_FIX_MASKS ---
+    print('Injecting collision mask fixes into objects...')
+
+    objects = filter_type(my_asset.Object, assets)
+    for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
+        # use output dir, since that's where we'll be writing
+        gml_path = obj.get_object_gml_file(JUICER.dir_out)
+        obj_fix_mask(obj, gml_path, JUICER.dir_out)
+    # --- COG_END: MAIN_EX_JUICER_FIX_MASKS ---
+
+
+# --- COG_START: DEF_PTH_GET_WET ---
+def pth_get_wet(dir_wet_cluster: Path, asset: my_asset.AssetFile) -> Path:
+    """Gen wet file location.
+
+    :param dir_wet_cluster: Wet root directory, including cluster name
+      (e.g. data/chunks/StageA/)
+    :param asset: Asset to get wet filename of.
+    :return: Resulting wet filename.
+    """
+    if isinstance(asset, AssetExtSfx):
+        fname = f'{asset.name[1:-1]}.wav'
+    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
+        fname = f'{asset.name[1:-1]}.ogg'
+    elif isinstance(asset, my_asset.Sprite):
+        fname = f'{asset.name}.gmspr'
+    elif isinstance(asset, my_asset.Background):
+        fname = f'{asset.name}.gmbck'
+    else:
+        raise NotImplementedError('Asset type not supported')
+
+    wet_type_dir = dir_wet_cluster / type(asset).type_get_dir_rel()
+    return wet_type_dir / fname
+
+
+# --- COG_END: DEF_PTH_GET_WET ---
+
+
+
 
 
 def main_juicer_gen_wet(assets: list[Asset]) -> None:

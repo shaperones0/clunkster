@@ -50,6 +50,8 @@ Super destructive tools:
     * [Example 3.1 - Generate dependency graphs](#example-31---generate-dependency-graphs)
     * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
+  * [4 - Project Juicer](#4---project-juicer)
+    * [Example 4.1 - Juicer: processing routines](#example-41---juicer-processing-routines)
 
 # Rationale
 
@@ -2537,3 +2539,336 @@ Once you've cleared this one, you may call the game qualified for using
 the dangerous toys down the line.
 
 Congrats on defeating the tutorial boss.
+
+## 4 - Project Juicer
+
+In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: [clusters](#example-13---clusters)), the game must satisfy both clusterization linters (see: [ex2.3](#example-23---lint-cross-cluster-references) and [ex3.3](#example-33---lint-room-cluster-boundaries)) in order for the resulting build to run well.
+
+We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you 
+won't get to run them individually until everything is done.
+
+Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
+
+### Example 4.1 - Juicer: processing routines
+Now that the project is cleared out, time for the useful tools.
+
+Mechanism behind most of the following tools is the Juicer system. This
+system copies the project, changes some of the assets, and boom - you
+have lowered RAM usage from 2.5 GB down to 1 GB.
+
+Now, I trust you've already looked at [dehydration](#dehydration) and
+[juicing](#juicing), that's what we'll be implementing.
+
+Let's start with processing (or "prepare" as called in Dehydration) logic.
+
+As it's outlined in Juicing, processing will be applied only to sprites,
+backgrounds and external audio. However, according to Juicing, we'll need
+to fix a couple of things: object's masks and room's stretch backgrounds.
+
+Object's masks require doing changes to every object, so this thing belongs
+in the processing stage.
+
+Room's stretch backgrounds, however, are a bit too expensive to be put into
+processing stage. Rooms are good candidates for simply symlinking their
+folders (gazillion tiny files), and sacrificing that for some lousy
+stretching backgrounds is not the play. Plus, those are usually very rare,
+and it makes more sense to just pre-bake correct scale manually.
+
+Use the regex `bg_stretch.=1` to find all the offenders with `grep`.
+
+```py
+import subprocess
+import warnings
+from pathlib import Path
+
+from gmcodec import core as gmc_core
+from gmcodec import file as gmc_file
+from gmcodec import model as gmc_model
+from gmcodec import validate as gmc_validate
+from PIL import Image
+
+from clunkster import asset as my_asset
+
+# see ex1.1
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+def juice_sprite(
+    sprite: my_asset.Sprite, project_root: Path, out_file: Path
+) -> None:
+    """Juice a sprite into external ``.gmspr`` file.
+
+    :param sprite: Sprite object.
+    :param project_root: Project root directory.
+    :param out_file: File to write resulting ``.gmspr`` bytes to.
+    """
+    # read original metadata
+    meta = sprite.get_sprite_metadata(project_root)
+
+    frames_bgra: list[bytes] = []
+    width, height = 0, 0
+
+    for image_index in range(meta.frames):
+        img_path = sprite.get_sprite_image(project_root, image_index)
+        with Image.open(img_path) as img:
+            img = img.convert('RGBA')
+            if width == 0:
+                width, height = img.size
+            frames_bgra.append(img.tobytes('raw', 'BGRA'))
+
+    assert meta.frames == len(frames_bgra)
+
+    # map metadata
+    gm_meta = gmc_model.GmsprMeta.default()
+    # gm_meta.version = 800
+    gm_meta.width = width
+    gm_meta.height = height
+    gm_meta.subimage_count = len(frames_bgra)
+    gm_meta.origin_x = meta.origin_x
+    gm_meta.origin_y = meta.origin_y
+
+    gm_meta.mask_kind = meta.collision_shape
+    gm_meta.mask_tolerance = meta.alpha_tolerance
+    gm_meta.separate_masks = meta.per_frame_colliders
+    gm_meta.bbox_kind = meta.bbox_type
+    gm_meta.bbox_left = meta.bbox_left
+    gm_meta.bbox_right = meta.bbox_right
+    gm_meta.bbox_bottom = meta.bbox_bottom
+    gm_meta.bbox_top = meta.bbox_top
+
+    gmc_validate.gmspr_validate(gm_meta, frames_bgra)
+    payload = gmc_core.gmspr_build_payload(gm_meta, frames_bgra)
+
+    out_file.write_bytes(gmc_file.file_pack(payload))
+
+
+def juice_background(
+    bg: my_asset.Background, project_root: Path, out_file: Path
+) -> None:
+    """Juice a background into external ``.gmbck`` file.
+
+    :param bg: Background object.
+    :param project_root: Project root directory.
+    :param out_file: File to write resulting ``.gmbck`` bytes to.
+    """
+    # read the original metadata
+    meta = bg.get_background_metadata(project_root)
+
+    # meta.exists == 0 was already filtered out
+    img_path = bg.get_background_image(project_root)
+    with Image.open(img_path) as img:
+        img = img.convert('RGBA')
+        width, height = img.size
+        pixel_data = img.tobytes('raw', 'BGRA')
+
+    gm_meta = gmc_model.GmbckMeta.default()
+    # gm_meta.version = ...
+    gm_meta.use_as_tile = meta.tileset
+    gm_meta.tile_width = meta.tile_width
+    gm_meta.tile_height = meta.tile_height
+    gm_meta.tile_h_offset = meta.tile_hoffset
+    gm_meta.tile_v_offset = meta.tile_voffset
+    gm_meta.tile_h_sep = meta.tile_hsep
+    gm_meta.tile_v_sep = meta.tile_vsep
+    # gm_meta.image_version = ...
+    gm_meta.width = width
+    gm_meta.height = height
+
+    gmc_validate.gmbck_validate(gm_meta, pixel_data)
+    payload = gmc_core.gmbck_build_payload(gm_meta, pixel_data)
+
+    out_file.write_bytes(gmc_file.file_pack(payload))
+
+
+def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
+    """Juice audio into a compressed format.
+
+    :param audio: External audio.
+    :param out_file: File to write result to.
+    """
+    if isinstance(audio, AssetExtSfx):
+        # FMOD kind 0 (RAM): compress to MS ADPCM 22050Hz
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                'ffmpeg',
+                '-i',
+                str(audio.file),
+                '-y',
+                '-c:a',
+                'pcm_s16le',
+                '-ar',
+                '44100',
+                str(out_file),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        # FMOD kind 1/3 (Stream): compress to low-bitrate Ogg Vorbis
+        subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                'ffmpeg',
+                '-i',
+                str(audio.file),
+                '-y',
+                # kill anything that isn't first audio stream from input 0
+                '-map',
+                '0:a:0',
+                # kill any cover art just in case
+                '-vn',
+                '-map_metadata',
+                '-1',
+                '-c:a',
+                'libvorbis',
+                '-q:a',
+                '3',
+                str(out_file),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
+def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
+    """Fix objects masks not updating when replacing sprites."""
+    # exact action blocks, we'll validate against that;
+    #  notice that endings are deliberately LF, that's how .gm82 save
+    #  format works
+
+    target_event = '#define Other_4'  # Room Start
+
+    # "Execute a piece of code"
+    block_603 = (
+        '/*"/*\'/**//* YYD ACTION\n'
+        'lib_id=1\n'
+        'action_id=603\n'
+        'applies_to=self\n'
+        '*/\n'
+    )
+
+    # "Call the parent's event"
+    block_604 = (
+        '/*"/*\'/**//* YYD ACTION\nlib_id=1\naction_id=604\ninvert=0\n*/\n'
+    )
+    injection_code = 'mask_index=mask_index\n'
+
+    # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
+    #  being just children of SpikeUp with no alterations other than
+    #  sprite) should have their code created
+    if not gml_path.exists():
+        gml_path.touch()
+
+    gml_text = gml_path.read_text(encoding='utf-8')
+    # check that the text was properly saved with LFs
+    assert '\r\n' not in gml_text
+
+    # check different cases
+    if target_event in gml_text:
+        # CASE A: Room Start already exists
+
+        # split event at event declaration and its trailing newline
+        parts = gml_text.split(target_event + '\n')
+
+        if len(parts) != 2:  # noqa: PLR2004
+            # handle edge case where the event is at the very end of
+            #  the file with no trailing newline
+            if gml_text.endswith(target_event):
+                parts = gml_text.split(target_event)
+                parts[1] = '\n'
+            else:
+                raise ValueError(
+                    f'Validation Error: Multiple Room Start events or '
+                    f"malformed structure found in '{obj.name}.gml'."
+                )
+
+        event_body = parts[1]
+
+        if event_body.startswith(block_603):
+            # CASE A1: starts with a code block
+            offset = len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(obj.name, '- A1: starts with a code block')
+
+        elif event_body.startswith(block_604 + block_603):
+            # CASE A2: starts with call parent, followed by a code block
+            offset = len(block_604) + len(block_603)
+            new_event_body = (
+                event_body[:offset] + injection_code + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A2: starts with call parent, followed by a code block',
+            )
+
+        elif event_body.startswith(block_604):
+            # CASE A3: starts with call parent, without any code blocks
+            # append a new code block
+            offset = len(block_604)
+            new_event_body = (
+                event_body[:offset]
+                + block_603
+                + injection_code
+                + event_body[offset:]
+            )
+            print(
+                obj.name,
+                '- A3: starts with call parent without code block '
+                'afterward???',
+            )
+            warnings.warn(
+                f'Object {obj.name} starts with call parent without '
+                f'code block??? Investigate.',
+                stacklevel=2,
+            )
+        else:
+            # idk
+            raise ValueError(
+                f'Validation Error: YYD ACTION match '
+                f"failed in '{obj.name}.gml'. The block immediately "
+                f"following '{target_event}' does not match YYD ACTION "
+                f'603 or 604 patterns.'
+            )
+
+        # rebuild, maintain LF
+        new_text = parts[0] + target_event + '\n' + new_event_body
+        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+    else:
+        # CASE B: Room Start doesn't exist
+        meta = obj.get_object_metadata(dir_out)
+        # objects with no parent have this string blank
+        has_parent = bool(meta.parent)
+
+        # append the event into the file
+
+        # check newline
+        #  since we could've just created the file, it is allowed
+        #  to be empty
+        if gml_text and not gml_text.endswith('\n'):
+            gml_text += '\n'
+
+        new_block = target_event + '\n'
+        if has_parent:
+            # CASE B1: use the "Call parent event" block
+            new_block += block_604
+            print(
+                obj.name,
+                '- B1: no room start + has parent, must add Call parent event',
+            )
+        else:
+            print(obj.name, '- B2: no room start')
+
+        # add the code block and injection
+        new_block += block_603 + injection_code
+        gml_text += new_block
+
+        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+```
+
+Now, I didn't add any code for you to test those functions. Those can be
+"tested" in the fully assembling the pipeline at the end.
