@@ -1,1 +1,1 @@
-"""Project processing bones."""
+"""Pipeline bones."""

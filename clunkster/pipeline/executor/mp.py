@@ -11,6 +11,7 @@ from clunkster.pipeline.events import context as proj_context, dispatcher as pro
 from clunkster.pipeline.task import Task
 from clunkster.pipeline.executor import base
 from clunkster.pipeline.cache import FileBuildCache
+from clunkster.pipeline.events import event
 
 
 
@@ -73,6 +74,9 @@ def execute_mp(
     if not tasks:
         return
 
+    total_tasks = len(tasks)
+    dispatcher.dispatch(event.ProgressStart(worker_id="main", task_id="overall", total=total_tasks))
+
     manager = mp.Manager()
     queue = manager.Queue()
 
@@ -86,9 +90,11 @@ def execute_mp(
                 for task in tasks
             }
 
-            results = (
-                (futures[f], f.result())
-                for f in concurrent.futures.as_completed(futures)
-            )
+            def stream_results():
+                for i, f in enumerate(concurrent.futures.as_completed(futures), start=1):
+                    yield futures[f], f.result()
+                    dispatcher.dispatch(proj_event.ProgressAdvance(worker_id="main", task_id="overall", completed=i))
 
-            base.tasks_apply_results(cache, results)
+            base.tasks_apply_results(cache, stream_results())
+
+        dispatcher.dispatch(proj_event.ProgressCompleted(worker_id="main", task_id="overall"))

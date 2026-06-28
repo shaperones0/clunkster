@@ -15,7 +15,10 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import override, Self
+from typing import override, Self, Concatenate, Any
+from types import TracebackType
+import functools as ft
+import threading
 
 import rustworkx as rx
 import tqdm
@@ -33,8 +36,10 @@ from gmcodec import (
     validate as gmc_validate,
 )
 from PIL import Image
+from rich import live as r_live, table as r_table, progress as r_progress, console as r_console, text as r_text, panel as r_panel
 
 from clunkster import asset as my_asset, lint as my_lint
+from clunkster.pipeline.events.dispatcher import EventDispatcher
 from clunkster.text import location as my_location, read as my_read
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
@@ -42,15 +47,10 @@ from clunkster.parse import tree as my_parse_tree
 from clunkster.pipeline import cache as my_cache
 from clunkster.pipeline.task import Task, TaskCopyRebase, TaskGeneric, TaskCopyTree, TaskCopy
 from clunkster.pipeline.executor import mp as my_exec_mp, thread as my_exec_thread
-from clunkster.pipeline.events import dispatcher as my_event_dispatcher
-
-# terminal color for output
-TER_RED = '\033[91m'
-TER_GREEN = '\033[92m'
-TER_YELLOW = '\033[93m'
-TER_CYAN = '\033[96m'
-TER_RESET = '\033[0m'
-
+from clunkster.pipeline.events import dispatcher as my_event_dispatcher, event as my_event, sink as my_event_sink
+from clunkster.pipeline.ui.base import Ui
+from clunkster.pipeline.ui.simple import UiSimple, UiSimpleAsync
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress, ui_auto_sink
 
 # <snip CLS_ASSET_EXT>
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -133,20 +133,6 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
     # add finders for new asset types
 # </snip DEF_ASSET_SCANNABLES>
 
-def asset_str_linter(asset: Asset) -> str:
-    """Descriptive asset repr to be used in linters."""
-    if isinstance(asset, my_asset.AssetHasPath):
-        return (
-            f'[{type(asset).type_name():^10}]: '
-            f'{"/".join(asset.tree_path)}'
-            f'/{asset.name}'
-        )
-
-    return (
-        f'[{type(asset).type_name():^10}]: '
-        f'{asset.name}'
-    )
-
 # <snip DEF_ASSET_SORT_KEY>
 def asset_sort_key(asset: Asset) -> tuple[str, ...]:
     if isinstance(asset, my_asset.AssetHasPath):
@@ -181,19 +167,6 @@ def asset_wet_fname(asset: my_asset.Asset) -> str:
     raise NotImplementedError('Asset type not supported')
 # </snip DEF_ASSET_WET_FNAME>
 
-
-# <snip DEF_TYPE_FILTER>
-def filter_type[TFilter](
-    f_type: type[TFilter], items: col.Iterable[object]
-) -> col.Iterator[TFilter]:
-    """Filter given iterable based on type.
-
-    :param f_type: Type to filter for.
-    :param items: The iterable to filter.
-    :return: Iterator of items of type ``f_type``.
-    """
-    return (item for item in items if isinstance(item, f_type))
-# </snip DEF_TYPE_FILTER>
 # <snip CLUSTERABLE_ASSETS>
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
@@ -284,6 +257,213 @@ def global_set_project(project_root: Path) -> None:
     my_read.reg_root(PROJECT)
     LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
 # </snip PROJECT>
+
+
+# <snip DISPATCHER_RICH>
+# TODO why hardcode big width
+CON = r_console.Console(width=1024)
+
+
+def rich_render_row_progress(text: str, current: int, total: int, width: int = 60, color: str = "white") -> r_text.Text:
+    """Renders a string where the background color acts as a progress bar."""
+    pct = 0.0 if total <= 0 else min(1.0, current / total)
+
+    text_padded = text.ljust(width)[:width]
+    fill_len = int(width * pct)
+
+    rich_text = r_text.Text('--- ')
+    if fill_len > 0:
+        rich_text.append(text_padded[:fill_len], style=f"bold black on {color}")
+    if fill_len < width:
+        rich_text.append(text_padded[fill_len:], style="bold white on default")
+
+    return rich_text
+
+
+
+class UiRich(Ui):
+    @override
+    def __init__(self, step_name: str, width: int = 60) -> None:
+        self.step_name = step_name
+        self.width = width
+
+        # state
+        self.task_id = "..."
+        self.current = 0
+        self.total = 1
+        self.statuses: list[str] = []
+
+        self.live = r_live.Live(self._generate_renderable(), refresh_per_second=10)
+
+    def _generate_renderable(self) -> r_console.Group:
+        # title + progress
+        bar_text = f"Task: {self.task_id} "
+        header = rich_render_row_progress(bar_text, self.current, self.total, self.width)
+
+        logs = r_text.Text("\n".join(self.statuses), style="dim")
+
+        return r_console.Group(
+            header,
+            logs
+        )
+
+    def _update(self):
+        self.live.update(self._generate_renderable())
+
+    @override
+    def register(self, dispatcher: my_event_dispatcher.EventDispatcher):
+        dispatcher.clear()
+        dispatcher.register(my_event.TaskStarted, self.on_task_started)
+        dispatcher.register(my_event.ProgressStart, self.on_progress_start)
+        dispatcher.register(my_event.ProgressAdvance, self.on_progress_advance)
+        dispatcher.register(my_event.ProgressCompleted, self.on_progress_completed)
+        dispatcher.register(my_event.Status, self.on_status)
+        dispatcher.register(my_event.TaskFinished, self.on_task_finished)
+
+    def on_task_started(self, e: my_event.TaskStarted):
+        self.task_id = e.task_id
+        self._update()
+
+    def on_progress_start(self, e: my_event.ProgressStart):
+        self.current = 0
+        self.total = e.total
+        self._update()
+
+    def on_progress_advance(self, e: my_event.ProgressAdvance):
+        self.current = e.completed
+        self._update()
+
+    def on_progress_completed(self, _):
+        self.current = self.total  # force fill
+        self._update()
+
+    def on_status(self, e: my_event.Status):
+        self.statuses.append(f"| {e.text}")
+        self._update()
+
+    def on_task_finished(self, e: my_event.TaskFinished):
+        self.current = self.total
+        self._update()
+
+    @override
+    def start(self):
+        self.live.start()
+
+    @override
+    def stop(self):
+        self.live.stop()
+
+
+@dataclasses.dataclass(slots=True)
+class WorkerState:
+    task_id: str = "Idle"
+    current: int = 0
+    total: int = 1
+
+
+class UiRichAsync(Ui):
+    def __init__(self, step_name: str, width: int = 120):
+        self.step_name = step_name
+        self.width = width
+
+        self.total_current = 0
+        self.total_target = 1
+        self.workers: dict[str, WorkerState] = {}
+
+        self._lock = threading.Lock()
+        self.live = r_live.Live(self._generate_renderable(), refresh_per_second=10)
+
+    def _generate_renderable(self) -> r_console.Group:
+        # must be called within lock
+
+        # progress in header
+        header_text = f" {self.step_name} ({self.total_current}/{self.total_target}) "
+        header_bar = rich_render_row_progress(header_text, self.total_current, self.total_target, self.width)
+
+        # worker table
+        table = r_table.Table(show_header=False, width=self.width, expand=True)
+        table.add_column("Worker")
+        table.add_column('Task')
+
+        for worker_id, state in sorted(self.workers.items()):
+            row_bar = rich_render_row_progress(state.task_id, state.current, state.total, self.width - 2)
+            table.add_row(worker_id, row_bar)
+
+        return r_console.Group(header_bar, table)
+
+    def _update(self):
+        # must be called within lock
+        self.live.update(self._generate_renderable())
+
+    def update_total_progress(self, current: int, total: int):
+        """Called by main thread to update the overall step progress."""
+        with self._lock:
+            self.total_current = current
+            self.total_target = total
+            self._update()
+
+    @override
+    def register(self, dispatcher: EventDispatcher):
+        dispatcher.register(my_event.TaskStarted, self.on_task_started)
+        dispatcher.register(my_event.ProgressStart, self.on_progress_start)
+        dispatcher.register(my_event.ProgressAdvance, self.on_progress_advance)
+        dispatcher.register(my_event.TaskFinished, self.on_task_finished)
+
+    def _get_worker(self, worker_id: str) -> WorkerState:
+        # must be called within lock
+
+        if worker_id not in self.workers:
+            self.workers[worker_id] = WorkerState()
+        return self.workers[worker_id]
+
+    def on_task_started(self, e: my_event.TaskStarted):
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.task_id = e.task_id
+            worker.current = 0
+            self._update()
+
+    def on_progress_start(self, e: my_event.ProgressStart):
+        if e.worker_id == 'main':
+            self.update_total_progress(0, self.total_target)
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.total = max(1, e.total)
+            self._update()
+
+    def on_progress_advance(self, e: my_event.ProgressAdvance):
+        if e.worker_id == 'main':
+            self.update_total_progress(e.completed, self.total_target)
+            return
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.current = e.completed
+            self._update()
+
+    def on_task_finished(self, e: my_event.TaskFinished):
+        if e.worker_id == 'main':
+            self.update_total_progress(self.total_target, self.total_target)
+            return
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.current = worker.total  # fill on finish
+            self._update()
+
+    @override
+    def start(self):
+        self.live.start()
+
+    @override
+    def stop(self):
+        self.live.stop()
+
+# </snip DISPATCHER_RICH>
+
+CLS_UI: type[Ui] = UiRich
+CLS_UI_ASYNC: type[Ui] = UiRichAsync
 
 
 # <snip CLS_DEPENDENCY>
@@ -561,6 +741,9 @@ def main_ex_aliases() -> list[Asset]:
 
     Also, this script has a neat table output for clusters per asset type,
     It can be useful to discern where exactly any extra names are located.
+
+    Also, since this stage is used as an actual part of the pipeline, it uses
+    the fancy printing shims.
     """
     # <snip MAIN_EX_ALIASES>
     assets: list[Asset] = []
@@ -595,17 +778,18 @@ def main_ex_aliases() -> list[Asset]:
         table_type_to_clusters[asset_type] = list(cluster_set)
 
     # generate the table
-    clusters_all = sorted(
-        {name for clusters in table_type_to_clusters.values() for name in clusters}
-    )
-    print('All clusters:', *clusters_all)
+    clusters_all = {name for clusters in table_type_to_clusters.values() for name in clusters}
+    clusters_all_sorted = sorted(clusters_all)
+
+    table = r_table.Table('[bold]Type', *sorted(clusters_all), title='Clusters', padding=0)
     for asset_type, clusters in table_type_to_clusters.items():
         cluster_set = set(clusters)
-        row = [
-            clm if clm in cluster_set else ' ' * len(clm)
-            for clm in clusters_all
-        ]
-        print(f'[{asset_type.type_name():>10}]:', '|'.join(row))
+        row = (
+            clm if clm in cluster_set else ''
+            for clm in clusters_all_sorted
+        )
+        table.add_row(asset_type.type_name(), *row)
+    CON.print(table)
 
     # lint
     lint_unused_aliases = lint_existing_aliases - lint_used_aliases
@@ -630,6 +814,7 @@ def main_ex_aliases() -> list[Asset]:
     return assets
 
 
+@ui_auto_sink(CLS_UI, step_name='Scanning references')
 def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     """Reference scanner.
 
@@ -661,9 +846,8 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
         for asset in assets
         for file_path in asset_scannables(asset, PROJECT)
     )
-    for asset, file_path in tqdm.tqdm(
-            scans, total=len(scans), desc='Scanning'
-    ):
+
+    for asset, file_path in ui_progress(scans):
         text = my_read.read(file_path)
         line_map = my_read.line_map(file_path)
         matches: list[my_scan_dep.DependencyMatch] = list(
@@ -690,7 +874,7 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
                 )
             )
 
-    print(f'\nDone! Found {total_matches} total dependency references.')
+    ui_out(f'Found {total_matches} total dependency references.')
     # </snip MAIN_EX_SCAN_SYNC>
     return dependencies
 
@@ -743,6 +927,7 @@ class LintUnused(LintAssetCluster):
 # </snip CLS_LINT_UNUSED>
 
 
+@ui_auto_sink(CLS_UI, "Lint: unused assets")
 def main_ex_lint_unused(
     dependencies: list[Dependency], assets: list[Asset]
 ) -> None:
@@ -763,7 +948,7 @@ def main_ex_lint_unused(
 
     # populate used set from dependencies
     used_asset_names: set[str] = set()
-    for dep in dependencies:
+    for dep in ui_progress(dependencies):
         # ignore self-references
         if dep.source_asset.name == dep.target_asset.name:
             continue
@@ -776,9 +961,9 @@ def main_ex_lint_unused(
     # unwrap
     violations_cnt = LINT.consume(LintUnused)
     if violations_cnt:
-        print(f"\nFound {violations_cnt} violations.")
+        ui_out(f"\nFound {violations_cnt} violations.")
     else:
-        print("\nSomehow all clear...")
+        ui_out("\nSomehow all clear...")
     # </snip MAIN_EX_LINT_UNUSED>
 
 
@@ -815,6 +1000,7 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
 # </snip CLS_LINT_CROSSREF>
 
 
+@ui_auto_sink(CLS_UI, "Lint: cross-cluster references")
 def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     """Validate cluster boundaries.
 
@@ -855,7 +1041,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     hidden bugs.
     """
     # <snip MAIN_EX_LINT_CROSSREF>
-    for dep in dependencies:
+    for dep in ui_progress(dependencies):
         source = dep.source_asset
         target = dep.target_asset
 
@@ -890,13 +1076,14 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     # you can turn on verbose=True
     violations_cnt = LINT.consume(LintCrossref)
     if violations_cnt:
-        print(f"\nFound {violations_cnt} violations.")
+        ui_out(f"\nFound {violations_cnt} violations.")
     else:
-        print("\nClear!!!")
+        ui_out("Clear!!!")
 
     # </snip MAIN_EX_LINT_CROSSREF>
 
 
+@ui_auto_sink(CLS_UI, "Building graph")
 def main_ex_graph(
     assets: list[Asset], dependencies: list[Dependency]
 ) -> dict[str, RoomGraph]:
@@ -983,7 +1170,9 @@ def main_ex_graph(
     # group rooms by their allowed clusters
     cluster_groups: dict[frozenset[str], list[my_asset.Room]] = {}
 
-    for asset_room in filter_type(my_asset.Room, assets):
+    for asset_room in assets:
+        if not isinstance(asset_room, my_asset.Room):
+            continue
         room_cluster = asset_cluster(asset_room)
         allowed_clusters = LINT_RULES.get(
             room_cluster, {room_cluster, 'Common'}
@@ -992,20 +1181,17 @@ def main_ex_graph(
             asset_room
         )
 
-    print('Clusterset to rooms:')
+    ui_out('Clusterset to rooms:')
     for cluster_set, rooms in cluster_groups.items():
-        print(*cluster_set)
+        ui_out(*cluster_set)
         for room in rooms:
-            print(' ', room.name)
-        print()
+            ui_out(' ', room.name)
+        ui_out()
 
     room_graph_data: dict[str, RoomGraph] = {}
 
     # process clustersets
-    print('Building graphs:')
-    clusterset_names_len = max(
-        len(' '.join(cluster_set)) for cluster_set in cluster_groups
-    )
+    ui_out('Building graphs:')
     for cluster_set, rooms in cluster_groups.items():
         graph, name_to_index = build_graph(set(cluster_set))
 
@@ -1014,10 +1200,9 @@ def main_ex_graph(
             name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
         ]
 
-        task_name = ' '.join(sorted(cluster_set)).rjust(clusterset_names_len)
-
-        for room in tqdm.tqdm(
-            rooms, desc=task_name, leave=True, file=sys.stdout
+        ui_out('- ' + ' '.join(sorted(cluster_set)))
+        for room in ui_progress(
+            rooms
         ):
             room_name = room.name
             if room_name not in name_to_index:
@@ -1048,6 +1233,7 @@ def main_ex_graph(
     return room_graph_data
 
 
+@ui_auto_sink(CLS_UI, "Lint: unreachable assets")
 def main_ex_lint_unused_graph(
     assets: list[Asset], room_graph_data: dict[str, RoomGraph]
 ) -> None:
@@ -1086,9 +1272,9 @@ def main_ex_lint_unused_graph(
 
     violations_cnt = LINT.consume(LintUnused)
     if violations_cnt:
-        print(f'\nFound {violations_cnt} unreachable assets.')
+        ui_out(f'\nFound {violations_cnt} unreachable assets.')
     else:
-        print("\nClear??? omg")
+        ui_out("\nClear??? omg")
     # </snip MAIN_EX_LINT_UNUSED_GRAPH>
 
 
@@ -1152,6 +1338,8 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
         return "\n".join(lines)
 # </snip CLS_LINT_CROSSREF_GRAPH>
 
+
+@ui_auto_sink(CLS_UI, "Lint: room cluster boundaries")
 def main_ex_lint_crossref_graph(
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
@@ -1177,7 +1365,7 @@ def main_ex_lint_crossref_graph(
     }
     total_violations = 0
 
-    for rg in room_graph_data.values():
+    for rg in ui_progress(list(room_graph_data.values())):
         room_cluster = asset_to_cluster.get(rg.room.name)
         if not room_cluster:
             continue
@@ -1255,13 +1443,13 @@ def main_ex_lint_crossref_graph(
                 ))
 
         if total_violations > 1000:  # noqa: PLR2004
-            print('\nLinter exceeded 1000 violations, bailing out')
+            ui_out('\nLinter exceeded 1000 violations, bailing out')
             break
     violations_cnt = LINT.consume(LintCrossrefGraph)
     if violations_cnt:
-        print(f'Found {violations_cnt} violations')
+        ui_out(f'Found {violations_cnt} violations')
     else:
-        print('No errors! Awesome!')
+        ui_out('No errors! Awesome!')
     # <md>
     # Once you've cleared this one, you may call the game qualified for using
     # the dangerous toys down the line.
@@ -1479,17 +1667,12 @@ def juice_obj_fix_mask(
             new_event_body = (
                 event_body[:offset] + injection_code + event_body[offset:]
             )
-            print(obj_name, '- A1: starts with a code block')
 
         elif event_body.startswith(block_604 + block_603):
             # CASE A2: starts with call parent, followed by a code block
             offset = len(block_604) + len(block_603)
             new_event_body = (
                 event_body[:offset] + injection_code + event_body[offset:]
-            )
-            print(
-                obj_name,
-                '- A2: starts with call parent, followed by a code block',
             )
 
         elif event_body.startswith(block_604):
@@ -1501,11 +1684,6 @@ def juice_obj_fix_mask(
                 + block_603
                 + injection_code
                 + event_body[offset:]
-            )
-            print(
-                obj_name,
-                '- A3: starts with call parent without code block '
-                'afterward???',
             )
             warnings.warn(
                 f'Object {obj_name} starts with call parent without '
@@ -1540,12 +1718,6 @@ def juice_obj_fix_mask(
         if obj_has_parent:
             # CASE B1: use the "Call parent event" block
             new_block += block_604
-            print(
-                obj_name,
-                '- B1: no room start + has parent, must add Call parent event',
-            )
-        else:
-            print(obj_name, '- B2: no room start')
 
         # add the code block and injection
         new_block += block_603 + injection_code
@@ -1743,6 +1915,7 @@ class BuildTasks:
     tasks_mp: tuple[Task, ...]
 
 
+@ui_auto_sink(CLS_UI, "Juicer: generate tasks")
 def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     """Run the thing.
 
@@ -1757,7 +1930,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
        just so.
 
     Therefore, I've made logic of task generation very explicit. Also, this
-    step actually executes some of the immediate tasks, like creating symlinks
+    step does some of the cheap tasks, like creating build dir and symlinks.
     """
 
     # filter assets by their juiceable type
@@ -2005,9 +2178,19 @@ def main_juicer_run(tasks: BuildTasks) -> None:
     cache = my_cache.FileBuildCache(JUICER.file_cache)
 
     print("Starting threaded tasks")
-    my_exec_thread.execute_threaded(tasks.tasks_threaded, cache, dispatcher)
+    with UiRichAsync("Threaded tasks") as ui:
+        ui.register(dispatcher)
+        ui.update_total_progress(0, len(tasks.tasks_threaded))
+
+        my_exec_thread.execute_threaded(tasks.tasks_threaded, cache, dispatcher)
+
     print("Starting mp tasks")
-    my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
+    with UiRichAsync("Multiprocessing tasks") as ui:
+        ui.register(dispatcher)
+        ui.update_total_progress(0, len(tasks.tasks_mp))
+
+        my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
+
     print("Dun")
 
 
@@ -2422,10 +2605,8 @@ def main() -> None:
 
     main_ex_lint_tree()
     assets = main_ex_aliases()
-
     if is_check:
         deps = main_ex_scan_sync(assets)
-
         # main_ex_lint_unused(deps, assets)
         main_ex_lint_crossref(deps)
 

@@ -20,10 +20,20 @@ class TaskFinished(Event):
 
 
 @dataclass(frozen=True, slots=True)
-class Progress(Event):
+class ProgressStart(Event):
+    task_id: str
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressAdvance(Event):
     task_id: str
     completed: int
-    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressCompleted(Event):
+    task_id: str
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,6 +14,7 @@ dev = [
     "pillow>=12.2.0",
     "pyahocorasick>=2.3.1",
     'pytest>=9.0.3',
+    "rich>=15.0.0",
     'ruff>=0.15.14',
     "rustworkx>=0.17.1",
     "tqdm>=4.67.3",

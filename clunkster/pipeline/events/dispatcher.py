@@ -9,6 +9,9 @@ class EventDispatcher:
     def __init__(self):
         self._handlers: dict[type[Event], list[Callable[[Event], None]]] = {}
 
+    def clear(self) -> None:
+        self._handlers.clear()
+
     def register[TEvent: Event](
         self,
         event_type: type[TEvent],
