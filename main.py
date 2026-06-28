@@ -2075,9 +2075,10 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
             continue
 
         # get wet file location
-        asset_name_to_file_wet[asset.name] = str(
-            JUICER.rel_dir_wet / asset_cluster(asset) / asset_wet_fname(asset)
-        )
+
+        asset_name_to_file_wet[asset.name] = (
+            JUICER.rel_dir_wet / asset_cluster(asset) / type(asset).type_get_dir_rel() / asset_wet_fname(asset)
+        ).as_posix()
 
     # common params for writing anything related to game maker
     text_params = {'encoding': 'utf-8', 'newline': '\n'}
