@@ -1,11 +1,10 @@
 """Build progress caching."""
 
 import collections.abc as col
-import hashlib
 import json
 from pathlib import Path
 
-from clunkster.project.task import Task
+from clunkster.pipeline.task import Task
 
 
 class FileBuildCache:
@@ -62,5 +61,8 @@ class FileBuildCache:
 
     def save(self) -> None:
         """Save task's hashes back to cache file."""
-        with self.cache_file.open('w') as f:
+        temp_file = self.cache_file.with_suffix(".tmp")
+
+        with temp_file.open('w') as f:
             json.dump(self.data, f, indent=2)
+        temp_file.replace(self.cache_file)

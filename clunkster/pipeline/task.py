@@ -2,7 +2,6 @@
 
 import collections.abc as col
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 import functools as ft
 import hashlib
@@ -14,11 +13,13 @@ def file_hash(*paths: Path) -> str:
     """Calculate MD5 hash of all input files."""
     hasher = hashlib.md5()
     for filepath in sorted(paths):
-        if filepath.exists():
-            assert filepath.is_file()
-            with filepath.open('rb') as f:
-                for chunk in iter(lambda: f.read(4096), b''):
-                    hasher.update(chunk)
+        if not filepath.exists():
+            raise FileNotFoundError(filepath)
+        if not filepath.is_file():
+            raise ValueError(f'{filepath} is not a file')
+        with filepath.open('rb') as f:
+            for chunk in iter(lambda: f.read(4096), b''):
+                hasher.update(chunk)
     return hasher.hexdigest()
 
 
@@ -36,21 +37,21 @@ class Task(ABC):
 
     @property
     @abstractmethod
-    def inputs(self) -> col.Iterable[Path]:
+    def inputs(self) -> col.Sequence[Path]:
         """Input files."""
 
     @ft.cached_property
-    def inputs_cached(self) -> col.Iterable[Path]:
+    def inputs_cached(self) -> col.Sequence[Path]:
         """Input files."""
         return self.inputs
 
-    @abstractmethod
     @property
-    def outputs(self) -> col.Iterable[Path]:
+    @abstractmethod
+    def outputs(self) -> col.Sequence[Path]:
         """Output files."""
 
     @ft.cached_property
-    def outputs_cached(self) -> col.Iterable[Path]:
+    def outputs_cached(self) -> col.Sequence[Path]:
         """Output files."""
         return self.outputs
 
@@ -73,25 +74,29 @@ class TaskGeneric(Task, ABC):
 
     @override
     @property
-    def inputs(self) -> col.Iterable[Path]:
+    def inputs(self) -> col.Sequence[Path]:
         return self._inputs
 
     @override
     @property
-    def outputs(self) -> col.Iterable[Path]:
+    def outputs(self) -> col.Sequence[Path]:
         return self._outputs
 
 
 class TaskCopy(TaskGeneric):
+    def __init__(self, file_input: Path, file_output: Path) -> None:
+        if not file_input.is_file():
+            raise ValueError(f'Input {file_input} is not a file')
+        if file_output.exists():
+            if not file_output.is_file():
+                raise ValueError(f'Attempted file write into directory {file_output}')
 
-    def __init__(self, file: Path, dir_input_root: Path, dir_output_root: Path) -> None:
-        assert file.is_file()
-        self.file_input = file
-        self.file_output = dir_output_root / file.relative_to(dir_input_root)
+        self.file_input = file_input
+        self.file_output = file_output
         super().__init__(
-            task_id=f'copy_{self.file_output}',
-            inputs=(self.file_input,),
-            outputs=(self.file_output,)
+            task_id=f'copy_{file_input}',
+            inputs=(file_input,),
+            outputs=(file_output,),
         )
 
     @override
@@ -99,11 +104,37 @@ class TaskCopy(TaskGeneric):
         shutil.copy2(self.file_input, self.file_output)
 
 
+class TaskCopyRebase(TaskGeneric):
+
+    def __init__(self, *files: Path, dir_input_root: Path, dir_output_root: Path) -> None:
+        not_files = tuple(file for file in files if not file.is_file())
+        if not_files:
+            raise ValueError(f'Input {not_files} are not files')
+
+        self.files_input = files
+        self.files_output = tuple(
+            dir_output_root / pth.relative_to(dir_input_root) for pth in self.files_input
+        )
+        super().__init__(
+            task_id=f'copy_rebase_{self.files_input}',
+            inputs=self.files_input,
+            outputs=self.files_output,
+        )
+
+    @override
+    def execute(self) -> None:
+        for file_input, file_dest in zip(self.files_input, self.files_output):
+            shutil.copy2(file_input, file_dest)
+
+
 class TaskCopyTree(TaskGeneric):
 
     def __init__(self, dir_input: Path, dir_output: Path) -> None:
-        assert dir_input.is_dir()
-        assert dir_output.is_dir()
+        if not dir_input.is_dir():
+            raise ValueError(f'Input {dir_input} is not a directory')
+        if dir_output.exists():
+            if not dir_output.is_dir():
+                raise ValueError(f'Attempted dir write into non-directory {dir_output}')
         self.dir_input = dir_input
         self.dir_output = dir_output
 
@@ -122,4 +153,4 @@ class TaskCopyTree(TaskGeneric):
 
     @override
     def execute(self) -> None:
-        shutil.copytree(self.dir_input, self.dir_output)
+        shutil.copytree(self.dir_input, self.dir_output, dirs_exist_ok=True)

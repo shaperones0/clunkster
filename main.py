@@ -39,8 +39,10 @@ from clunkster.text import location as my_location, read as my_read
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
-from clunkster.project import cache as my_cache
-from clunkster.project.task import Task, TaskCopy, TaskGeneric, TaskCopyTree
+from clunkster.pipeline import cache as my_cache
+from clunkster.pipeline.task import Task, TaskCopyRebase, TaskGeneric, TaskCopyTree, TaskCopy
+from clunkster.pipeline.executor import mp as my_exec_mp, thread as my_exec_thread
+from clunkster.pipeline.events import dispatcher as my_event_dispatcher
 
 # terminal color for output
 TER_RED = '\033[91m'
@@ -1714,7 +1716,6 @@ class TaskFixMaskObjects(TaskGeneric):
     @override
     def execute(self) -> None:
         shutil.copy2(self.file_input_meta, self.file_output_meta)
-        shutil.copy2(self.file_input_gml, self.file_output_gml)
         juice_obj_fix_mask(
             obj_name=self.obj_name,
             obj_has_parent=self.obj_has_parent,
@@ -1736,10 +1737,13 @@ def main_juicer_classes() -> None:
     """
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class BuildTasks:
+    tasks_threaded: tuple[Task, ...]
+    tasks_mp: tuple[Task, ...]
 
 
-
-def main_juicer_run(assets: list[Asset]) -> None:
+def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     """Run the thing.
 
     This stage is responsible for mapping out source project, generating
@@ -1752,7 +1756,8 @@ def main_juicer_run(assets: list[Asset]) -> None:
     2. We must also account for Common assets, and make sure they get copied
        just so.
 
-    Therefore, I've made logic of task generation very explicit.
+    Therefore, I've made logic of task generation very explicit. Also, this
+    step actually executes some of the immediate tasks, like creating symlinks
     """
 
     # filter assets by their juiceable type
@@ -1770,29 +1775,37 @@ def main_juicer_run(assets: list[Asset]) -> None:
         if isinstance(asset, AssetExtAudio):
             asset_audio.append(asset)
 
+    img_dry = JUICER.dir_dry / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
+    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
     tasks_threaded: list[Task] = []
-    tasks_objects: list[Task] = []  # special list to not fix twice
     tasks_mp: list[Task] = []
-
-    # create build folder
-    JUICER.dir_out.mkdir(parents=True, exist_ok=True)
 
     # them functions
     def pth_symlink(pth: Path) -> None:
         """Create a symlink from input project root to build output."""
         # this ain't IO bound operation so do it in-place
-        pth.symlink_to(
-            JUICER.dir_out / pth.relative_to(PROJECT),
-            target_is_directory=True
-        )
+        output_dir = JUICER.dir_out / pth.relative_to(PROJECT)
+        if not output_dir.is_symlink():
+            output_dir.symlink_to(
+                pth,
+                target_is_directory=True
+            )
+
+    def type_copy_yyd(asset_type: type[my_asset.AssetBuiltin]) -> None:
+        tasks_threaded.append(TaskCopyRebase(
+            asset_type.type_get_tree_file(PROJECT),
+            asset_type.type_get_index_file(PROJECT),
+            dir_input_root=PROJECT,
+            dir_output_root=JUICER.dir_out
+        ))
 
     def map_root(dir_root: Path) -> None:
         """Map project root."""
         for pth in dir_root.iterdir():
             if pth.is_file():
                 if pth.suffix == '.gm82':
-                    tasks_threaded.append(TaskCopy(
-                        file=pth,
+                    tasks_threaded.append(TaskCopyRebase(
+                        pth,
                         dir_input_root=PROJECT,
                         dir_output_root=JUICER.dir_out
                     ))
@@ -1803,7 +1816,7 @@ def main_juicer_run(assets: list[Asset]) -> None:
             match pth.name:
                 case 'backgrounds':
                     # process backgrounds
-                    pass
+                    map_backgrounds()
                 case 'cache':
                     # cache is not needed for building
                     pass
@@ -1827,6 +1840,8 @@ def main_juicer_run(assets: list[Asset]) -> None:
                     pth_symlink(pth)
                 case 'scripts':
                     # copy (we'll have to dynamically change a few scripts)
+                    #  using copytree on the whole tree might be faster than
+                    #  copying individual assets
                     tasks_threaded.append(TaskCopyTree(
                         pth,
                         JUICER.dir_out / pth.relative_to(PROJECT),
@@ -1836,7 +1851,7 @@ def main_juicer_run(assets: list[Asset]) -> None:
                     pth_symlink(pth)
                 case 'sprites':
                     # process sprites
-                    pass
+                    map_sprites()
                 case 'triggers':
                     # symlink
                     pth_symlink(pth)
@@ -1846,11 +1861,14 @@ def main_juicer_run(assets: list[Asset]) -> None:
     def map_data(dir_data: Path) -> None:
         """Map data folder."""
 
+        # make sure data folder exists
+        (JUICER.dir_out / dir_data.relative_to(PROJECT)).mkdir(exist_ok=True)
+
         # you wanna change names to reflect paths in AssetExtAudio classes
         for pth in dir_data.iterdir():
             if pth.is_file():
-                tasks_threaded.append(TaskCopy(
-                    file=pth,
+                tasks_threaded.append(TaskCopyRebase(
+                    pth,
                     dir_input_root=PROJECT,
                     dir_output_root=JUICER.dir_out
                 ))
@@ -1858,16 +1876,106 @@ def main_juicer_run(assets: list[Asset]) -> None:
             match pth.name:
                 case 'music':
                     # process bgm
-                    pass
+                    map_audio()
                 case 'sounds':
                     # process sfx + sfx3
-                    pass
+                    pass    # done above
                 case _:
                     # copy idk
-                    pass
+                    tasks_threaded.append(TaskCopyTree(
+                        pth,
+                        JUICER.dir_out / pth.relative_to(PROJECT),
+                    ))
+
+    def map_backgrounds() -> None:
+        """Map backgrounds."""
+        # copy yyd
+        type_copy_yyd(my_asset.Background)
+
+        for bg in asset_backgrounds:
+            if asset_cluster(bg) == "Common":
+                # copy as is
+                tasks_threaded.append(TaskCopyRebase(
+                    bg.get_background_metadata_file(PROJECT),
+                    bg.get_background_image(PROJECT),
+                    dir_input_root=PROJECT,
+                    dir_output_root=JUICER.dir_out
+                ))
+                continue
+            # copy metadata
+            tasks_threaded.append(TaskCopyRebase(
+                bg.get_background_metadata_file(PROJECT),
+                dir_input_root=PROJECT,
+                dir_output_root=JUICER.dir_out
+            ))
+            # copy dry image
+            tasks_threaded.append(TaskCopy(
+                file_input=img_dry,
+                file_output=bg.get_background_image(JUICER.dir_out)
+            ))
+            # generate wet image
+            tasks_mp.append(TaskEncodeBackground(
+                background=bg,
+                dir_input_root=PROJECT,
+                dir_wet_root=dir_wet / asset_cluster(bg)
+            ))
+
+    def map_sprites() -> None:
+        """Map sprites."""
+        # copy yyd
+        type_copy_yyd(my_asset.Sprite)
+
+        for sprite in asset_sprites:
+            if asset_cluster(sprite) == "Common":
+                # copy as is
+                tasks_threaded.append(TaskCopyTree(
+                    dir_input=sprite.get_sprite_folder(PROJECT),
+                    dir_output=sprite.get_sprite_folder(JUICER.dir_out)
+                ))
+                continue
+            # copy metadata
+            tasks_threaded.append(TaskCopyRebase(
+                sprite.get_sprite_metadata_file(PROJECT),
+                dir_input_root=PROJECT,
+                dir_output_root=JUICER.dir_out
+            ))
+            # copy dry images
+            meta = sprite.get_sprite_metadata(PROJECT)
+            for image_index in range(meta.frames):
+                tasks_threaded.append(TaskCopy(
+                    file_input=img_dry,
+                    file_output=sprite.get_sprite_image(JUICER.dir_out, image_index)
+                ))
+            # generate wet image
+            tasks_mp.append(TaskEncodeSprite(
+                sprite=sprite,
+                dir_input_root=PROJECT,
+                dir_wet_root=dir_wet / asset_cluster(sprite)
+            ))
+
+    def map_audio() -> None:
+        """Map music."""
+        # no yyd files
+        for audio in asset_audio:
+            if asset_cluster(audio) == "Common":
+                # copy as is
+                tasks_threaded.append(TaskCopyRebase(
+                    audio.file,
+                    dir_input_root=PROJECT,
+                    dir_output_root=JUICER.dir_out
+                ))
+                continue
+            # no metadata or dry stuff
+            tasks_mp.append(TaskCompressAudio(
+                audio=audio,
+                dir_wet_root=dir_wet / asset_cluster(audio)
+            ))
 
     def map_objects() -> None:
         """Map objects."""
+        # copy yyd
+        type_copy_yyd(my_asset.Object)
+
         for obj in asset_objects:
             # add all regardless of cluster
             tasks_threaded.append(TaskFixMaskObjects(
@@ -1876,587 +1984,35 @@ def main_juicer_run(assets: list[Asset]) -> None:
                 dir_out_root=JUICER.dir_out
             ))
 
+    # ensure output dir exists before creating symlinks
+    JUICER.dir_out.mkdir(parents=True, exist_ok=True)
 
+    # run mapper
+    map_root(PROJECT)
 
-def main_juicer_copy(assets: list[Asset]) -> None:
-    """Copy project's folder into build dir.
-
-    Once you get all the cross-cluster linters happy, we can start optimizing
-    the project. We will start with Project Juicer, and our first step
-    is to copy the project into a build directory, and replace every asset
-    from it with dry stubs, save for ones that are in Common cluster.
-
-    The dry stubs that I used for my project are provided in repo's
-    ``data/dry`` folder.
-
-    I should note that we will only be "juicing" backgrounds, sprites and
-    external audio (from gm82snd). Other assets don't impact RAM enough
-    to worry about them.
-
-    Once you run this tool, check that: your project gets successfully coped,
-    projects opens in Game Maker, and all the non-Common assets get replaced
-    with stubs. If all of these checks out, then you can do the next step.
-
-    Btw, the project will open, but it won't be ready for playing, because
-    we deleted all the audio. When you run the game, it will very soon crash
-    due to unknown sound. This issue will be solved at the end of the Juicer
-    pipeline... for now you'll have to live with it.
-    """
-    # --- COG_START: MAIN_EX_JUICER_COPY ---
-    # clear build folder
-    if JUICER.dir_out.exists():
-        # check that JUICER's out dir is part of the project just to be safe
-        # remove this check if necessary
-        # assert PROJECT in JUICER.dir_out.parents
-        shutil.rmtree(JUICER.dir_out)
-
-    # exclude Common assets from ignoring audio copy
-    paths_unignore: set[Path] = set()
-    for asset in assets:
-        if asset.cluster != 'Common':
-            continue
-        # hardcode this for now (we'll fix later)
-        if not isinstance(asset, (AssetExtSfx, AssetExtSfx3, AssetExtBgm)):
-            continue
-        paths_unignore.add(asset.file)
-
-    sfx_dir = AssetExtSfx.type_get_dir(PROJECT)
-    sfx3_dir = AssetExtSfx3.type_get_dir(PROJECT)
-    bgm_dir = AssetExtBgm.type_get_dir(PROJECT)
-
-    def _ignore_audio(dir_path: str, dir_contents: list[str]) -> list[str]:
-        """Callback for copytree to skip copying audio, except Common."""
-        path = Path(dir_path)
-
-        if (
-            path.is_relative_to(sfx_dir)
-            or path.is_relative_to(bgm_dir)
-            or path.is_relative_to(sfx3_dir)
-        ):
-            ignored_items = []
-
-            for content in dir_contents:
-                content_path = path / content
-
-                # ignore files outside unignore whitelist
-                if (
-                    content_path.is_file()
-                    and content_path not in paths_unignore
-                ):
-                    ignored_items.append(content)
-
-            return ignored_items
-
-        # ignore nothing
-        return []
-
-    print('Copying project...')
-    shutil.copytree(PROJECT, JUICER.dir_out, ignore=_ignore_audio)
-
-    stub_img = JUICER.dir_dry / (
-        'img_prod.png' if JUICER.is_prod else 'img_dev.png'
+    build_tasks = BuildTasks(
+        tasks_threaded=tuple(tasks_threaded),
+        tasks_mp=tuple(tasks_mp),
     )
 
-    print('Injecting dry stubs...')
-    # inject dry stubs
-    for asset in assets:
-        if asset.cluster == 'Common':
-            continue
-
-        if isinstance(asset, my_asset.Sprite):
-            meta = asset.get_sprite_metadata(JUICER.dir_out)
-            for image_index in range(meta.frames):
-                img = asset.get_sprite_image(JUICER.dir_out, image_index)
-                shutil.copyfile(stub_img, img)
-        elif isinstance(asset, my_asset.Background):
-            meta = asset.get_background_metadata(JUICER.dir_out)
-            if not meta.exists:
-                raise ValueError('Empty backgrounds are not allowed')
-            shutil.copyfile(
-                stub_img, asset.get_background_image(JUICER.dir_out)
-            )
-
-    # --- COG_END: MAIN_EX_JUICER_COPY ---
+    return build_tasks
 
 
-# --- COG_START: DEF_OBJ_FIX_MASK ---
+def main_juicer_run(tasks: BuildTasks) -> None:
+    """Run generated build tasks."""
 
-# --- COG_END: DEF_OBJ_FIX_MASK ---
+    dispatcher = my_event_dispatcher.EventDispatcher()
+    cache = my_cache.FileBuildCache(JUICER.file_cache)
 
-
-def main_juicer_fix_masks(assets: list[Asset]) -> None:
-    """Before we continue, we must fix one annoying GameMaker bug.
-
-    If you replace a sprite via ``sprite_replace_sprite``, it will not update
-    collision data for objects that use sprite. We'll have to do it manually
-    by injecting ``mask_index=mask_index`` into Room Start event of
-    every object.
-
-    Now, this fix isn't as trivial, since we have to inject code into objects,
-    making sure we solve every configuration preciely, without generating
-    unintended cases.
-
-    For this reason, we validate against specific action definitions, and raise
-    errors at a sight of any inconsistency. If your project frequently  uses
-    some substandard Room Start pattern than the ones we handle in this script,
-    feel free to modify it.
-
-    To elaborate on exact cases solved:
-
-    - A. Object already has Room Start event (line "#define Other_4" found)
-        - A1. Room Start starts with a code block (block 603)
-            - append the injected code after the action signature
-        - A2. Room Start starts with "Call parent's event" (block 604),
-            followed by a code block
-            - inject into the code block (tehcnically, the right
-              thing would be to inject it before "Call parent's event",
-              but, since this fix is applied to ALL objects, parent's
-              Room Start also has the mask fix)
-        - A3. Room Start starts with "Call parent's event", but not followed
-            by a code block (for whatever reason)
-            - create a new code block and inject right there (though I added
-              a warning for such cases, and you should investigate them)
-    - B. Object has no Room Start event
-        - B1. Object has a parent
-            - add "Call parent's event" block and a code block with inject
-              afterward
-        - B2. Object has no parent
-            - add just a code blck with inject
-
-    """
-    # --- COG_START: MAIN_EX_JUICER_FIX_MASKS ---
-    print('Injecting collision mask fixes into objects...')
-
-    objects = filter_type(my_asset.Object, assets)
-    for obj in tqdm.tqdm(objects, desc='Injecting fixes into objects...'):
-        # use output dir, since that's where we'll be writing
-        gml_path = obj.get_object_gml_file(JUICER.dir_out)
-        obj_fix_mask(obj, gml_path, JUICER.dir_out)
-    # --- COG_END: MAIN_EX_JUICER_FIX_MASKS ---
-
-
-# --- COG_START: DEF_PTH_GET_WET ---
-def pth_get_wet(dir_wet_cluster: Path, asset: my_asset.AssetFile) -> Path:
-    """Gen wet file location.
-
-    :param dir_wet_cluster: Wet root directory, including cluster name
-      (e.g. data/chunks/StageA/)
-    :param asset: Asset to get wet filename of.
-    :return: Resulting wet filename.
-    """
-    if isinstance(asset, AssetExtSfx):
-        fname = f'{asset.name[1:-1]}.wav'
-    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
-        fname = f'{asset.name[1:-1]}.ogg'
-    elif isinstance(asset, my_asset.Sprite):
-        fname = f'{asset.name}.gmspr'
-    elif isinstance(asset, my_asset.Background):
-        fname = f'{asset.name}.gmbck'
-    else:
-        raise NotImplementedError('Asset type not supported')
-
-    wet_type_dir = dir_wet_cluster / type(asset).type_get_dir_rel()
-    return wet_type_dir / fname
-
-
-# --- COG_END: DEF_PTH_GET_WET ---
-
-
-
-
-
-def main_juicer_gen_wet(assets: list[Asset]) -> None:
-    """Copying works, time to extract wet assets.
-
-    For this process we'll convert sprites and backgrounds into
-    ``.gmspr`` and ``.gmbck`` files for easier loading on game maker side,
-    music and sounds will be compressed. Refer to [Dehydration](#dehydration)
-    for more info.
-
-    Encoding images into the Game Maker's formats was done via my awesome
-    library [gmcodec](https://github.com/shaperones0/gmcodec).
-
-    Compressing audio was done via FFmpeg. Normally I'd postpone any
-    optimization passes until the pipeline is done, but the audio compression
-    one was too easy to insert for me to miss out.
-
-    As an unfortunate side effect, the process now takes around a minute
-    to finish... We'll address that once we are done with v1 of the pipeline.
-    Until then - suffer.
-    """
-    # --- COG_START: MAIN_EX_JUICER_GEN_WET ---
-    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
-    if dir_wet.exists():
-        shutil.rmtree(dir_wet)
-
-    print('Generating wet assets (compression & encoding)...')
-
-    for asset in tqdm.tqdm(
-        list(filter_type(my_asset.Sprite, assets)),
-        desc='Encoding sprites...',
-    ):
-        wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
-        wet_file.parent.mkdir(parents=True, exist_ok=True)
-        juice_sprite(asset, PROJECT, wet_file)
-
-    for asset in tqdm.tqdm(
-        list(filter_type(my_asset.Background, assets)),
-        desc='Encoding backgrounds...',
-    ):
-        wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
-        wet_file.parent.mkdir(parents=True, exist_ok=True)
-        juice_background(asset, PROJECT, wet_file)
-
-    for asset in tqdm.tqdm(
-        list(filter_type(AssetExtSfx, assets))
-        + list(filter_type(AssetExtSfx3, assets))
-        + list(filter_type(AssetExtBgm, assets)),
-        desc='Compressing audio...',
-    ):
-        wet_file = pth_get_wet(dir_wet / asset.cluster, asset)
-        wet_file.parent.mkdir(parents=True, exist_ok=True)
-        juice_audio(asset, wet_file)
-
-    # --- COG_END: MAIN_EX_JUICER_GEN_WET ---
+    print("Starting threaded tasks")
+    my_exec_thread.execute_threaded(tasks.tasks_threaded, cache, dispatcher)
+    print("Starting mp tasks")
+    my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
+    print("Dun")
 
 
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
-    """It is time to finally integrate Clunkster into the project.
-
-    Here's the static scripts that you'll have to add:
-
-    - ``clunkster_init()``: Initialized Clunkster's variables.
-    - ``clunkster_room_start()``: Clunkster's Room Start event, cleans up
-      all unused assets.
-    - ``clunkster_room_goto(target_room)``: A ``room_goto`` replacement
-      that ensures all assets are loaded for target room.
-    - ``clunkster_registry_begin()``: Toggles registry mode on.
-    - ``clunkster_is_reg()``: Returns registry mode status.
-    - ``clunkster_registry_end()``: Toggles registry mode off.
-
-    And the following scripts will be autogenerated in this step. You should
-    still add them - we'll be filling them in this step, instead of
-    creating. In raw project those are usually empty.
-
-    - ``clunkster_gen_type()``: Returns ``"dev"`` or ``"prod"`` in a built
-      project. Returns ``""`` in the raw source project.
-    - ``clunkster_gen_init_audio()``: Initializes audio stubs.
-    - ``clunkster_gen_get_room_clusters(target_room)``: Populates the required
-      cluster map.
-    - ``clunkster_gen_hydrate_cluster(cluster_name)``: Loads assets.
-    - ``clunkster_gen_dehydrate_cluster(cluster_name)``: Unloads assets
-      (replaces them with ``dry`` stubs to reduce RAM).
-
-    Following describes the base implementation of those scripts, as well
-    as some tips on where they should be called.
-
-    1. ``clunkster_init()`` - Initializes Clunkster logic
-
-    .. code-block:: gml
-
-        ///clunkster_init()
-        //Initialize Clunkster globals
-
-        global.__clunk_reg_mode=0
-        global.__clunk_active_clusters=ds_map_create()
-        global.__clunk_req_clusters=ds_map_create()
-
-    See example of proper Game Start logic below.
-
-    2. ``clunkster_room_start()`` - System's Room Start event, responsible
-      for cleaning up unloaded assets.
-
-    .. code-block:: gml
-
-        ///clunkster_room_start()
-        //Clunkster's Room Start event
-        //Cleanup cluster no longer needed for this room
-
-        var _key,_next;
-        _key=ds_map_find_first(global.__clunk_active_clusters)
-
-        while is_string(_key) {
-            _next=ds_map_find_next(global.__clunk_active_clusters,_key)
-            if not ds_map_exists(global.__clunk_req_clusters,_key) {
-                //this cluster is no longer needed
-                clunkster_gen_dehydrate_cluster(_key)
-                ds_map_delete(global.__clunk_active_clusters,_key)
-            }
-            _key=_next
-        }
-
-    Put it at Room Start, in some ``World``-like object.
-
-    3. ``clunkster_room_goto(target_room)`` - Interceptor of ``room_goto``
-      calls, which is responsible for loading any asset required by target
-      room.
-
-    .. code-block:: gml
-
-        ///clunkster_room_goto(room)
-        //Intercept room_goto and load necessary clusters
-
-        ds_map_clear(global.__clunk_req_clusters)
-        clunkster_gen_get_room_clusters(argument0)
-
-        var _key;
-        _key=ds_map_find_first(global.__clunk_req_clusters)
-        repeat ds_map_size(global.__clunk_req_clusters) {
-            if !ds_map_exists(global.__clunk_active_clusters,_key) {
-                //must be loaded
-                clunkster_gen_hydrate_cluster(_key)
-                ds_map_add(global.__clunk_active_clusters,_key,1)
-            }
-            _key=ds_map_find_next(global.__clunk_req_clusters,_key)
-        }
-
-        room_goto(argument0)
-
-    Notice that you'll have to replace every ``room_goto`` call with this
-      function, and never use any other methods of room change.
-
-    Next are registry-related functions.
-
-    4. ``clunkster_registry_begin()`` - Switch registry mode ON.
-
-    .. code-block:: gml
-
-        ///clunkster_registry_begin()
-
-        global.__clunk_reg_mode=1
-
-    5. ``clunkster_registry_end()`` - Switch registry mode OFF.
-
-    .. code-block:: gml
-
-        ///clunkster_registry_end()
-
-        global.__clunk_reg_mode=0
-
-    6. ``clunkster_is_reg()`` - Check whether in registry mode.
-
-    .. code-block:: gml
-
-        ///clunkster_is_reg()
-        //Check whether in registry mode
-
-        return global.__clunk_reg_mode
-
-    And finally, the autogenerated scripts. In raw project they can remain
-    empty.
-
-    7. ``clunkster_gen_type()``
-
-    .. code-block:: gml
-
-        ///clunkster_gen_type()
-        //Returns the type of project.
-        //Expect "dev" for builds with no dynamic asset loading
-        //Expect "prod" for builds with dynamic asset loading
-        //Expect "" for raw projects
-
-        //This script is autogenerated by Clunkster.
-
-        return ""
-
-    8. ``clunkster_gen_init_audio()``
-
-    .. code-block:: gml
-
-        ///clunkster_gen_init_audio()
-        //Initialize audio sources with stubs
-        //sound_add_ext("null.wav",kind,streamed,"snd_actual")
-
-        //This script is autogenerated by Clunkster.
-
-    9. ``clunkster_gen_get_room_clusters(target_room)``
-
-    .. code-block:: gml
-
-        ///clunkster_gen_get_room_clusters(target_room)
-        //Get clusters that must be loaded for given room
-        //Populates global.__clunk_req_clusters
-
-        //This script is autogenerated by Clunkster.
-
-    10. ``clunkster_gen_hydrate_cluster(cluster_name)``
-
-    .. code-block:: gml
-
-        ///clunkster_gen_hydrate_cluster(cluster_name)
-        //Loads data from specified cluster in one block
-
-        //This script is autogenerated by Clunkster.
-
-    11. ``clunkster_gen_dehydrate_cluster(cluster_name)``
-
-    .. code-block:: gml
-
-        ///clunkster_gen_dehydrate_cluster(cluster_name)
-        //Unloads data from specified cluster in one block
-
-        //This script is autogenerated by Clunkster.
-
-    What are the registries? Basically, if you wanna have some values
-    associated with a externalized resource, that should be applied whenever
-    its loaded, you can simply put such data in a ``dsmap`` and add some
-    logic for loading and applying those values
-
-    For example, if you have some values associated with audio source (like
-    volume balancing, original sample rate, loops), you can create a
-    registry, like this ``sndreg``:
-
-    ``sndreg_init``:
-
-    .. code-block:: gml
-
-        ///sndreg_init()
-        //Initialize sound registry
-
-        global._sndreg=ds_map_create()
-        global._sndlist=ds_list_create()
-
-    ``sndreg_ext`` - Fills in all data of an audio at once:
-
-    .. code-block:: gml
-
-        ///sndreg_ext(snd,og_samplerate=44100,vol=1,[loopstart,loopend=-1])
-        //Fill in all params at once
-
-        //reg
-        if !ds_map_exists(global._sndreg,argument0+":REG") {
-            ds_list_add(global._sndlist,argument0)
-            dsmap(global._sndreg,argument0+":REG",1)
-        }
-
-        //rate
-        var _rate;if argument_count>1 _rate=argument[1] else _rate=44100
-        dsmap(global._sndreg,argument0+":RATE",_rate)
-
-        //vol
-        var _vol;if argument_count>2 _vol=argument[2] else _vol=1
-        dsmap(global._sndreg,argument0+":VOL",_vol)
-
-        //loop
-        if argument_count>3 {
-            dsmap(global._sndreg,argument0+":LA",argument[3])
-            var _le;
-            if argument_count>4 _le=argument[4] else _le=-1
-            dsmap(global._sndreg,argument0+":LB",_le)
-        }
-
-    ``sndreg_populate`` - This is where you define all those values:
-
-    .. code-block:: gml
-
-        ///sndreg_populate()
-        //Populate sound registry with necessary sound data
-
-        sndreg_ext("block_break",44100)
-        sndreg_ext("block_change",44100,0.8)
-        sndreg_ext("boss_hit",44100,0.8)
-        sndreg_ext("cherry_trap",44100,0.6)
-        sndreg_ext("get_item",44100)
-        sndreg_ext("glass",44100)
-
-        if room_is_ice_stage() {
-            sndreg_ext("ice_melt",44100)
-        }
-
-    ``sndreg_apply`` - Apply registry values to a sound:
-
-    .. code-block:: gml
-
-        ///sndreg_apply(snd)
-        if sound_exists(argument0) {
-            //volume
-            var _vol;_vol=dsmap(global._sndreg,argument0+":VOL")
-            if is_undefined(_vol) _vol=1
-            sound_volume(argument0,_vol)
-
-            //loop
-            var _ls;_ls=dsmap(global._sndreg,argument0+":LA")
-            if not is_undefined(_ls) {
-                var _le;_le=dsmap(global._sndreg,argument0+":LB")
-                if is_undefined(_le) _le=-1
-
-                //scale samplerate to accound for compression
-                var _scaled_start,_scaled_end;
-                _scaled_start=sndreg_scale_sample(argument0,_ls)
-
-                if _le==-1 {
-                    _scaled_end=sound_get_length(argument0,unit_samples)
-                }
-                else {
-                    _scaled_end=sndreg_scale_sample(argument0,_le)
-                }
-                sound_set_loop(
-                    argument0,
-                    _scaled_start,_scaled_end,unit_samples
-                )
-            }
-        }
-        else {
-            show_error(str_ins(
-                "sndreg_apply: Sound '%' doesn't exist",argument0
-            ),0)
-        }
-
-    ``sndreg_apply_all`` - Apply registry values to all registered sounds; this
-      one should be used right after registry population, if project type
-      is raw.
-
-    .. code-block:: gml
-
-        ///sndreg_apply_all()
-        //Apply audio stuff to all sounds
-
-        var _i,_ac,_snd;
-        _ac=ds_list_size(global._sndlist)
-        for (_i=0;_i<_ac;_i+=1) {
-            _snd=ds_list_find_value(global._sndlist,_i)
-            sndreg_apply(_snd)
-        }
-
-    This allows us to write a clean Game Start logic:
-
-    .. code-block:: gml
-
-        clunkster_registry_begin()
-        sndreg_populate()
-        clunkster_registry_end()
-        if clunkster_gen_type() == "" {
-            //all audio is internal and loaded, run audio balance
-            sndreg_apply_all()
-        }
-        else {
-            //we are in 'dev' or 'prod' build, generate stubs
-            clunkster_gen_init_audio()
-        }
-
-    With that out of the way we may start on the autogenerating GML scripts.
-    Now - this is the part where most of the project variability would kick in.
-    Things like:
-
-    1. What kinds of routines should be called on each loaded assets
-    2. How do you register external assets
-    3. What way of dehydration in runtime works best for you
-
-    etc.
-
-    You'll have to look at the code and edit those moments in manually.
-
-    In this particular project, the dehydration was implemented according to
-    [the respective section of this readme](#dehydration).
-
-    Also, notice that in this implementation we load everything
-    synchronously in one block, resulting in 1-5 second stutters during
-    loads. I don't think such low loading time create a need for things like
-    loading screens.
-
-    Notice the humongous number of functions. That's a secret tool that will
-    come in handy later.
-    """
+    """It is time to finally integrate Clunkster into the project."""
     # --- COG_START: MAIN_EX_JUICER_GEN_GML ---
     print('Generating Clunkster scripts...')
 
@@ -2495,11 +2051,11 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     asset_name_to_file_wet: dict[str, str] = {}
     dehydrated_clusters: set[str] = set()
     for asset in assets:
-        if asset.cluster == 'Common':
+        if asset_cluster(asset) == 'Common':
             # skip common assets
             continue
 
-        dehydrated_clusters.add(asset.cluster)
+        dehydrated_clusters.add(asset_cluster(asset))
 
         # populate specific array
         if isinstance(asset, AssetExtBgm):
@@ -2519,9 +2075,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
             continue
 
         # get wet file location
-        dir_wet = JUICER.dir_out / JUICER.rel_dir_wet / asset.cluster
         asset_name_to_file_wet[asset.name] = str(
-            pth_get_wet(dir_wet, asset).relative_to(JUICER.dir_out)
+            JUICER.rel_dir_wet / asset_cluster(asset) / asset_wet_fname(asset)
         )
 
     # common params for writing anything related to game maker
@@ -2542,10 +2097,11 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
     cluster_to_rooms: dict[str, list[str]] = {}
     for room in assets_rooms:
-        cluster_to_rooms.setdefault(room.cluster, []).append(room.name)
+        room_cluster = asset_cluster(room)
+        cluster_to_rooms.setdefault(room_cluster, []).append(room.name)
 
         needed_clusters = set(
-            LINT_RULES.get(room.cluster, {room.cluster, 'Common'})
+            LINT_RULES.get(room_cluster, {room_cluster, 'Common'})
         )
         needed_clusters.discard('Common')
 
@@ -2637,12 +2193,13 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
         # populate load code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster_load_code.setdefault(asset.cluster, []).append(
+        cluster = asset_cluster(asset)
+        cluster_load_code.setdefault(cluster, []).append(
             f'    sound_replace({asset.name},"{pth_wet}",{kind},{preload}) '
             f'sndreg_apply({asset.name})'
         )
         # populate unload code
-        cluster_unload_code.setdefault(asset.cluster, []).append(
+        cluster_unload_code.setdefault(cluster, []).append(
             f'    sound_replace({asset.name},{stub_var},{kind},{preload})'
         )
 
@@ -2653,20 +2210,22 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     for asset in assets_spr:
         # no need for any init code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster_load_code.setdefault(asset.cluster, []).append(
+        cluster = asset_cluster(asset)
+        cluster_load_code.setdefault(cluster, []).append(
             f'    sprite_replace_sprite({asset.name},"{pth_wet}")'
         )
-        cluster_unload_code.setdefault(asset.cluster, []).append(
+        cluster_unload_code.setdefault(cluster, []).append(
             f'    sprite_replace_sprite({asset.name},_p_spr)'
         )
 
     for asset in assets_bg:
         # no need for any init code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster_load_code.setdefault(asset.cluster, []).append(
+        cluster = asset_cluster(asset)
+        cluster_load_code.setdefault(cluster, []).append(
             f'    background_replace_background({asset.name},"{pth_wet}")'
         )
-        cluster_unload_code.setdefault(asset.cluster, []).append(
+        cluster_unload_code.setdefault(cluster, []).append(
             f'    background_replace_background({asset.name},_p_bg)'
         )
 
@@ -2709,628 +2268,6 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     # MD: continue onto the improved version of Project Juicer below.
     # --- COG_END: MAIN_EX_JUICER_GEN_GML ---
 
-
-# --- COG_START: CLS_TASKS ---
-class TaskAsset[TAsset: my_asset.AssetFile](my_task.Task, ABC):
-    """Generic asset-based task."""
-
-    @abstractmethod
-    def _get_asset(self) -> my_asset.AssetFile:
-        """Get the asset that this tasks processes."""
-
-    def get_asset(self) -> my_asset.AssetFile:
-        """Get the asset that this tasks processes."""
-        return self._get_asset()
-
-
-class TaskEncodeBackground(TaskAsset[my_asset.Background]):
-    """Encode background task."""
-
-    def __init__(
-        self,
-        background: my_asset.Background,
-        project_root: Path,
-        dir_project_out: Path,
-        dir_wet_cluster: Path,
-        file_dry: Path,
-    ) -> None:
-        """Create the task from existing asset."""
-        self.background = background
-        self.project_root = project_root
-        self.project_out = dir_project_out
-        self.file_dry = file_dry
-
-        # destination image (dry or as-is if Common)
-        self.file_meta = background.get_background_metadata_file(project_root)
-        self.out_img = background.get_background_image(dir_project_out)
-
-        # add png into required outputs
-        outputs = [self.out_img, self.file_meta]
-
-        # add gmbck only if not common (commons won't be generating those)
-        self.file_gmbck_output = pth_get_wet(dir_wet_cluster, background)
-        if background.cluster != 'Common':
-            outputs.append(self.file_gmbck_output)
-
-        super().__init__(
-            task_id=f'encode_bg_{background.name}',
-            inputs=(
-                background.get_background_metadata_file(project_root),
-                background.get_background_image(project_root),
-            ),
-            outputs=outputs,
-        )
-
-    def _get_asset(self) -> my_asset.AssetFile:
-        return self.background
-
-    def execute(self) -> None:
-        """Execute the task."""
-        if self.background.cluster == 'Common':
-            # raw copy
-            src = self.background.get_background_image(self.project_root)
-            dest = self.out_img
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-        else:
-            # juice
-            juice_background(
-                self.background, self.project_root, self.file_gmbck_output
-            )
-            # stub
-            dest = self.out_img
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(self.file_dry, dest)
-
-        # always copy the metadata
-        dest = self.project_out / self.file_meta.relative_to(self.project_root)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            self.file_meta,
-            dest,
-        )
-
-
-class TaskEncodeSprite(TaskAsset[my_asset.Sprite]):
-    """Encode sprite task."""
-
-    def __init__(
-        self,
-        sprite: my_asset.Sprite,
-        project_root: Path,
-        dir_project_out: Path,
-        dir_wet_cluster: Path,
-        file_dry: Path,
-    ) -> None:
-        """Create the task from existing asset."""
-        self.sprite = sprite
-        self.project_root = project_root
-        self.project_out = dir_project_out
-        self.file_dry = file_dry
-
-        self.file_meta = sprite.get_sprite_metadata_file(project_root)
-        meta = sprite.get_sprite_metadata(project_root)
-
-        # map destination images (dry or as-is if Common)
-        self.out_imgs = [
-            sprite.get_sprite_image(dir_project_out, i)
-            for i in range(meta.frames)
-        ]
-
-        # add pngs into required outputs
-        outputs = [*self.out_imgs, self.file_meta]
-
-        # add gmspr only if not common (commons won't be generating those)
-        self.file_gmspr_output = pth_get_wet(dir_wet_cluster, sprite)
-        if sprite.cluster != 'Common':
-            outputs.append(self.file_gmspr_output)
-
-        super().__init__(
-            task_id=f'encode_spr_{sprite.name}',
-            inputs=(
-                sprite.get_sprite_metadata_file(project_root),
-                *(
-                    sprite.get_sprite_image(project_root, i)
-                    for i in range(meta.frames)
-                ),
-            ),
-            outputs=outputs,
-        )
-
-    def _get_asset(self) -> my_asset.AssetFile:
-        return self.sprite
-
-    def execute(self) -> None:
-        """Execute the task."""
-        meta = self.sprite.get_sprite_metadata(self.project_root)
-        if self.sprite.cluster == 'Common':
-            # raw copy
-            for i in range(meta.frames):
-                src = self.sprite.get_sprite_image(self.project_root, i)
-                dest = self.out_imgs[i]
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
-        else:
-            # juice
-            juice_sprite(
-                self.sprite, self.project_root, self.file_gmspr_output
-            )
-            # stub
-            for dest in self.out_imgs:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(self.file_dry, dest)
-
-        # always copy the metadata
-        dest = self.project_out / self.file_meta.relative_to(self.project_root)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            self.file_meta,
-            dest,
-        )
-
-
-class TaskCompressAudio(TaskAsset[AssetExtAudio]):
-    """Compress audio task."""
-
-    def __init__(
-        self,
-        audio: AssetExtAudio,
-        project_root: Path,
-        dir_project_out: Path,
-        dir_wet_cluster: Path,
-        _: Path,
-    ) -> None:
-        """Create the task from existing asset."""
-        self.audio = audio
-        self.project_root = project_root
-        self.project_out = dir_project_out
-        # there's no dry file for audio
-
-        # Commons compress into data/music folder,
-        #  non-Commons into data/chunks/whatever
-        self.file_out_chunked = pth_get_wet(dir_wet_cluster, audio)
-        self.file_out_raw = (
-            dir_project_out
-            / self.file_out_chunked.relative_to(dir_wet_cluster)
-        )
-
-        if audio.cluster == 'Common':
-            self.file_output = self.file_out_raw
-        else:
-            self.file_output = self.file_out_chunked
-        super().__init__(
-            task_id=f'compress_{audio.name[1:-1]}',
-            inputs=(audio.file,),
-            outputs=(self.file_output,),
-        )
-
-    def _get_asset(self) -> my_asset.AssetFile:
-        return self.audio
-
-    def execute(self) -> None:
-        """Execute the task."""
-        # it might sound tempting to compress the Common audio as well,
-        #  but you don't really wanna hear it
-        if self.audio.cluster == 'Common':
-            src = self.audio.file
-            dest = self.file_output
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(src, dest)
-        else:
-            juice_audio(self.audio, self.file_output)
-
-
-class TaskFixMaskObjects(TaskAsset[my_asset.Object]):
-    """Inject ``mask_index=mask_index`` on objects room start."""
-
-    def __init__(
-        self,
-        obj: my_asset.Object,
-        project_root: Path,
-        dir_project_out: Path,
-        dir_wet_cluster: Path,
-        _: Path,
-    ) -> None:
-        """Mask fixer."""
-        self.obj = obj
-        self.project_root = project_root
-        self.project_out = dir_project_out
-
-        self.in_file_meta = obj.get_object_metadata_file(project_root)
-        self.in_file_gml = obj.get_object_gml_file(project_root)
-
-        self.out_file_meta = dir_project_out / self.in_file_meta.relative_to(
-            self.project_root
-        )
-        self.out_file_gml = dir_project_out / self.in_file_gml.relative_to(
-            self.project_root
-        )
-
-        super().__init__(
-            task_id=f'fixmasks_{obj.name}',
-            inputs=(self.in_file_meta, self.in_file_gml),
-            outputs=(self.out_file_meta, self.out_file_gml),
-        )
-
-    def _get_asset(self) -> my_asset.AssetFile:
-        return self.obj
-
-    def execute(self) -> None:
-        """Execute the task."""
-        # inject the code into every object, regardless of common or not
-
-        # feed project root into dir_out because idk that's the source FIXME
-        obj_fix_mask(self.obj, self.out_file_gml, self.project_root)
-
-
-class TaskFixBgStretchRooms(TaskAsset[my_asset.Room]):
-    """Inject background stretch logic into room's ``code.gml``."""
-
-    def __init__(
-        self,
-        room: my_asset.Room,
-        project_root: Path,
-        dir_project_out: Path,
-        dir_wet_cluster: Path,
-        _: Path,
-    ) -> None:
-        """Initialize room background stretch fixer."""
-        self.room = room
-        self.project_root = project_root
-        self.project_out = dir_project_out
-
-        self.in_file_meta = room.get_room_metadata_file(project_root)
-        self.in_file_gml = room.get_room_gml_file(project_root)
-
-        self.out_file_meta = dir_project_out / self.in_file_meta.relative_to(
-            project_root
-        )
-        self.out_file_gml = dir_project_out / self.in_file_gml.relative_to(
-            project_root
-        )
-
-        # all files and fields are guaranteed to exist
-        meta = room.get_room_metadata(project_root)
-        self.idx_stretch: list[int] = [
-            i for i in range(8) if getattr(meta, f'bg_stretch{i}')
-        ]
-        self.gml_src = self.in_file_gml.read_text(encoding='utf-8')
-
-        super().__init__(
-            task_id=f'rm_fixstretch_{room.name}',
-            inputs=(self.in_file_meta, self.in_file_gml),
-            outputs=(self.out_file_meta, self.out_file_gml),
-        )
-
-    def _get_asset(self) -> my_asset.AssetFile:
-        return self.room
-
-    def execute(self) -> None:
-        """Execute task."""
-        code = self.gml_src
-        if self.idx_stretch:
-            lines = [
-                '\n// --- CLUNKSTER BG STRETCH FIX ---',
-                *(
-                    f"""
-if background_width[{i}]>0 && background_height[{i}]>0 {{
-    background_xscale[{i}]=room_width/background_width[{i}]
-    background_yscale[{i}]=room_height/background_height[{i}]
-}}"""
-                    for i in self.idx_stretch
-                ),
-            ]
-            code = '\n'.join(lines) + '\n' + self.gml_src
-        self.out_file_gml.write_text(code, encoding='utf-8')
-
-
-class ProcessorGeneric[TAsset: my_asset.AssetFile](
-    my_proj_processor.Processor
-):
-    """Generic asset type processor, processes all assets of the given type.
-
-    Puts type's directory into ignore, expects task constructor
-    signature to be (``asset``, ``project_root``, ``dir_wet_cluster``).
-    """
-
-    def __init__(
-        self,
-        cls_asset: type[TAsset],
-        # bruuuuuuuuuuuuuuuuh
-        cls_task: col.Callable[
-            [TAsset, Path, Path, Path, Path], TaskAsset[TAsset]
-        ],
-        dir_wet: Path,
-        file_dry: Path,
-    ) -> None:
-        """Initialize generic asset processor.
-
-        :param cls_task: Class with a constructor signature of (``asset``,
-          ``path_project_root``, ``path_project_out``, ``path_wet_cluster``,
-          ``file_ry``)
-        :param dir_wet: Exported assets directory, like ``data/chunks``.
-        """
-        self.cls_asset = cls_asset
-        self.cls_task = cls_task
-        self.dir_wet = dir_wet
-        self.file_dry = file_dry
-
-    def get_ignored_source_patterns(
-        self, project_root: Path
-    ) -> col.Iterable[str]:
-        """Ignores entire directory of this asset type.
-
-        :param project_root:
-        :return:
-        """
-        # not a single day without hax
-        dir_posix = self.cls_asset.type_get_dir_rel().as_posix()
-        for ext_glob in self.cls_asset.type_globs():
-            yield f'{dir_posix}/**/{ext_glob}'
-
-    def generate_tasks(
-        self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
-    ) -> col.Iterable[my_task.Task]:
-        """Generate tasks for converting all assets of this type."""
-        for asset in filter_type(self.cls_asset, assets):
-            yield self.cls_task(
-                asset,
-                project_root,
-                dir_out,
-                self.dir_wet / asset.cluster,
-                self.file_dry,
-            )
-
-
-class ProcessorRoomsPatch(my_proj_processor.Processor):
-    """Processes rooms to fix background scaling."""
-
-    def __init__(
-        self,
-        dir_wet: Path,
-        file_dry: Path,
-    ) -> None:
-        """Initialize generic asset processor.
-
-        :param dir_wet: Exported assets directory, like ``data/chunks``.
-        """
-        self.dir_wet = dir_wet
-        self.file_dry = file_dry
-
-    def get_ignored_source_patterns(
-        self, project_root: Path
-    ) -> col.Iterable[str]:
-        """Get ignored patters.
-
-        Don't hijack anything.
-        """
-        return []
-
-    def generate_tasks(
-        self, assets: col.Iterable[Asset], project_root: Path, dir_out: Path
-    ) -> col.Iterable[my_task.Task]:
-        """Generate room fix tasks."""
-        for room in filter_type(my_asset.Room, assets):
-            yield TaskFixBgStretchRooms(
-                room,
-                project_root,
-                dir_out,
-                self.dir_wet / room.cluster,
-                self.file_dry,
-            )
-
-
-# --- COG_END: CLS_TASKS ---
-
-
-def main_juicer2_cls() -> tuple[
-    my_cache.FileBuildCache,
-    my_proj_ignore.FileIgnore,
-    tuple[my_proj_processor.Processor, ...],
-]:
-    """Let's upgrade the Juicer.
-
-    Now that we've verified our project generation, we can optimize the
-    two lengthiest parts of the pipeline: project copying and asset
-    processing. We want to lower our build times down to 5-10 seconds on
-    regular builds, which we'll do with the help of caching and
-    multiprocessing.
-
-    Now, caching and multiprocessing also means that we'll have to convert
-    our code into atomic "tasks", that can be fed into a process pool executor
-    and do their stuff from here. But this presents a bit of a challenge on its
-    own - sending stuff between Python processes takes some effort. Python has
-    to picke objects on one side, send it, and then unpickle on the other (_god
-    i wish there was an easier way to do this lol_). So some cheap operations
-    (like copying the bulk of the file count, ahem, rooms, ahem) can be done
-    synchronously in-place (or via Python's threading). So that's why we'll
-    split this pipeline into, again, copying the (bulk of the) project, and
-    then the actual expensive tasks would be sent to ``ProcessPoolExecutor``.
-
-    It's a good thing that Clunkster provides several utilities for such
-    project conversions, one of them is a system of "tasks" (atomic conversion
-    of one asset) and "processors" (factories, that walk through the
-    asset/dependency lists and generate tasks).
-
-    So let's write those processors and tasks. We'll reuse our logic from
-    earlier examples. Notice that we have a bunch of separate logic for
-    Common and non-Common assets. It is how it is.
-    """
-    # --- COG_START: MAIN_EX_JUICER2_CLS ---
-    # setup build cache and ignore file while we're at it
-    cl_cache = my_cache.FileBuildCache(JUICER.file_cache)
-    cl_ignore = my_proj_ignore.FileIgnore.from_file(JUICER.file_ignore)
-    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
-    cl_processors = (
-        ProcessorGeneric(
-            my_asset.Background,
-            TaskEncodeBackground,
-            dir_wet,
-            JUICER.dir_dry
-            / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}',
-        ),
-        ProcessorGeneric(
-            my_asset.Sprite,
-            TaskEncodeSprite,
-            dir_wet,
-            JUICER.dir_dry
-            / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}',
-        ),
-        ProcessorGeneric(
-            AssetExtBgm,
-            TaskCompressAudio,
-            dir_wet,
-            Path(),  # dummy
-        ),
-        ProcessorGeneric(AssetExtSfx, TaskCompressAudio, dir_wet, Path()),
-        ProcessorGeneric(AssetExtSfx3, TaskCompressAudio, dir_wet, Path()),
-        ProcessorGeneric(my_asset.Object, TaskFixMaskObjects, dir_wet, Path()),
-        ProcessorRoomsPatch(dir_wet, Path()),
-    )
-    # --- COG_END: MAIN_EX_JUICER2_CLS ---
-    return cl_cache, cl_ignore, cl_processors
-
-
-def main_juicer2_copy(
-    cl_cache: my_cache.FileBuildCache,
-    cl_ignore: my_proj_ignore.FileIgnore,
-    cl_processors: col.Iterable[my_proj_processor.Processor],
-) -> None:
-    """Let's address the copying problem first.
-
-    We can make a makeshift "copy tasks" by constructing cache entries by hand.
-    This does make the first copy a bit slower than our initial version,
-    but this time we get to skip over most of the assets on subsequent builds.
-
-    This results in around 5-10 seconds on first launch and 1-2 seconds on
-    subsequent ones (we still do calculate hashes of every file duh).
-
-    Also don't forget to preserve Common assets as is.
-    """
-    # --- COG_START: MAIN_EX_JUICER2_COPY ---
-    print('Syncing project files...')
-
-    # processor ignores
-    proc_ignore_patterns: list[str] = []
-    for proc in cl_processors:
-        proc_ignore_patterns.extend(proc.get_ignored_source_patterns(PROJECT))
-    procs_rex = [
-        re.compile(fnmatch.translate(pat)) for pat in proc_ignore_patterns
-    ]
-
-    stat_copied = 0
-    stat_skipped = 0
-
-    all_files = [p for p in PROJECT.rglob('*') if p.is_file()]
-    for src_path in tqdm.tqdm(all_files, desc='Copying project files'):
-        rel_path = src_path.relative_to(PROJECT)
-        rel_posix = rel_path.as_posix()
-
-        # skip paths claimed by processors
-        #  append / to ensure it matches dirs
-        if any(
-            pat.match(rel_posix) or pat.match(src_path.name)
-            for pat in procs_rex
-        ):
-            continue
-
-        # check clunksterignore
-        if cl_ignore.is_ignored(rel_posix):
-            continue
-
-        # check cache
-        dest_path = JUICER.dir_out / rel_path
-        task_id = f'copy_{rel_posix}'
-        current_hash = my_cache.file_hash(src_path)
-        if cl_cache.is_fresh(
-            task_id=task_id,
-            current_hash=current_hash,
-            outputs=(dest_path,),
-        ):
-            stat_skipped += 1
-            continue
-
-        # copy and update cache
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dest_path)
-        cl_cache.update(task_id, current_hash)
-        stat_copied += 1
-
-    # don't save yet - wait until the next stage
-    # cl_cache.save()
-    print(f'Project synced: {stat_copied} updated, {stat_skipped} cached')
-    # --- COG_END: MAIN_EX_JUICER2_COPY ---
-
-
-def main_juicer2_mp(
-    assets: list[Asset],
-    cl_cache: my_cache.FileBuildCache,
-    cl_processors: col.Iterable[my_proj_processor.Processor],
-) -> None:
-    """This is it Luigi."""
-    # --- COG_START: MAIN_EX_JUICER2_MP ---
-    print('Generating tasks...')
-
-    tasks: list[my_task.Task] = []
-    stat_cached = 0
-
-    for proc in cl_processors:
-        # 3rd param is unused doh
-        for task in proc.generate_tasks(assets, PROJECT, JUICER.dir_out):
-            current_hash = task.get_input_hash()
-
-            if cl_cache.is_fresh(
-                task_id=task.task_id,
-                current_hash=current_hash,
-                outputs=task.outputs,
-            ):
-                stat_cached += 1
-            else:
-                tasks.append(task)
-
-    if not tasks:
-        print(f'All assets are up to date! ({stat_cached} cached)')
-    else:
-        print(f'Processing {len(tasks)} assets')
-
-        stat_success = 0
-        stat_failed = 0
-
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            # submit to wrapper
-            futures = [
-                executor.submit(my_task.worker_exec_task, task)
-                for task in tasks
-            ]
-
-            future_iter = tqdm.tqdm(
-                concurrent.futures.as_completed(futures),
-                total=len(futures),
-                desc='Juicing assets',
-            )
-
-            for future in future_iter:
-                result = future.result()
-
-                if result.success:
-                    # cache update on success
-                    cl_cache.update(result.task_id, result.new_hash)
-                    stat_success += 1
-                else:
-                    print(
-                        f'\n[FUCK] Task {result.task_id} failed:'
-                        f'\n{result.error}'
-                    )
-                    stat_failed += 1
-
-        cl_cache.save()
-        print(f'Done: {stat_success} succeeded, {stat_failed} failed')
-
-        if stat_failed > 0:
-            raise RuntimeError('Pipeline halted due to aids')
-    # MD: Don't forget to run our old GML generator after doing this step.
-    # MD: Could also run Game Maker's CLI compile with `subprocess.Popen`
-    # --- COG_END: MAIN_EX_JUICER2_MP ---
 
 
 def main_juicer2_gm_compile() -> None:
@@ -3439,7 +2376,6 @@ def _load_private(config_dir: Path) -> None:
         dir_dry=JUICER.dir_dry,  # og dir
         rel_dir_wet=JUICER.rel_dir_wet,
         file_cache=config_dir.parent / 'clunkster_cache.json',
-        file_ignore=config_dir.parent / '.clunksterignore',
         fname_gm82=_config['fname_gm82'],
     )
 
@@ -3472,7 +2408,7 @@ def main() -> None:
 
     # allow testing tutorials on private data as well
     is_test = False
-    is_check = True
+    is_check = False
     if len(sys.argv) > 2:  # noqa: PLR2004
         if sys.argv[2] == 'test':
             is_test = True
@@ -3500,11 +2436,13 @@ def main() -> None:
         print('All ok, exiting regardless :D')
         return
 
-    cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
-    main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
-    main_juicer2_mp(assets, cl_cache, cl_processors)
+    # cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
+    # main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
+    # main_juicer2_mp(assets, cl_cache, cl_processors)
+    tasks = main_juicer_gen_tasks(assets)
+    main_juicer_run(tasks)
     main_juicer_gen_gml(assets)
-    main_juicer2_gm_compile()
+    # main_juicer2_gm_compile()
 
 
 if __name__ == '__main__':
