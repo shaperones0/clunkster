@@ -36,8 +36,14 @@ Super destructive tools:
     * [[HowTo] Prerequisites - Proper use of the Ignore Pragma](#howto-prerequisites---proper-use-of-the-ignore-pragma)
   * [Dehydration](#dehydration)
   * [Juicing](#juicing)
+  * [Pipeline architecture](#pipeline-architecture)
   * [Integration into the project](#integration-into-the-project)
 * [Examples](#examples)
+  * [0 - Setting up](#0---setting-up)
+    * [Example 0.1 - Setup: Project](#example-01---setup-project)
+    * [Example 0.2 - Setup: Widgets](#example-02---setup-widgets)
+    * [Example 0.3 - Setup: Rich UI](#example-03---setup-rich-ui)
+    * [Example 0.4 - Full example (pipeline excerpt)](#example-04---full-example-pipeline-excerpt)
   * [1 - Reading project](#1---reading-project)
     * [Example 1.1 - Finding assets](#example-11---finding-assets)
     * [Example 1.2 - Lint: `tree.yyd` files](#example-12---lint-treeyyd-files)
@@ -431,7 +437,7 @@ default:
 
 Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool that might come in handy later.
 
-> Note: Clunkster is very sensetive to exact way you format the context guards. Only `if guard() { ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
+> Note: Clunkster is very sensitive to exact way you format the context guards. Only `if guard() { ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
 
 ### [HowTo] Prerequisites - Timelines...
 
@@ -787,6 +793,124 @@ With that said, the project building strategy becomes:
 Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
 original path relative to the project root>`
 
+
+## Pipeline architecture
+
+Pipeline has a number of systems and abstractions that run all throughout examples and might appear confusing. The deal behind was about solving few annoying issues:
+
+1. We should be able to run our asset processing logic in parallel, for more expensive / IO-bound operations, without loosing the ability to report on the progress (status prints, progress bars).
+2. We should be able to have different interfaces (CLI mode / TUI mode (not implemented yet but would be rad af)).
+
+Following outlines our solutions. Most of them are housed in [pipeline folder](https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline).
+
+- `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching and house the `execute` method that actually does the thing.
+- `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are already present, and input files haven't changed, are skipped.
+- `executor`: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.
+    - `executor/base.py`: Shared util logic.
+    - `executor/mp.py`: Multiprocessing executor.
+    - `executor/thread.py`: Threading executor.
+- `events`: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.
+    - `events/event.py`: The actual event models.
+    - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
+    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes through the event to underlying dispatcher. However, concurrent executors implement their own sinks:
+        - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
+        - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
+    - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
+
+The overall architecture can be expressed by this diagram:
+
+```mermaid
+graph TD
+    subgraph Worker Processes
+        W1[Worker 1: Task Execution]
+        W2[Worker 2: Task Execution]
+
+        S1[QueueEventSink<br/>Injects PID/Thread ID]
+        S2[QueueEventSink<br/>Injects PID/Thread ID]
+
+        W1 -- "emit(ProgressAdvance)" --> S1
+        W2 -- "emit(TaskFinished)" --> S2
+    end
+
+    Q[(multiprocessing.Queue)]
+
+    S1 -->|Puts WorkerEvent| Q
+    S2 -->|Puts WorkerEvent| Q
+
+    subgraph Main Process
+        R[QueueEventReceiver<br/>Daemon Thread]
+        D[EventDispatcher]
+        UI["UI logic<br/>(UiRichAsync/UiSimpleAsync)"]
+
+        Q -- "Pops Event" --> R
+        R -- "dispatch(event)" --> D
+        D -- "Triggers Handlers" --> UI
+    end
+
+    UI -- "Renders Table & Progress" --> Term[Terminal Output]
+
+    classDef worker fill:#1e1e1e,stroke:#4CAF50,stroke-width:2px,color:#fff;
+    classDef queue fill:#2d2d2d,stroke:#FFC107,stroke-width:2px,color:#fff;
+    classDef main fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
+
+    class W1,W2,S1,S2 worker;
+    class Q queue;
+    class R,D,UI main;
+```
+
+With simple and justifiable systems out of the way, next things might seem questionable:
+
+- `ui`: UI abstraction system.
+    - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
+    - `ui/simple.py`: Simple UI implementation, using prints.
+    - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
+
+UI abstraction architecture can also be expressed in a diagram:
+
+```mermaid
+graph TD
+    subgraph Pipeline Code
+        Step["Pipeline Step Function<br/>@ui_auto_sink('Step Name')"]
+        UI_PROG["ui_progress(assets)"]
+        UI_OUT["ui_out('Status message')"]
+
+        Step --> UI_PROG
+        Step --> UI_OUT
+    end
+
+    subgraph Convenience Layer
+        SA[SinkAdapter<br/>Global 'ADAPTER' Instance]
+    end
+
+    subgraph Transport & Routing
+        DS[DirectEventSink]
+        ED[EventDispatcher]
+        UI_SYNC[UI Component<br/>UiRich / UiSimple]
+    end
+
+    UI_PROG -- "Generates Events<br/>(Start, Advance, End)" --> SA
+    UI_OUT -- "Generates Event<br/>(Status)" --> SA
+
+    SA -- "emit(event)" --> DS
+    DS -- "Passthrough into Dispatcher" --> ED
+    ED -- "Triggers Handlers" --> UI_SYNC
+    UI_SYNC -- "Renders" --> Term[Terminal Output]
+
+    classDef dev fill:#1e1e1e,stroke:#9C27B0,stroke-width:2px,color:#fff;
+    classDef conv fill:#2d2d2d,stroke:#FF9800,stroke-width:2px,color:#fff;
+    classDef core fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
+
+    class Step,UI_PROG,UI_OUT dev;
+    class SA conv;
+    class DS,ED,UI_SYNC core;
+```
+
+You'll encounter UI implementation with [rich](https://rich.readthedocs.io/en/latest/introduction.html) a bit later.
+
+Full example of a synchronous pipeline step can be found here: [ex0.4](#example-04---full-example-pipeline-excerpt).
+
+Full example of concurrents is available in the Project Juicer section of [Examples](#examples).
+
 ## Integration into the project
 
 In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Project Juicer and its derivatives.
@@ -1043,7 +1167,7 @@ if sound_exists(argument0) {
         var _le;_le=dsmap(global._sndreg,argument0+":LB")
         if is_undefined(_le) _le=-1
 
-        //scale samplerate to accound for compression
+        //scale samplerate to account for compression
         var _scaled_start,_scaled_end;
         _scaled_start=sndreg_scale_sample(argument0,_ls)
 
@@ -1098,7 +1222,419 @@ else {
 
 # Examples
 
-Following examples represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+
+## 0 - Setting up
+
+This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
+- Project
+- Widgets
+
+### Example 0.1 - Setup: Project
+Setup project and linter session.
+
+Mandatory stuff includes setting few important variables:
+
+- `PROJECT`: project root path, where game's `.gm82` files is stored
+- `LINT`: linter session (contains violation queue, resolvers, etc.)
+
+```py
+from pathlib import Path
+
+from clunkster import lint as my_lint
+from clunkster import project as my_proj
+
+PROJECT: Path
+LINT = my_lint.LinterSession()
+
+
+def global_set_project(project_root: Path) -> None:
+    """Convenience function for initializing the project."""
+    global PROJECT
+    PROJECT = project_root
+    my_proj.set_root(PROJECT)
+
+global_set_project(Path('path/to/the/project'))
+```
+
+Notice the humble helper function `global_set_project` and what it does.
+Calling `my_proj.set_root(PROJECT)` is very important.
+
+
+### Example 0.2 - Setup: Widgets
+Populate abstract widgets used down the line.
+
+Since most of UI is abstracted, examples don't use `print` or other
+methods of output, but rather more abstract `ui_out` and other shims
+from the same module. More complicated UI requires abstract widgets. The
+ones required by the tool are outlined here, as well as their sample
+implementation with `print`.
+
+```py
+import collections.abc as col
+from abc import ABC, abstractmethod
+from typing import override
+
+class WidgetRenderer(ABC):
+    """Base class for our widget renderers."""
+
+    @abstractmethod
+    def render_table(
+        self,
+        table: col.Sequence[col.Sequence[str]],
+        *,
+        title: str | None = None,
+    ) -> None:
+        """Render a 2D sequence of strings.
+
+        Assumed ``table[0]`` contains the headers.
+        """
+
+
+class WidgetRendererSimple(WidgetRenderer):
+    """Renders widgets using standard Python print statements."""
+
+    @override
+    def render_table(
+        self,
+        table: col.Sequence[col.Sequence[str]],
+        *,
+        title: str | None = None,
+    ) -> None:
+        if not table or len(table) < 2:  # noqa: PLR2004
+            return
+
+        corner_label = table[0][0]
+        headers = table[0][1:]
+
+        if title:
+            print(f'\n--- {title} ---')
+
+        print(corner_label, *headers)
+
+        for row_data in table[1:]:
+            row_label = row_data[0]
+            cells = row_data[1:]
+
+            formatted_row = [
+                cell or ' ' * len(header)
+                for header, cell in zip(headers, cells, strict=True)
+            ]
+
+            print(f'[{row_label!s:>10}]:', '|'.join(formatted_row))
+
+WIDGET: WidgetRenderer
+
+
+def global_widget_renderer(renderer: WidgetRenderer) -> None:
+    """Set widget renderer."""
+    global WIDGET
+    WIDGET = renderer
+
+global_widget_renderer(WidgetRendererSimple())
+```
+
+With that out of the way you may start the [first real examples](#example-11---finding-assets). However, I recommend reading a bit about the [pipeline architecture](#pipeline-architecture), which should give you proper understanding on what to do if things don't work out.
+
+### Example 0.3 - Setup: Rich UI
+The other UI option is [rich](https://github.com/textualize/rich).
+
+We have to add the widget renderer and `Ui` implementations.
+
+```py
+import collections.abc as col
+import dataclasses
+import threading
+from typing import override
+
+from rich import console as r_console
+from rich import live as r_live
+from rich import table as r_table
+from rich import text as r_text
+
+from clunkster.pipeline.events import event as my_event
+from clunkster.pipeline.ui.base import Ui, UiAsync
+
+# see ex0.2
+class WidgetRenderer: ...
+def global_widget_renderer(): ...
+
+# TODO remove big width param
+CON = r_console.Console(width=1024)
+
+
+def rich_render_row_progress(
+    text: str, current: int, total: int, width: int = 60, color: str = 'white'
+) -> r_text.Text:
+    """Renders a string where the background color acts as a progress bar."""
+    pct = 0.0 if total <= 0 else min(1.0, current / total)
+
+    text_padded = text.ljust(width)[:width]
+    fill_len = int(width * pct)
+
+    rich_text = r_text.Text('--- ')
+    if fill_len > 0:
+        rich_text.append(
+            text_padded[:fill_len], style=f'bold black on {color}'
+        )
+    if fill_len < width:
+        rich_text.append(text_padded[fill_len:], style='bold white on default')
+
+    return rich_text
+
+
+class UiRich(Ui):
+    """Rich UI."""
+
+    @override
+    def __init__(self, step_name: str, width: int = 60) -> None:
+        """Initialize Rich UI."""
+        self.step_name = step_name
+        self.width = width
+
+        # state
+        self.task_id = '...'
+        self.current = 0
+        self.total = 1
+        self.statuses: list[str] = []
+
+        self.live = r_live.Live(
+            self._generate_renderable(), refresh_per_second=10
+        )
+
+    def _generate_renderable(self) -> r_console.Group:
+        # title + progress
+        bar_text = f'Task: {self.task_id} '
+        header = rich_render_row_progress(
+            bar_text, self.current, self.total, self.width
+        )
+
+        logs = r_text.Text('\n'.join(self.statuses), style='dim')
+
+        return r_console.Group(header, logs)
+
+    def _update(self) -> None:
+        self.live.update(self._generate_renderable())
+
+    @override
+    def on_task_started(self, e: my_event.TaskStarted) -> None:
+        self.task_id = e.task_id
+        self._update()
+
+    @override
+    def on_progress_start(self, e: my_event.ProgressStart) -> None:
+        self.current = 0
+        self.total = e.total
+        self._update()
+
+    @override
+    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
+        self.current = e.completed
+        self._update()
+
+    @override
+    def on_progress_completed(self, e: my_event.ProgressCompleted) -> None:
+        self.current = self.total  # force fill
+        self._update()
+
+    @override
+    def on_status(self, e: my_event.Status) -> None:
+        self.statuses.append(f'| {e.text}')
+        self._update()
+
+    @override
+    def on_task_finished(self, e: my_event.TaskFinished) -> None:
+        self.current = self.total
+        self._update()
+
+    @override
+    def start(self) -> None:
+        self.live.start()
+
+    @override
+    def stop(self) -> None:
+        self.live.stop()
+
+
+@dataclasses.dataclass(slots=True)
+class WorkerState:
+    """Worker current state."""
+
+    task_id: str = 'Idle'
+    current: int = 0
+    total: int = 1
+
+
+class UiRichAsync(UiAsync):
+    """Rich UI. Concurrents version."""
+
+    def __init__(self, step_name: str, width: int = 120) -> None:
+        """Initialize Concurrent Rich UI."""
+        self.step_name = step_name
+        self.width = width
+
+        self.total_current = 0
+        self.total_target = 1
+        self.workers: dict[str, WorkerState] = {}
+
+        self._lock = threading.Lock()
+        self.live = r_live.Live(
+            self._generate_renderable(), refresh_per_second=10
+        )
+
+    def _generate_renderable(self) -> r_console.Group:
+        # must be called within lock
+
+        # progress in header
+        header_text = (
+            f' {self.step_name} ({self.total_current}/{self.total_target}) '
+        )
+        header_bar = rich_render_row_progress(
+            header_text, self.total_current, self.total_target, self.width
+        )
+
+        # worker table
+        table = r_table.Table(show_header=False, width=self.width, expand=True)
+        table.add_column('Worker')
+        table.add_column('Task')
+
+        for worker_id, state in sorted(self.workers.items()):
+            row_bar = rich_render_row_progress(
+                state.task_id, state.current, state.total, self.width - 2
+            )
+            table.add_row(worker_id, row_bar)
+
+        return r_console.Group(header_bar, table)
+
+    def _update(self) -> None:
+        # must be called within lock
+        self.live.update(self._generate_renderable())
+
+    @override
+    def update_total_progress(self, current: int, total: int) -> None:
+        """Called by main thread to update the overall step progress."""
+        with self._lock:
+            self.total_current = current
+            self.total_target = total
+            self._update()
+
+    def _get_worker(self, worker_id: str) -> WorkerState:
+        # must be called within lock
+
+        if worker_id not in self.workers:
+            self.workers[worker_id] = WorkerState()
+        return self.workers[worker_id]
+
+    @override
+    def on_task_started(self, e: my_event.TaskStarted) -> None:
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.task_id = e.task_id
+            worker.current = 0
+            self._update()
+
+    @override
+    def on_progress_start(self, e: my_event.ProgressStart) -> None:
+        if e.worker_id == 'main':
+            self.update_total_progress(0, self.total_target)
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.total = max(1, e.total)
+            self._update()
+
+    @override
+    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
+        if e.worker_id == 'main':
+            self.update_total_progress(e.completed, self.total_target)
+            return
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.current = e.completed
+            self._update()
+
+    @override
+    def on_task_finished(self, e: my_event.TaskFinished) -> None:
+        if e.worker_id == 'main':
+            self.update_total_progress(self.total_target, self.total_target)
+            return
+
+        with self._lock:
+            worker = self._get_worker(e.worker_id)
+            worker.current = worker.total  # fill on finish
+            self._update()
+
+    @override
+    def start(self) -> None:
+        self.live.start()
+
+    @override
+    def stop(self) -> None:
+        self.live.stop()
+
+
+class WidgetRendererRich(WidgetRenderer):
+    """Renders widgets using the Rich library."""
+
+    def __init__(self, console: r_console.Console | None = None) -> None:
+        """Set up Rich Widget renderer.
+
+        :param console: Existing Rich console.
+        """
+        self.console = console or CON
+
+    @override
+    def render_table(
+        self,
+        table: col.Sequence[col.Sequence[str]],
+        *,
+        title: str | None = None,
+    ) -> None:
+        if not table or len(table) < 2:  # noqa: PLR2004
+            return
+
+        headers = table[0]
+
+        rich_table = r_table.Table(
+            f'[bold]{headers[0]}[/bold]', *headers[1:], title=title, padding=0
+        )
+
+        for row_data in table[1:]:
+            rich_table.add_row(*row_data)
+
+        self.console.print(rich_table)
+
+global_widget_renderer(WidgetRendererRich())
+```
+
+### Example 0.4 - Full example (pipeline excerpt)
+
+Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for a more thorough example as well).
+
+```py
+import time
+
+from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
+from clunkster.pipeline.ui.base import Ui, UiAsync
+from clunkster.pipeline.ui.simple import UiSimple, UiSimpleAsync
+
+CLS_UI: type[Ui] = UiSimple
+CLS_UI_ASYNC: type[UiAsync] = UiSimpleAsync
+
+@ui_auto_sink('Example step', cls_ui=CLS_UI)
+def main_example() -> None:
+    """Example pipeline step."""
+    # no need to report start of the step
+    ui_out('Good weather up there')
+    time.sleep(1)
+    ui_out('Makes me forget about my job: counting to 10')
+    for number in ui_progress(range(10)):
+        time.sleep(0.5)
+        ui_out('Number', number)
+    ui_out('Clear?!! No way')
+    # no need to report end of the step
+```
 
 ## 1 - Reading project
 
@@ -1131,8 +1667,11 @@ from typing import override
 
 from clunkster import asset as my_asset
 from clunkster import lint as my_lint
-from clunkster import project as my_proj
 from clunkster.asset import Asset
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtAudio(my_asset.AssetSingleFile, ABC):
@@ -1212,16 +1751,6 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     AssetExtSfx3,
 )
 
-PROJECT: Path
-LINT = my_lint.LinterSession()
-
-
-def global_set_project(project_root: Path) -> None:
-    """Convenience function for initializing the project."""
-    global PROJECT, LINT
-    PROJECT = project_root
-    my_proj.set_root(PROJECT)
-
 assets: list[Asset] = []
 
 for asset_type in CLUSTERABLE_ASSETS:
@@ -1286,6 +1815,10 @@ from clunkster import lint as my_lint
 from clunkster import project as my_proj
 from clunkster.parse import tree as my_parse_tree
 from clunkster.text import location as my_location
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
 
 # see ex1.1
 class AssetExtAudio: ...
@@ -1359,10 +1892,6 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     AssetExtSfx,
     AssetExtSfx3,
 )
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
     tree_file = asset_cls.type_get_tree_file(PROJECT)
@@ -1461,16 +1990,26 @@ the fancy printing shims.
 
 ```py
 import collections.abc as col
-import dataclasses
-from abc import ABC
 from pathlib import Path
 from typing import override
-
-from rich import table as r_table
 
 from clunkster import asset as my_asset
 from clunkster import lint as my_lint
 from clunkster.asset import Asset
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
+
+# see ex0.2
+class WidgetRenderer: ...
+WIDGET: WidgetRenderer = ...
+
+# see ex1.1
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
 
 ALIAS: dict[str, list[str]] = {
     'StageA': [
@@ -1506,70 +2045,6 @@ def global_set_alias(alias: dict[str, list[str]]) -> None:
             if cluster in ALIAS_INV:
                 raise ValueError(f"Invalid ALIAS (duplicate: '{cluster}')")
             ALIAS_INV[cluster] = name
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtAudio(my_asset.AssetSingleFile, ABC):
-    """Generic external audio asset."""
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtBgm(AssetExtAudio):
-    """External background music asset."""
-
-    @override
-    @classmethod
-    def type_name(cls) -> str:
-        return 'DATA_BGM'
-
-    @override
-    @classmethod
-    def type_globs(cls) -> tuple[str, ...]:
-        return '*.ogg', '*.mp3', '*.wav'
-
-    @override
-    @classmethod
-    def type_get_dir_rel(cls) -> Path:
-        return Path('data') / 'music'
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtSfx(AssetExtAudio):
-    """External sound effect asset (kind 0)."""
-
-    @override
-    @classmethod
-    def type_name(cls) -> str:
-        return 'DATA_SFX'
-
-    @override
-    @classmethod
-    def type_globs(cls) -> col.Iterable[str]:
-        return ('*.wav',)
-
-    @override
-    @classmethod
-    def type_get_dir_rel(cls) -> Path:
-        return Path('data') / 'sounds'
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class AssetExtSfx3(AssetExtAudio):
-    """External sound effect asset (kind 3)."""
-
-    @override
-    @classmethod
-    def type_name(cls) -> str:
-        return 'DATA_SFX3'
-
-    @override
-    @classmethod
-    def type_globs(cls) -> col.Iterable[str]:
-        return '*.ogg', '*.mp3'
-
-    @override
-    @classmethod
-    def type_get_dir_rel(cls) -> Path:
-        return Path('data') / 'sounds'
 
 def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
     """Get asset's initial cluster before aliasing."""
@@ -1619,10 +2094,6 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     AssetExtSfx3,
 )
 
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
-
 assets: list[Asset] = []
 
 # ALIAS linter: find existing names in ALIAS
@@ -1661,17 +2132,20 @@ clusters_all = {
     for name in clusters
 }
 clusters_all_sorted = sorted(clusters_all)
+# table (+ headers)
+table: list[list[str]] = [['Type', *clusters_all_sorted]]
 
-table = r_table.Table(
-    '[bold]Type', *sorted(clusters_all), title='Clusters', padding=0
-)
+# rows
 for asset_type, clusters in table_type_to_clusters.items():
     cluster_set = set(clusters)
-    row = (
+
+    # cluster name if it exists or empty string if it doesn't
+    row = [asset_type.type_name()] + [
         clm if clm in cluster_set else '' for clm in clusters_all_sorted
-    )
-    table.add_row(asset_type.type_name(), *row)
-CON.print(table)
+    ]
+    table.append(row)
+
+WIDGET.render_table(table, title='Clusters')
 
 # lint
 lint_unused_aliases = lint_existing_aliases - lint_used_aliases
@@ -1733,6 +2207,10 @@ from clunkster.asset import Asset
 from clunkster.pipeline.ui.adapter import ui_out, ui_progress
 from clunkster.text import location as my_location
 
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
+
 # see ex1.1
 class AssetExtAudio: ...
 class AssetExtBgm: ...
@@ -1765,10 +2243,6 @@ class Dependency:
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 # see ex1.3
 assets: list[Asset] = ...
@@ -1841,6 +2315,10 @@ from clunkster import asset as my_asset
 from clunkster import lint as my_lint
 from clunkster.asset import Asset
 from clunkster.pipeline.ui.adapter import ui_out, ui_progress
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
 
 # see ex1.1
 class AssetExtAudio: ...
@@ -1915,10 +2393,6 @@ class LintUnused(LintAssetCluster):
     @property
     def asset(self) -> Asset:
         return self._asset
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 # see ex1.3
 assets: list[Asset] = ...
@@ -1996,6 +2470,10 @@ from clunkster.asset import Asset
 from clunkster.pipeline.ui.adapter import ui_out, ui_progress
 from clunkster.text import location as my_location
 
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
+
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
@@ -2062,10 +2540,6 @@ class LintCrossref(
         ctx = self._dependency.contexts
         ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
         return f'{target.name} [{asset_cluster(target)}]{ctx_str}'
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 # see ex2.1
 dependencies: list[Dependency] = ...
@@ -2317,6 +2791,10 @@ from clunkster import lint as my_lint
 from clunkster.asset import Asset
 from clunkster.pipeline.ui.adapter import ui_out
 
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
+
 # see ex2.3
 LINT_RULES: dict[str, set[str]] = ...
 
@@ -2340,10 +2818,6 @@ class RoomGraph: ...
 
 # see ex2.2
 class LintUnused: ...
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 # see ex1.3
 assets: list[Asset] = ...
@@ -2410,6 +2884,10 @@ from clunkster import asset as my_asset
 from clunkster import lint as my_lint
 from clunkster.asset import Asset
 from clunkster.pipeline.ui.adapter import ui_out, ui_progress
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
 
 # see ex2.3
 LINT_RULES: dict[str, set[str]] = ...
@@ -2520,10 +2998,6 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                     lines.extend(f'    {err.trace}' for err in errors)
 
         return '\n'.join(lines)
-
-# see ex1.1
-PROJECT: Path = ...
-LINT: my_lint.LinterSession = ...
 
 # see ex1.3
 assets: list[Asset] = ...

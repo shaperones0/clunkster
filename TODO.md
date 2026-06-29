@@ -1,14 +1,1 @@
-- fix not including metadata in the input files of tasks
-- add a forbidden names linter
-- remove the Process system (it sucsk)
-- replace with a "stage" system
-    - tasks can be assigned a build stage name
-    - build stages are made in user land
-    - build stages handle the execution of given tasks (so that's where multiprocessing and tqdm can fit)
-- move task distribution between stages into library i guess
-- move the gml scripts from gml_gen example into readme
-- merge Juicer v1 and Juicer v2 (v1 has no reason to exist)
-- actually fuck it, split readme into mdbook
-- therefore replace cogapp with fstrings or smth like that
-- also autogenerate script reference lel
-- use better cli (rich+textual???) instead of tqdm and simple prints...
+- mdformat (with ruff extension)

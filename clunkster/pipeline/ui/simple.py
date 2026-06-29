@@ -4,7 +4,7 @@ import threading
 from typing import override
 
 from clunkster.pipeline.events import event
-from clunkster.pipeline.ui.base import Ui
+from clunkster.pipeline.ui.base import Ui, UiAsync
 
 
 class UiSimple(Ui):
@@ -55,7 +55,7 @@ class UiSimple(Ui):
         pass
 
 
-class UiSimpleAsync(Ui):
+class UiSimpleAsync(UiAsync):
     """Simple print-based Ui. Async version."""
 
     @override
@@ -68,6 +68,7 @@ class UiSimpleAsync(Ui):
 
         self._lock = threading.Lock()
 
+    @override
     def update_total_progress(self, current: int, total: int) -> None:
         """Called by main thread to update the overall step progress."""
         with self._lock:

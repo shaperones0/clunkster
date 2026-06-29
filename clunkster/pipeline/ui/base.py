@@ -73,3 +73,18 @@ class Ui(ABC):
 
     def on_status(self, e: event.Status) -> None:  # noqa: B027
         """Status event handler."""
+
+
+class UiAsync(Ui, ABC):
+    """Async UI abstraction.
+
+    Contains method for setting total progress.
+    """
+
+    @abstractmethod
+    def update_total_progress(self, current: int, total: int) -> None:
+        """Update total progress on the main thread.
+
+        :param current: Number of processes items.
+        :param total: Total number of items.
+        """

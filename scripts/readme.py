@@ -12,6 +12,7 @@ from scripts import (
     doc_toc,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
+from scripts.doc_snippets import s_py
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
@@ -23,7 +24,7 @@ def readme_txt() -> str:
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
     snips = doc_extract.extract(doc_parse.parse(lines_main))
-    head = doc_headers.ExampleHeaderGenerator()
+    head = doc_headers.ExampleHeaderGenerator(idx_major_start=-1)
     docs = doc_docstring.extract(txt_main)
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
@@ -442,7 +443,7 @@ default:
 
 Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool that might come in handy later.
 
-> Note: Clunkster is very sensetive to exact way you format the context guards. Only `if guard() {{ ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
+> Note: Clunkster is very sensitive to exact way you format the context guards. Only `if guard() {{ ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
 
 ### [HowTo] Prerequisites - Timelines...
 
@@ -798,6 +799,124 @@ With that said, the project building strategy becomes:
 Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
 original path relative to the project root>`
 
+
+## Pipeline architecture
+
+Pipeline has a number of systems and abstractions that run all throughout examples and might appear confusing. The deal behind was about solving few annoying issues:
+
+1. We should be able to run our asset processing logic in parallel, for more expensive / IO-bound operations, without loosing the ability to report on the progress (status prints, progress bars).
+2. We should be able to have different interfaces (CLI mode / TUI mode (not implemented yet but would be rad af)).
+
+Following outlines our solutions. Most of them are housed in [pipeline folder](https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline).
+
+- `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching and house the `execute` method that actually does the thing.
+- `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are already present, and input files haven't changed, are skipped.
+- `executor`: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.
+    - `executor/base.py`: Shared util logic.
+    - `executor/mp.py`: Multiprocessing executor.
+    - `executor/thread.py`: Threading executor.
+- `events`: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.
+    - `events/event.py`: The actual event models.
+    - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
+    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes through the event to underlying dispatcher. However, concurrent executors implement their own sinks:
+        - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
+        - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
+    - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
+
+The overall architecture can be expressed by this diagram:
+
+```mermaid
+graph TD
+    subgraph Worker Processes
+        W1[Worker 1: Task Execution]
+        W2[Worker 2: Task Execution]
+
+        S1[QueueEventSink<br/>Injects PID/Thread ID]
+        S2[QueueEventSink<br/>Injects PID/Thread ID]
+
+        W1 -- "emit(ProgressAdvance)" --> S1
+        W2 -- "emit(TaskFinished)" --> S2
+    end
+
+    Q[(multiprocessing.Queue)]
+
+    S1 -->|Puts WorkerEvent| Q
+    S2 -->|Puts WorkerEvent| Q
+
+    subgraph Main Process
+        R[QueueEventReceiver<br/>Daemon Thread]
+        D[EventDispatcher]
+        UI["UI logic<br/>(UiRichAsync/UiSimpleAsync)"]
+
+        Q -- "Pops Event" --> R
+        R -- "dispatch(event)" --> D
+        D -- "Triggers Handlers" --> UI
+    end
+
+    UI -- "Renders Table & Progress" --> Term[Terminal Output]
+
+    classDef worker fill:#1e1e1e,stroke:#4CAF50,stroke-width:2px,color:#fff;
+    classDef queue fill:#2d2d2d,stroke:#FFC107,stroke-width:2px,color:#fff;
+    classDef main fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
+
+    class W1,W2,S1,S2 worker;
+    class Q queue;
+    class R,D,UI main;
+```
+
+With simple and justifiable systems out of the way, next things might seem questionable:
+
+- `ui`: UI abstraction system.
+    - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
+    - `ui/simple.py`: Simple UI implementation, using prints.
+    - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
+
+UI abstraction architecture can also be expressed in a diagram:
+
+```mermaid
+graph TD
+    subgraph Pipeline Code
+        Step["Pipeline Step Function<br/>@ui_auto_sink('Step Name')"]
+        UI_PROG["ui_progress(assets)"]
+        UI_OUT["ui_out('Status message')"]
+
+        Step --> UI_PROG
+        Step --> UI_OUT
+    end
+
+    subgraph Convenience Layer
+        SA[SinkAdapter<br/>Global 'ADAPTER' Instance]
+    end
+
+    subgraph Transport & Routing
+        DS[DirectEventSink]
+        ED[EventDispatcher]
+        UI_SYNC[UI Component<br/>UiRich / UiSimple]
+    end
+
+    UI_PROG -- "Generates Events<br/>(Start, Advance, End)" --> SA
+    UI_OUT -- "Generates Event<br/>(Status)" --> SA
+
+    SA -- "emit(event)" --> DS
+    DS -- "Passthrough into Dispatcher" --> ED
+    ED -- "Triggers Handlers" --> UI_SYNC
+    UI_SYNC -- "Renders" --> Term[Terminal Output]
+
+    classDef dev fill:#1e1e1e,stroke:#9C27B0,stroke-width:2px,color:#fff;
+    classDef conv fill:#2d2d2d,stroke:#FF9800,stroke-width:2px,color:#fff;
+    classDef core fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
+
+    class Step,UI_PROG,UI_OUT dev;
+    class SA conv;
+    class DS,ED,UI_SYNC core;
+```
+
+You'll encounter UI implementation with [rich](https://rich.readthedocs.io/en/latest/introduction.html) a bit later.
+
+Full example of a synchronous pipeline step can be found here: {exs.href('ex_setup_example')}.
+
+Full example of concurrents is available in the Project Juicer section of [Examples](#examples).
+
 ## Integration into the project
 
 In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Project Juicer and its derivatives.
@@ -1054,7 +1173,7 @@ if sound_exists(argument0) {{
         var _le;_le=dsmap(global._sndreg,argument0+":LB")
         if is_undefined(_le) _le=-1
 
-        //scale samplerate to accound for compression
+        //scale samplerate to account for compression
         var _scaled_start,_scaled_end;
         _scaled_start=sndreg_scale_sample(argument0,_ls)
 
@@ -1109,7 +1228,67 @@ else {{
 
 # Examples
 
-Following examples represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+
+{head.next_section("Setting up").render_header()}
+
+This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
+- Project
+- Widgets
+
+{exs.code_begin('ex_setup_main', 'Setup: Project')}
+{docs['main_ex_setup_main']}
+{exs.render((
+        snips['PROJECT'],
+        snips['MAIN_EX_SETUP_MAIN']
+    ))}
+{exs.code_reg_stub_src({
+        'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession')
+    })}
+
+{exs.code_begin('ex_setup_widgets', 'Setup: Widgets')}
+{docs['main_ex_setup_widgets']}
+{exs.render((
+        snips['CLS_WIDGETS'],
+        snips['WIDGETS'],
+        snips['MAIN_EX_SETUP_WIDGETS'],
+
+    ))}
+{exs.code_reg_stub_src({
+        'CLS_WIDGETS': '\n'.join((
+            gen_stub_cls('WidgetRenderer'),
+            gen_stub_func('global_widget_renderer'),
+        )),
+        'WIDGETS': '\n'.join((
+            gen_stub_cls('WidgetRenderer'),
+            gen_stub_var('WIDGET: WidgetRenderer'),
+        )),
+    })}
+
+With that out of the way you may start the {exs.href('ex_start', 'first real examples')}. However, I recommend reading a bit about the [pipeline architecture](#pipeline-architecture), which should give you proper understanding on what to do if things don't work out.
+
+{exs.code_begin('ex_setup_rich', 'Setup: Rich UI')}
+{docs['main_ex_setup_rich']}
+{exs.render((
+        exs.stub('CLS_WIDGETS'),
+        snips['UI_RICH'],
+        snips['MAIN_EX_SETUP_RICH'],
+    ))}
+
+{exs.code_begin('ex_setup_example', 'Full example (pipeline excerpt)')}
+
+Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for a more thorough example as well).
+
+{exs.render((
+        s_py(
+            'CLS_UI: type[Ui] = UiSimple\n'
+            'CLS_UI_ASYNC: type[UiAsync] = UiSimpleAsync'
+        ),
+        snips['DEF_EXAMPLE'],
+    ))}
+{exs.code_reg_stub_src({
+        'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[Ui]', 'CLS_UI_ASYNC: type[Ui]')
+    })}
 
 {head.next_section("Reading project").render_header()}
 
@@ -1120,9 +1299,9 @@ validations and assigning clusters to the assets.
 
 {docs['main_ex_start']}
 {exs.render((
+        exs.stub('PROJECT'),
         snips['CLS_ASSET_EXT'],
         snips['CLUSTERABLE_ASSETS'],
-        snips['PROJECT'],
         snips['MAIN_EX_START'],
     ))}
 {exs.code_reg_stub_src({
@@ -1132,29 +1311,29 @@ validations and assigning clusters to the assets.
                 'AssetExtSfx',
                 'AssetExtSfx3',
             ),
-        'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession')
     })}
 
 {exs.code_begin('ex_lint_tree', 'Lint: `tree.yyd` files')}
 
 {docs['main_ex_lint_tree']}
 {exs.render((
+        exs.stub('PROJECT'),
         exs.stub('CLS_ASSET_EXT'),
         snips['CLS_LINT_TREE'],
         snips['CLUSTERABLE_ASSETS'],
-        exs.stub('PROJECT'),
         snips['MAIN_EX_LINT_TREE'],
     ))}
 
 {exs.code_begin('ex_aliases', 'Clusters')}
 {docs['main_ex_aliases']}
 {exs.render((
+        exs.stub('PROJECT'),
+        exs.stub('WIDGETS'),
+        exs.stub('CLS_ASSET_EXT'),
         snips['ALIAS'],
-        snips['CLS_ASSET_EXT'],
         snips['DEF_ASSET_CLUSTERS'],
         snips['CLS_LINT_ALIAS'],
         snips['CLUSTERABLE_ASSETS'],
-        exs.stub('PROJECT'),
         snips['MAIN_EX_ALIASES'],
     ))}
 
@@ -1171,11 +1350,11 @@ validations based on them.
 {exs.code_begin('ex_scan_sync', 'Reference scanning')}
 {docs['main_ex_scan_sync']}
 {exs.render((
+        exs.stub('PROJECT'),
         exs.stub('CLS_ASSET_EXT'),
         exs.stub('DEF_ASSET_CLUSTERS'),
         snips['DEF_ASSET_SCANNABLES'],
         snips['CLS_DEPENDENCY'],
-        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         snips['MAIN_EX_SCAN_SYNC'],
     ))}
@@ -1189,13 +1368,13 @@ validations based on them.
 {exs.code_begin('ex_lint_unused', 'Lint: unused assets')}
 {docs['main_ex_lint_unused']}
 {exs.render((
+        exs.stub('PROJECT'),
         exs.stub('CLS_ASSET_EXT'),
         exs.stub('DEF_ASSET_CLUSTERS'),
         snips['DEF_ASSET_SORT_KEY'],
         exs.stub('CLS_DEPENDENCY'),
         snips['CLS_LINT_ASSET_CLUSTER'],
         snips['CLS_LINT_UNUSED'],
-        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         snips['MAIN_EX_LINT_UNUSED'],
@@ -1210,6 +1389,7 @@ validations based on them.
 {exs.code_begin('ex_lint_crossref', 'Lint: cross-cluster references')}
 {docs['main_ex_lint_crossref']}
 {exs.render((
+        exs.stub('PROJECT'),
         snips['LINT_RULES'],
         snips['CONTEXT_RULES'],
         exs.stub('CLS_ASSET_EXT'),
@@ -1217,7 +1397,6 @@ validations based on them.
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_LINT_ASSET_CLUSTER'),
         snips['CLS_LINT_CROSSREF'],
-        exs.stub('PROJECT'),
         exs.stub('VAR_DEPS'),
         snips['MAIN_EX_LINT_CROSSREF'],
     ))}
@@ -1256,6 +1435,7 @@ checks based on more advanced usage tracing.
 {exs.code_begin('ex_lint_unused_graph', 'Lint: unreachable assets')}
 {docs['main_ex_lint_unused_graph']}
 {exs.render((
+        exs.stub('PROJECT'),
         exs.stub('LINT_RULES'),
         exs.stub('CONTEXT_RULES'),
         exs.stub('EXTRA_ROOTS'),
@@ -1263,7 +1443,6 @@ checks based on more advanced usage tracing.
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_ROOM_GRAPH'),
         exs.stub('CLS_LINT_UNUSED'),
-        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         exs.stub('VAR_ROOM_DATA'),
@@ -1273,6 +1452,7 @@ checks based on more advanced usage tracing.
 {exs.code_begin('ex_lint_crossref_graph', 'Lint: room cluster boundaries')}
 {docs['main_ex_lint_crossref_graph']}
 {exs.render((
+        exs.stub('PROJECT'),
         exs.stub('LINT_RULES'),
         exs.stub('CONTEXT_RULES'),
         exs.stub('EXTRA_ROOTS'),
@@ -1282,7 +1462,6 @@ checks based on more advanced usage tracing.
         exs.stub('CLS_DEPENDENCY'),
         exs.stub('CLS_ROOM_GRAPH'),
         snips['CLS_LINT_CROSSREF_GRAPH'],
-        exs.stub('PROJECT'),
         exs.stub('VAR_ASSETS'),
         exs.stub('VAR_DEPS'),
         exs.stub('VAR_ROOM_DATA'),

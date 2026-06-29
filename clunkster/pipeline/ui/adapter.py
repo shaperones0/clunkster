@@ -92,13 +92,30 @@ def ui_auto_sink[**P, R](
     return decorator
 
 
+def _adapter_simple() -> SinkAdapter:
+    """Create baseline sink adapter."""
+    dispatcher = EventDispatcher()
+    return SinkAdapter(
+        sink=DispatchEventSink(dispatcher=dispatcher), step_name='main'
+    )
+
+
+def _adapter_ensure() -> SinkAdapter:
+    """Ensure ``ADAPTER`` exists."""
+    global ADAPTER
+
+    if ADAPTER is None:
+        adapter = ADAPTER = _adapter_simple()
+    else:
+        adapter = ADAPTER
+    return adapter
+
+
 def ui_out(*messages: object, sep: str = ' ') -> None:
     """Output a message as a ``Status`` event."""
-    assert ADAPTER is not None
-    ADAPTER.out(*messages, sep=sep)
+    _adapter_ensure().out(*messages, sep=sep)
 
 
 def ui_progress[TItem](seq: col.Sequence[TItem]) -> col.Iterator[TItem]:
     """Wrap a sequence in a progress bar."""
-    assert ADAPTER is not None
-    return ADAPTER.progress(seq)
+    return _adapter_ensure().progress(seq)
