@@ -105,10 +105,8 @@ def _adapter_ensure() -> SinkAdapter:
     global ADAPTER
 
     if ADAPTER is None:
-        adapter = ADAPTER = _adapter_simple()
-    else:
-        adapter = ADAPTER
-    return adapter
+        raise ValueError('Adapter is not initialized')
+    return ADAPTER
 
 
 def ui_out(*messages: object, sep: str = ' ') -> None:

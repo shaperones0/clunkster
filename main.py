@@ -1015,17 +1015,21 @@ def main_ex_aliases() -> list[Asset]:
         for name in clusters
     }
     clusters_all_sorted = sorted(clusters_all)
-    # table (+ headers)
-    table: list[list[str]] = [['Type', *clusters_all_sorted]]
+    asset_types = list(table_type_to_clusters.keys())
+    table: list[list[str]] = [
+        ['Cluster', *(at.type_name() for at in asset_types)]
+    ]
 
-    # rows
-    for asset_type, clusters in table_type_to_clusters.items():
-        cluster_set = set(clusters)
+    # 3. Add rows: One row per cluster
+    for cluster_name in clusters_all_sorted:
+        row = [cluster_name]
 
-        # cluster name if it exists or empty string if it doesn't
-        row = [asset_type.type_name()] + [
-            clm if clm in cluster_set else '' for clm in clusters_all_sorted
-        ]
+        for asset_type in asset_types:
+            if cluster_name in table_type_to_clusters[asset_type]:
+                row.append(asset_type.type_name())
+            else:
+                row.append('')
+
         table.append(row)
 
     WIDGET.render_table(table, title='Clusters')
@@ -2506,7 +2510,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
     return build_tasks  # noqa: RET504
 
 
-@ui_auto_sink('Juicer: run tasks')
+@ui_auto_sink('Juicer: run tasks', cls_ui=CLS_UI)
 def main_juicer_run(tasks: BuildTasks) -> None:
     """Run generated build tasks.
 
@@ -2535,7 +2539,7 @@ def main_juicer_run(tasks: BuildTasks) -> None:
     # </snip MAIN_JUICER_RUN>
 
 
-@ui_auto_sink('Juicer: generating gml')
+@ui_auto_sink('Juicer: generating gml', cls_ui=CLS_UI)
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     """It is time to finally integrate Clunkster into the project.
 
@@ -2804,7 +2808,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     # </snip MAIN_JUICER_GEN_GML>
 
 
-@ui_auto_sink('Juicer: generating gml')
+@ui_auto_sink('Juicer: compiling the game', cls_ui=CLS_UI)
 def main_juicer_gm_compile() -> None:
     r"""One last step is automatic compile.
 
