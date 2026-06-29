@@ -46,7 +46,7 @@ Given the architectural differences across GameMaker projects, Clunkster is orga
 Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see it these tools fit your project's needs.
 
 Non-destructive tools:
-- Linter: `tree.yyd` validator
+- Linter: `tree.yyd` validator (see {exs.href('ex_lint_tree')})
 - Linter: unused assets detector (see {exs.href('ex_lint_unused')} and {exs.href('ex_lint_unused_graph')})
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})

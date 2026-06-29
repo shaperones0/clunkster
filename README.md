@@ -10,7 +10,7 @@ Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to s
 
 Non-destructive tools:
 
-- Linter: `tree.yyd` validator
+- Linter: `tree.yyd` validator (see [ex1.2](#example-12---lint-treeyyd-files))
 - Linter: unused assets detector (see [ex2.2](#example-22---lint-unused-assets) and [ex3.2](#example-32---lint-unreachable-assets))
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see [ex2.3](#example-23---lint-cross-cluster-references))
