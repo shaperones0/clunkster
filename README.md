@@ -189,7 +189,7 @@ ALIAS: dict[str, list[str]] = {
     'Common': [
         'sprEnemies',
         # tCommon was automatically assigned Common cluster,
-        # since its in the root of the tree
+        # since it's in the root of the tree
     ],
     # ...
 }
@@ -1997,7 +1997,7 @@ Generate clusters.
 
 Once we validated assets and trees, we can do cluster generation. We'll look at the top level folder name. In order to merge things like `"StageA"` and `"stage_a"` into single cluster `"StageA"`, we'll use the alias system.
 
-Now, the alias dictioanry can become quite large, so I added additional validation. Now we detect unused or extra names.
+Now, the alias dictionary can become quite large, so I added additional validation. Now we detect unused or extra names.
 
 Also, this script has a neat table output for clusters per asset type, It can be useful to discern where exactly any extra names are located.
 
@@ -2198,7 +2198,7 @@ Reference scanner.
 
 In order to run dependency linters, we need to scan the actual references. We'll use [`pyahocorasick`](github.com/WojciechMula/pyahocorasick) library to make it decently fast.
 
-Text occurences found like this reflect occurrences in static code, but with some exceptions (strings, comments). Filtering through such is implemented in Clunkster.
+Text occurrences found like this reflect occurrences in static code, but with some exceptions (strings, comments). Filtering through such is implemented in Clunkster.
 
 Also, for pure data registry scripts (like `sound_balance`), which, technically reference every asset, but don't instantiate them, we added a special directive: `//!clunkster: ignore`. Add it in any GML scripts that should be skipped.
 
@@ -2599,7 +2599,7 @@ Second, persistent objects. We can't cleanly trace where those objects travel th
 
 1. Highly localized objects (like room transitions), that don't instantiate state-specific assets beyong their spawn room. I think it'd be wise to validate that those objects are in Common cluster, for safety.
 
-2. Ubiqitous `World` object, which is present in every room. We mark those objectsi in `EXTRA_ROOTS`, so they get artificially added into the reachability sets.
+2. Ubiquitous `World` object, which is present in every room. We mark those objectsi in `EXTRA_ROOTS`, so they get artificially added into the reachability sets.
 
 Note: even though we calculate graphs for each room, saving them is optional. Beyond reachability set generation, they are only used in better output of second cross-reference linter down the line. If saving graphs ever becomes a bottleneck you may omit those and only calculate the `reachability_map: dict[str, set[str]]`
 

@@ -967,7 +967,7 @@ def main_ex_aliases() -> list[Asset]:
     ``"StageA"`` and ``"stage_a"`` into single cluster ``"StageA"``, we'll
     use the alias system.
 
-    Now, the alias dictioanry can become quite large, so I added additional
+    Now, the alias dictionary can become quite large, so I added additional
     validation. Now we detect unused or extra names.
 
     Also, this script has a neat table output for clusters per asset type,
@@ -1067,7 +1067,7 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     We'll use [``pyahocorasick``](github.com/WojciechMula/pyahocorasick)
     library to make it decently fast.
 
-    Text occurences found like this reflect occurrences in static code,
+    Text occurrences found like this reflect occurrences in static code,
     but with some exceptions (strings, comments). Filtering through
     such is implemented in Clunkster.
 
@@ -1381,7 +1381,7 @@ def main_ex_graph(
       state-specific assets beyong their spawn room. I think it'd be wise
       to validate that those objects are in Common cluster, for safety.
 
-    2. Ubiqitous ``World`` object, which is present in every room. We mark
+    2. Ubiquitous ``World`` object, which is present in every room. We mark
       those objectsi in ``EXTRA_ROOTS``, so they get artificially added into
     the reachability sets.
 

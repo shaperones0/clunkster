@@ -184,7 +184,7 @@ ALIAS: dict[str, list[str]] = {{
     'Common': [
         'sprEnemies',
         # tCommon was automatically assigned Common cluster,
-        # since its in the root of the tree
+        # since it's in the root of the tree
     ],
     # ...
 }}
