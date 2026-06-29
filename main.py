@@ -2981,7 +2981,7 @@ def main() -> None:
     tasks = main_juicer_gen_tasks(assets)
     main_juicer_run(tasks)
     main_juicer_gen_gml(assets)
-    # main_juicer2_gm_compile()
+    main_juicer_gm_compile()
 
 
 if __name__ == '__main__':

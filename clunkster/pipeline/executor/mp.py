@@ -7,7 +7,7 @@ import os
 import threading
 from dataclasses import replace
 from types import TracebackType
-from typing import cast, override
+from typing import override
 
 from clunkster.pipeline.cache import FileBuildCache
 from clunkster.pipeline.events import context as pl_context
@@ -128,9 +128,7 @@ def execute_mp(
     )
 
     manager = mp.Manager()
-    queue: mp.Queue[pl_event.Event | None] = cast(
-        mp.Queue[pl_event.Event | None], manager.Queue()
-    )
+    queue: mp.Queue[pl_event.Event | None] = manager.Queue()  # ty: ignore[invalid-assignment]
 
     with QueueEventReceiver(queue, dispatcher):
         sink = QueueEventSink(queue)

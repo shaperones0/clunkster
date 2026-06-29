@@ -11,7 +11,7 @@ class UiSimple(Ui):
     """Simple print-based Ui."""
 
     @override
-    def __init__(self, step_name: str, _: int) -> None:
+    def __init__(self, step_name: str, width: int = 60) -> None:
         """Initialize the Ui object."""
         self.step_name = step_name
 
