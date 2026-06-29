@@ -1281,13 +1281,13 @@ Following is the full example of integrating UI logic into a pipeline step, take
 
 {exs.render((
         s_py(
-            'CLS_UI: type[Ui] = UiSimple\n'
-            'CLS_UI_ASYNC: type[UiAsync] = UiSimpleAsync'
+            'CLS_UI: type[my_ui_base.Ui] = my_ui_simple.UiSimple\n'
+            'CLS_UI_ASYNC: type[my_ui_base.UiAsync] = my_ui_simple.UiSimpleAsync'
         ),
         snips['DEF_EXAMPLE'],
     ))}
 {exs.code_reg_stub_src({
-        'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[Ui]', 'CLS_UI_ASYNC: type[Ui]')
+        'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[my_ui_base.Ui]', 'CLS_UI_ASYNC: type[my_ui_base.Ui]')
     })}
 
 {head.next_section("Reading project").render_header()}

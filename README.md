@@ -1353,7 +1353,7 @@ from rich import table as r_table
 from rich import text as r_text
 
 from clunkster.pipeline.events import event as my_event
-from clunkster.pipeline.ui.base import Ui, UiAsync
+from clunkster.pipeline.ui import base as my_ui_base
 
 # see ex0.2
 class WidgetRenderer: ...
@@ -1383,7 +1383,7 @@ def rich_render_row_progress(
     return rich_text
 
 
-class UiRich(Ui):
+class UiRich(my_ui_base.Ui):
     """Rich UI."""
 
     @override
@@ -1465,7 +1465,7 @@ class WorkerState:
     total: int = 1
 
 
-class UiRichAsync(UiAsync):
+class UiRichAsync(my_ui_base.UiAsync):
     """Rich UI. Concurrents version."""
 
     def __init__(self, step_name: str, width: int = 120) -> None:
@@ -1615,12 +1615,12 @@ Following is the full example of integrating UI logic into a pipeline step, take
 ```py
 import time
 
+from clunkster.pipeline.ui import base as my_ui_base
+from clunkster.pipeline.ui import simple as my_ui_simple
 from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
-from clunkster.pipeline.ui.base import Ui, UiAsync
-from clunkster.pipeline.ui.simple import UiSimple, UiSimpleAsync
 
-CLS_UI: type[Ui] = UiSimple
-CLS_UI_ASYNC: type[UiAsync] = UiSimpleAsync
+CLS_UI: type[my_ui_base.Ui] = my_ui_simple.UiSimple
+CLS_UI_ASYNC: type[my_ui_base.UiAsync] = my_ui_simple.UiSimpleAsync
 
 @ui_auto_sink('Example step', cls_ui=CLS_UI)
 def main_example() -> None:

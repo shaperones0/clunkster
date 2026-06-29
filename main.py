@@ -18,31 +18,15 @@ from typing import Self, override
 
 import rustworkx as rx
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
-from gmcodec import (
-    core as gmc_core,
-)
-from gmcodec import (
-    file as gmc_file,
-)
-from gmcodec import (
-    model as gmc_model,
-)
-from gmcodec import (
-    validate as gmc_validate,
-)
+from gmcodec import core as gmc_core
+from gmcodec import file as gmc_file
+from gmcodec import model as gmc_model
+from gmcodec import validate as gmc_validate
 from PIL import Image
-from rich import (
-    console as r_console,
-)
-from rich import (
-    live as r_live,
-)
-from rich import (
-    table as r_table,
-)
-from rich import (
-    text as r_text,
-)
+from rich import console as r_console
+from rich import live as r_live
+from rich import table as r_table
+from rich import text as r_text
 
 from clunkster import asset as my_asset
 from clunkster import lint as my_lint
@@ -51,27 +35,14 @@ from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
 from clunkster.pipeline import cache as my_cache
-from clunkster.pipeline.events import (
-    dispatcher as my_event_dispatcher,
-)
-from clunkster.pipeline.events import (
-    event as my_event,
-)
-from clunkster.pipeline.executor import (
-    mp as my_exec_mp,
-)
-from clunkster.pipeline.executor import (
-    thread as my_exec_thread,
-)
-from clunkster.pipeline.task import (
-    Task,
-    TaskCopy,
-    TaskCopyTree,
-    TaskGeneric,
-)
+from clunkster.pipeline import task as my_task
+from clunkster.pipeline.events import dispatcher as my_event_dispatcher
+from clunkster.pipeline.events import event as my_event
+from clunkster.pipeline.executor import mp as my_exec_mp
+from clunkster.pipeline.executor import thread as my_exec_thread
+from clunkster.pipeline.ui import base as my_ui_base
+from clunkster.pipeline.ui import simple as my_ui_simple
 from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
-from clunkster.pipeline.ui.base import Ui, UiAsync
-from clunkster.pipeline.ui.simple import UiSimple, UiSimpleAsync
 from clunkster.text import location as my_location
 
 # <snip PROJECT>
@@ -185,8 +156,8 @@ def main_ex_setup_widgets() -> None:
     # </snip MAIN_EX_SETUP_WIDGETS>
 
     # silence isort on those two
-    _ = UiSimple
-    _ = UiSimpleAsync
+    _ = my_ui_simple.UiSimple
+    _ = my_ui_simple.UiSimpleAsync
 
 
 # <snip UI_RICH>
@@ -214,7 +185,7 @@ def rich_render_row_progress(
     return rich_text
 
 
-class UiRich(Ui):
+class UiRich(my_ui_base.Ui):
     """Rich UI."""
 
     @override
@@ -296,7 +267,7 @@ class WorkerState:
     total: int = 1
 
 
-class UiRichAsync(UiAsync):
+class UiRichAsync(my_ui_base.UiAsync):
     """Rich UI. Concurrents version."""
 
     def __init__(self, step_name: str, width: int = 120) -> None:
@@ -440,8 +411,8 @@ class WidgetRendererRich(WidgetRenderer):
 # </snip UI_RICH>
 
 # <snip GLOB_CLS_UI>
-CLS_UI: type[Ui] = UiRich
-CLS_UI_ASYNC: type[UiAsync] = UiRichAsync
+CLS_UI: type[my_ui_base.Ui] = UiRich
+CLS_UI_ASYNC: type[my_ui_base.UiAsync] = UiRichAsync
 # </snip GLOB_CLS_UI>
 
 
@@ -2085,7 +2056,7 @@ def main_ex_juicer_processing() -> None:
     """
 
 
-class TaskEncodeSprite(TaskGeneric):
+class TaskEncodeSprite(my_task.TaskGeneric):
     """Encode sprite into an external ``.gmspr`` file."""
 
     def __init__(
@@ -2129,7 +2100,7 @@ class TaskEncodeSprite(TaskGeneric):
         )
 
 
-class TaskEncodeBackground(TaskGeneric):
+class TaskEncodeBackground(my_task.TaskGeneric):
     """Encode background into an external ``.gmbck`` file."""
 
     def __init__(
@@ -2172,7 +2143,7 @@ class TaskEncodeBackground(TaskGeneric):
         )
 
 
-class TaskCompressAudio(TaskGeneric):
+class TaskCompressAudio(my_task.TaskGeneric):
     """Compress audio."""
 
     def __init__(
@@ -2204,7 +2175,7 @@ class TaskCompressAudio(TaskGeneric):
         juice_audio(self.audio, self.file_output)
 
 
-class TaskFixMaskObjects(TaskGeneric):
+class TaskFixMaskObjects(my_task.TaskGeneric):
     """Copy object and inject mask fix."""
 
     def __init__(
@@ -2276,8 +2247,8 @@ def main_juicer_classes() -> None:
 class BuildTasks:
     """Build tasks."""
 
-    tasks_threaded: tuple[Task, ...]
-    tasks_mp: tuple[Task, ...]
+    tasks_threaded: tuple[my_task.Task, ...]
+    tasks_mp: tuple[my_task.Task, ...]
 
 
 @ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
@@ -2317,8 +2288,8 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
         / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
     )
     dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
-    tasks_threaded: list[Task] = []
-    tasks_mp: list[Task] = []
+    tasks_threaded: list[my_task.Task] = []
+    tasks_mp: list[my_task.Task] = []
 
     # them functions
     def pth_symlink(pth: Path) -> None:
@@ -2330,7 +2301,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
 
     def copy_rebase(*files: Path) -> None:
         tasks_threaded.append(
-            TaskCopy(
+            my_task.TaskCopy(
                 *(
                     (_file, JUICER.dir_out / _file.relative_to(PROJECT))
                     for _file in files
@@ -2384,7 +2355,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
                     #  using copytree on the whole tree might be faster than
                     #  copying individual assets
                     tasks_threaded.append(
-                        TaskCopyTree(
+                        my_task.TaskCopyTree(
                             pth,
                             JUICER.dir_out / pth.relative_to(PROJECT),
                         )
@@ -2421,7 +2392,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
                 case _:
                     # copy idk
                     tasks_threaded.append(
-                        TaskCopyTree(
+                        my_task.TaskCopyTree(
                             pth,
                             JUICER.dir_out / pth.relative_to(PROJECT),
                         )
@@ -2444,7 +2415,9 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
             copy_rebase(bg.get_background_metadata_file(PROJECT))
             # copy dry image
             tasks_threaded.append(
-                TaskCopy((img_dry, bg.get_background_image(JUICER.dir_out)))
+                my_task.TaskCopy(
+                    (img_dry, bg.get_background_image(JUICER.dir_out))
+                )
             )
             # generate wet image
             tasks_mp.append(
@@ -2464,7 +2437,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
             if asset_cluster(sprite) == 'Common':
                 # copy as is
                 tasks_threaded.append(
-                    TaskCopyTree(
+                    my_task.TaskCopyTree(
                         dir_input=sprite.get_sprite_folder(PROJECT),
                         dir_output=sprite.get_sprite_folder(JUICER.dir_out),
                     )
@@ -2476,7 +2449,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
             meta = sprite.get_sprite_metadata(PROJECT)
             # make separate tasks cause some images are large
             tasks_threaded.extend(
-                TaskCopy(
+                my_task.TaskCopy(
                     (
                         img_dry,
                         sprite.get_sprite_image(JUICER.dir_out, image_index),
@@ -2563,7 +2536,12 @@ def main_juicer_run(tasks: BuildTasks) -> None:
 
 
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
-    """It is time to finally integrate Clunkster into the project."""
+    """It is time to finally integrate Clunkster into the project.
+
+    This code contains traces of my own project configuration (sound registry,
+    etc.), which might not be fully applicable for your project. You
+    should review this code extra thoroughly before pasting it...
+    """
     # --- COG_START: MAIN_EX_JUICER_GEN_GML ---
     print('Generating Clunkster scripts...')
 
