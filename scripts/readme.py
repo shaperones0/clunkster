@@ -1470,6 +1470,8 @@ checks based on more advanced usage tracing.
 
 {head.next_section('Project Juicer').render_header()}
 
+Now that the project is cleared out, it is time for some useful tools.
+
 In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
 
 We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
@@ -1477,11 +1479,40 @@ won't get to run them individually until everything is done.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
 
-{exs.code_begin('ex_juicer_processing', 'Juicer: processing routines')}
-{docs['main_ex_juicer_processing']}
+{exs.code_begin('ex_juicer_processing', 'Juicer: the juice')}
+
+This example is a bit bigger than usual, mostly because before we get to execute any meaningful code we must define a fair bit of classes and functions.
+
+{docs['main_juicer_processing']}
 {exs.render((
         exs.stub('CLS_ASSET_EXT'),
         snips['DEFS_JUICE']
+    ))}
+
+___
+
+{docs['main_juicer_classes']}
+{exs.render((
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEFS_JUICE'),
+        snips['DEF_ASSET_WET_FNAME'],
+        snips['CLS_JUICE_TASKS']
+    ))}
+
+Notice how none of both of the functions or Tasks above depend on ``PROJECT``, or any other global state. Awesome!
+
+___
+
+{docs['main_juicer_gen_tasks']}
+{exs.render((
+        exs.stub('PROJECT'),
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
+        exs.stub('CLS_JUICE_TASKS'),
+        snips['CLS_JUICE_BUILD_TASKS'],
+        snips['CLS_JUICER_CONFIG'],
+        exs.stub('VAR_ASSETS'),
+        snips['MAIN_EX_JUICER_GEN_TASKS']
     ))}
 
 {exs.code_reg_stub_src({
@@ -1489,9 +1520,26 @@ Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/)
             'juice_sprite',
             'juice_background',
             'juice_audio',
-            'juice_obj_fix_mask'
-        )
+            'juice_obj_fix_mask',
+        ),
+        'CLS_JUICE_TASKS': gen_stub_cls(
+            'TaskEncodeSprite',
+            'TaskEncodeBackground',
+            'TaskCompressAudio',
+            'TaskFixMaskObjects',
+        ),
+        'DEF_ASSET_WET_FNAME': gen_stub_func('asset_wet_fname'),
+        'CLS_JUICE_BUILD_TASKS': gen_stub_cls('BuildTasks'),
+        'CLS_JUICER_CONFIG': '\n'.join((
+            gen_stub_cls('ConfJuicer'),
+            gen_stub_var('JUICER: ConfJuicer')
+        )),
+        'VAR_JUICE_BUILD_TASKS': gen_stub_var('tasks: BuildTasks')
     })}
+
+
+
+
 """ # noqa: S608
 
 

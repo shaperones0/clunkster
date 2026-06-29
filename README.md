@@ -57,7 +57,7 @@ Super destructive tools:
     * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
   * [4 - Project Juicer](#4---project-juicer)
-    * [Example 4.1 - Juicer: processing routines](#example-41---juicer-processing-routines)
+    * [Example 4.1 - Juicer: the juice](#example-41---juicer-the-juice)
 
 # Rationale
 
@@ -3117,6 +3117,8 @@ Congrats on defeating the tutorial boss.
 
 ## 4 - Project Juicer
 
+Now that the project is cleared out, it is time for some useful tools.
+
 In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: [clusters](#example-13---clusters)), the game must satisfy both clusterization linters (see: [ex2.3](#example-23---lint-cross-cluster-references) and [ex3.3](#example-33---lint-room-cluster-boundaries)) in order for the resulting build to run well.
 
 We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
@@ -3124,21 +3126,15 @@ won't get to run them individually until everything is done.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
 
-### Example 4.1 - Juicer: processing routines
-Now that the project is cleared out, time for the useful tools.
+### Example 4.1 - Juicer: the juice
 
-Mechanism behind most of the following tools is the Juicer system. This
-system copies the project, changes some of the assets, and boom - you
-have lowered RAM usage from 2.5 GB down to 1 GB.
+This example is a bit bigger than usual, mostly because before we get to execute any meaningful code we must define a fair bit of classes and functions.
 
-Now, I trust you've already looked at [dehydration](#dehydration) and
-[juicing](#juicing), that's what we'll be implementing.
-
-Let's start with processing (or "prepare" as called in Dehydration) logic.
+First step - the actual processing functions.
 
 As it's outlined in Juicing, processing will be applied only to sprites,
-backgrounds and external audio. However, according to Juicing, we'll need
-to fix a couple of things: object's masks and room's stretch backgrounds.
+backgrounds and external audio. Plus fixing object's masks and room's
+stretch backgrounds.
 
 Object's masks require doing changes to every object, so this thing belongs
 in the processing stage.
@@ -3433,5 +3429,553 @@ def juice_obj_fix_mask(
         output_gml_path.write_text(input_gml, encoding='utf-8', newline='\n')
 ```
 
-Now, I didn't add any code for you to test those functions. Those can be
-"tested" in the fully assembling the pipeline at the end.
+___
+
+Step 2 - wrap the asset processing functions into Tasks.
+
+Few design notes:
+
+1. make sure tasks contents stay lightweight enough to be sent over IPC
+2. make sure task's execute method stays pure (doesn't rely on global
+   variables or other pre-initialized state)
+3. use keyword-only arguments for constructors because those paths are
+   easy to mess up
+
+```py
+import shutil
+from pathlib import Path
+from typing import override
+
+from clunkster import asset as my_asset
+from clunkster import project as my_proj
+from clunkster.pipeline import task as my_task
+
+# see ex1.1
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+# see ex4.1
+def juice_sprite(): ...
+def juice_background(): ...
+def juice_audio(): ...
+def juice_obj_fix_mask(): ...
+
+def asset_wet_fname(asset: my_asset.Asset) -> str:
+    """Get asset's wet file name."""
+    if isinstance(asset, AssetExtSfx):
+        return f'{asset.name_clean}.wav'
+    if isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
+        return f'{asset.name_clean}.ogg'
+    if isinstance(asset, my_asset.Sprite):
+        return f'{asset.name}.gmspr'
+    if isinstance(asset, my_asset.Background):
+        return f'{asset.name}.gmbck'
+    raise NotImplementedError('Asset type not supported')
+
+class TaskEncodeSprite(my_task.TaskGeneric):
+    """Encode sprite into an external ``.gmspr`` file."""
+
+    def __init__(
+        self,
+        *,
+        sprite: my_asset.Sprite,
+        dir_input_root: Path,
+        dir_wet_root: Path,
+    ) -> None:
+        """Initialize the task.
+
+        :param sprite: Sprite to encode.
+        :param dir_input_root: Input project root.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
+        file_metadata = sprite.get_sprite_metadata_file(dir_input_root)
+        self.sprite_meta = sprite.get_sprite_metadata(dir_input_root)
+        self.sprite_images = tuple(
+            sprite.get_sprite_image(dir_input_root, frame)
+            for frame in range(self.sprite_meta.frames)
+        )
+
+        self.file_output_gmspr = (
+            dir_wet_root
+            / type(sprite).type_get_dir_rel()
+            / asset_wet_fname(sprite)
+        )
+
+        super().__init__(
+            task_id=f'proc_spr_{sprite.name}',
+            inputs=(file_metadata, *self.sprite_images),
+            outputs=(self.file_output_gmspr,),
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_sprite(
+            meta=self.sprite_meta,
+            images=self.sprite_images,
+            out_file=self.file_output_gmspr,
+        )
+
+
+class TaskEncodeBackground(my_task.TaskGeneric):
+    """Encode background into an external ``.gmbck`` file."""
+
+    def __init__(
+        self,
+        *,
+        background: my_asset.Background,
+        dir_input_root: Path,
+        dir_wet_root: Path,
+    ) -> None:
+        """Initialize the task.
+
+        :param background: Background to encode.
+        :param dir_input_root: Input project root.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
+        file_metadata = background.get_background_metadata_file(dir_input_root)
+        self.background_meta = background.get_background_metadata(
+            dir_input_root
+        )
+        self.background_image = background.get_background_image(dir_input_root)
+
+        self.file_output_gmbck = (
+            dir_wet_root
+            / type(background).type_get_dir_rel()
+            / asset_wet_fname(background)
+        )
+
+        super().__init__(
+            task_id=f'proc_bg_{background.name}',
+            inputs=(file_metadata, self.background_image),
+            outputs=(self.file_output_gmbck,),
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_background(
+            meta=self.background_meta,
+            image=self.background_image,
+            out_file=self.file_output_gmbck,
+        )
+
+
+class TaskCompressAudio(my_task.TaskGeneric):
+    """Compress audio."""
+
+    def __init__(
+        self,
+        *,
+        audio: AssetExtAudio,
+        dir_wet_root: Path,
+    ) -> None:
+        """Initialize the task.
+
+        :param audio: Background to compress.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
+        self.audio = audio
+        self.file_output = (
+            dir_wet_root
+            / type(audio).type_get_dir_rel()
+            / asset_wet_fname(audio)
+        )
+
+        super().__init__(
+            task_id=f'compress_{audio.name_clean}',
+            inputs=(audio.file,),
+            outputs=(self.file_output,),
+        )
+
+    @override
+    def execute(self) -> None:
+        juice_audio(self.audio, self.file_output)
+
+
+class TaskFixMaskObjects(my_task.TaskGeneric):
+    """Copy object and inject mask fix."""
+
+    def __init__(
+        self,
+        *,
+        obj: my_asset.Object,
+        dir_input_root: Path,
+        dir_out_root: Path,
+    ) -> None:
+        """Initialize the task.
+
+        :param obj: Object to fix.
+        :param dir_input_root: Input project root.
+        :param dir_out_root: Output project root.
+        """
+        self.file_input_meta = obj.get_object_metadata_file(dir_input_root)
+        self.file_input_gml = obj.get_object_gml_file(dir_input_root)
+
+        self.file_output_meta = (
+            dir_out_root / self.file_input_meta.relative_to(dir_input_root)
+        )
+        self.file_output_gml = dir_out_root / self.file_input_gml.relative_to(
+            dir_input_root
+        )
+
+        meta = obj.get_object_metadata(dir_input_root)
+        self.obj_name = obj.name
+        self.obj_has_parent = bool(meta.parent)
+        # objects gml files are guaranteed to exist
+        # using read module because this gml was likely already read before
+        self.obj_input_gml = my_proj.read(
+            obj.get_object_gml_file(dir_input_root)
+        )
+        self.obj_output_gml_file = dir_out_root / obj.get_object_gml_file(
+            dir_input_root
+        ).relative_to(dir_input_root)
+
+        super().__init__(
+            task_id=f'fixmasks_{obj.name}',
+            inputs=(self.file_input_meta, self.file_input_gml),
+            outputs=(self.file_output_meta, self.file_output_gml),
+        )
+
+    @override
+    def execute(self) -> None:
+        shutil.copy2(self.file_input_meta, self.file_output_meta)
+        juice_obj_fix_mask(
+            obj_name=self.obj_name,
+            obj_has_parent=self.obj_has_parent,
+            input_gml=self.obj_input_gml,
+            output_gml_path=self.obj_output_gml_file,
+        )
+```
+
+Notice how none of both of the functions or Tasks above depend on ``PROJECT``, or any other global state. Awesome!
+
+___
+
+Step 3 - ~~Fly~~ Run the thing.
+
+This stage is responsible for mapping out source project, generating
+tasks, and sending tasks to executors.
+
+While the logic was outlined in [Juicing](#juicing), few things make
+this process a bit messy:
+
+1. External audio is not a top level folder.
+2. We must also account for Common assets, and make sure they get copied
+   just so.
+
+Therefore, I've made logic of task generation very explicit. Also, this
+step does some of the cheaper tasks, like creating build dir and symlinks.
+
+```py
+import dataclasses
+from pathlib import Path
+
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
+from clunkster.asset import Asset
+from clunkster.pipeline import task as my_task
+
+# see ex0.1
+PROJECT: Path = ...
+LINT: my_lint.LinterSession = ...
+
+# see ex1.1
+class AssetExtAudio: ...
+class AssetExtBgm: ...
+class AssetExtSfx: ...
+class AssetExtSfx3: ...
+
+# see ex1.3
+def asset_cluster_raw(): ...
+def asset_cluster(): ...
+
+# see ex4.1
+class TaskEncodeSprite: ...
+class TaskEncodeBackground: ...
+class TaskCompressAudio: ...
+class TaskFixMaskObjects: ...
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BuildTasks:
+    """Build tasks."""
+
+    tasks_threaded: tuple[my_task.Task, ...]
+    tasks_mp: tuple[my_task.Task, ...]
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ConfJuicer:
+    """Configuration for Project Juicer."""
+
+    # True to use prod build configuration, False for dev build configuration
+    is_prod: bool
+    # project output dir
+    dir_out: Path
+    # path to output external assets to, relative to dir_out
+    rel_dir_wet: Path
+    # dry asset source dir
+    dir_dry: Path
+
+    # cache.json file
+    file_cache: Path
+
+    # filename of the gm82 project
+    fname_gm82: str
+
+
+JUICER = ConfJuicer(
+    # start with dev builds
+    is_prod=False,
+    # use "_build" folder next to the project
+    dir_out=Path('path/to/project/_build'),
+    # if you downloaded Clunkster from source, then
+    #  such is available in repository's /data/dry folder
+    dir_dry=Path(__file__).parent / 'data' / 'dry',
+    rel_dir_wet=Path('data') / 'chunks',
+    file_cache=Path(__file__).parent / 'cache.json',
+    fname_gm82='projectidk.gm82',
+)
+
+# see ex1.3
+assets: list[Asset] = ...
+
+# filter assets by their juiceable type
+asset_sprites: list[my_asset.Sprite] = []
+asset_backgrounds: list[my_asset.Background] = []
+asset_objects: list[my_asset.Object] = []
+asset_audio: list[AssetExtAudio] = []
+for asset in assets:
+    if isinstance(asset, my_asset.Sprite):
+        asset_sprites.append(asset)
+    if isinstance(asset, my_asset.Background):
+        asset_backgrounds.append(asset)
+    if isinstance(asset, my_asset.Object):
+        asset_objects.append(asset)
+    if isinstance(asset, AssetExtAudio):
+        asset_audio.append(asset)
+
+img_dry = (
+    JUICER.dir_dry
+    / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
+)
+dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
+tasks_threaded: list[my_task.Task] = []
+tasks_mp: list[my_task.Task] = []
+
+# them functions
+def pth_symlink(pth: Path) -> None:
+    """Create a symlink from input project root to build output."""
+    # this ain't IO bound operation so do it in-place
+    output_dir = JUICER.dir_out / pth.relative_to(PROJECT)
+    if not output_dir.is_symlink():
+        output_dir.symlink_to(pth, target_is_directory=True)
+
+def copy_rebase(*files: Path) -> None:
+    tasks_threaded.append(
+        my_task.TaskCopy(
+            *(
+                (_file, JUICER.dir_out / _file.relative_to(PROJECT))
+                for _file in files
+            )
+        )
+    )
+
+def type_copy_yyd(asset_type: type[my_asset.AssetBuiltin]) -> None:
+    copy_rebase(
+        asset_type.type_get_tree_file(PROJECT),
+        asset_type.type_get_index_file(PROJECT),
+    )
+
+def map_root(dir_root: Path) -> None:
+    """Map project root."""
+    for pth in dir_root.iterdir():
+        if pth.is_file():
+            if pth.suffix == '.gm82':
+                copy_rebase(pth)
+            else:
+                raise NotImplementedError('Unknown file in project root')
+            continue
+        assert pth.is_dir()
+        match pth.name:
+            case 'backgrounds':
+                # process backgrounds
+                map_backgrounds()
+            case 'cache':
+                # cache is not needed for building
+                pass
+            case 'data':
+                # multicase handle
+                map_data(pth)
+            case 'fonts':
+                # symlink
+                pth_symlink(pth)
+            case 'objects':
+                # process fix masks
+                map_objects()
+            case 'paths':
+                # symlink
+                pth_symlink(pth)
+            case 'rooms':
+                # symlink
+                pth_symlink(pth)
+            case 'save':
+                # symlink
+                pth_symlink(pth)
+            case 'scripts':
+                # copy (we'll have to dynamically change a few scripts)
+                #  using copytree on the whole tree might be faster than
+                #  copying individual assets
+                tasks_threaded.append(
+                    my_task.TaskCopyTree(
+                        pth,
+                        JUICER.dir_out / pth.relative_to(PROJECT),
+                    )
+                )
+            case 'settings':
+                # symlink
+                pth_symlink(pth)
+            case 'sprites':
+                # process sprites
+                map_sprites()
+            case 'triggers':
+                # symlink
+                pth_symlink(pth)
+            case _:
+                raise NotImplementedError('Unknown folder in project root')
+
+def map_data(dir_data: Path) -> None:
+    """Map data folder."""
+    # make sure data folder exists
+    (JUICER.dir_out / dir_data.relative_to(PROJECT)).mkdir(exist_ok=True)
+
+    # you wanna change names to reflect paths in AssetExtAudio classes
+    for pth in dir_data.iterdir():
+        if pth.is_file():
+            copy_rebase(pth)
+            continue
+        match pth.name:
+            case 'music':
+                # process bgm
+                map_audio()
+            case 'sounds':
+                # process sfx + sfx3
+                pass  # done above
+            case _:
+                # copy idk
+                tasks_threaded.append(
+                    my_task.TaskCopyTree(
+                        pth,
+                        JUICER.dir_out / pth.relative_to(PROJECT),
+                    )
+                )
+
+def map_backgrounds() -> None:
+    """Map backgrounds."""
+    # copy yyd
+    type_copy_yyd(my_asset.Background)
+
+    for bg in asset_backgrounds:
+        if asset_cluster(bg) == 'Common':
+            # copy as is
+            copy_rebase(
+                bg.get_background_metadata_file(PROJECT),
+                bg.get_background_image(PROJECT),
+            )
+            continue
+        # copy metadata
+        copy_rebase(bg.get_background_metadata_file(PROJECT))
+        # copy dry image
+        tasks_threaded.append(
+            my_task.TaskCopy(
+                (img_dry, bg.get_background_image(JUICER.dir_out))
+            )
+        )
+        # generate wet image
+        tasks_mp.append(
+            TaskEncodeBackground(
+                background=bg,
+                dir_input_root=PROJECT,
+                dir_wet_root=dir_wet / asset_cluster(bg),
+            )
+        )
+
+def map_sprites() -> None:
+    """Map sprites."""
+    # copy yyd
+    type_copy_yyd(my_asset.Sprite)
+
+    for sprite in asset_sprites:
+        if asset_cluster(sprite) == 'Common':
+            # copy as is
+            tasks_threaded.append(
+                my_task.TaskCopyTree(
+                    dir_input=sprite.get_sprite_folder(PROJECT),
+                    dir_output=sprite.get_sprite_folder(JUICER.dir_out),
+                )
+            )
+            continue
+        # copy metadata
+        copy_rebase(sprite.get_sprite_metadata_file(PROJECT))
+        # copy dry images
+        meta = sprite.get_sprite_metadata(PROJECT)
+        # make separate tasks cause some images are large
+        tasks_threaded.extend(
+            my_task.TaskCopy(
+                (
+                    img_dry,
+                    sprite.get_sprite_image(JUICER.dir_out, image_index),
+                ),
+            )
+            for image_index in range(meta.frames)
+        )
+
+        # generate wet image
+        tasks_mp.append(
+            TaskEncodeSprite(
+                sprite=sprite,
+                dir_input_root=PROJECT,
+                dir_wet_root=dir_wet / asset_cluster(sprite),
+            )
+        )
+
+def map_audio() -> None:
+    """Map music."""
+    # no yyd files
+    for audio in asset_audio:
+        if asset_cluster(audio) == 'Common':
+            # copy as is
+            copy_rebase(audio.file)
+            continue
+        # no metadata or dry stuff
+        tasks_mp.append(
+            TaskCompressAudio(
+                audio=audio, dir_wet_root=dir_wet / asset_cluster(audio)
+            )
+        )
+
+def map_objects() -> None:
+    """Map objects."""
+    # copy yyd
+    type_copy_yyd(my_asset.Object)
+
+    # add all regardless of cluster
+    tasks_threaded.extend(
+        TaskFixMaskObjects(
+            obj=obj,
+            dir_input_root=PROJECT,
+            dir_out_root=JUICER.dir_out,
+        )
+        for obj in asset_objects
+    )
+
+# ensure output dir exists before creating symlinks
+JUICER.dir_out.mkdir(parents=True, exist_ok=True)
+
+# run mapper
+map_root(PROJECT)
+
+build_tasks = BuildTasks(
+    tasks_threaded=tuple(tasks_threaded),
+    tasks_mp=tuple(tasks_mp),
+)
+```

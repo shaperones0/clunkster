@@ -2020,28 +2020,15 @@ def juice_obj_fix_mask(
         output_gml_path.write_text(input_gml, encoding='utf-8', newline='\n')
 
 
-# <md>
-# Now, I didn't add any code for you to test those functions. Those can be
-# "tested" in the fully assembling the pipeline at the end.
-# </md>
 # </snip DEFS_JUICE>
 
 
-def main_ex_juicer_processing() -> None:
-    """Now that the project is cleared out, time for the useful tools.
-
-    Mechanism behind most of the following tools is the Juicer system. This
-    system copies the project, changes some of the assets, and boom - you
-    have lowered RAM usage from 2.5 GB down to 1 GB.
-
-    Now, I trust you've already looked at [dehydration](#dehydration) and
-    [juicing](#juicing), that's what we'll be implementing.
-
-    Let's start with processing (or "prepare" as called in Dehydration) logic.
+def main_juicer_processing() -> None:
+    """First step - the actual processing functions.
 
     As it's outlined in Juicing, processing will be applied only to sprites,
-    backgrounds and external audio. However, according to Juicing, we'll need
-    to fix a couple of things: object's masks and room's stretch backgrounds.
+    backgrounds and external audio. Plus fixing object's masks and room's
+    stretch backgrounds.
 
     Object's masks require doing changes to every object, so this thing belongs
     in the processing stage.
@@ -2056,6 +2043,7 @@ def main_ex_juicer_processing() -> None:
     """
 
 
+# <snip CLS_JUICE_TASKS>
 class TaskEncodeSprite(my_task.TaskGeneric):
     """Encode sprite into an external ``.gmspr`` file."""
 
@@ -2230,8 +2218,11 @@ class TaskFixMaskObjects(my_task.TaskGeneric):
         )
 
 
+# </snip CLS_JUICE_TASKS>
+
+
 def main_juicer_classes() -> None:
-    """Wrap asset processing into Tasks.
+    """Step 2 - wrap the asset processing functions into Tasks.
 
     Few design notes:
 
@@ -2243,6 +2234,7 @@ def main_juicer_classes() -> None:
     """
 
 
+# <snip CLS_JUICE_BUILD_TASKS>
 @dataclasses.dataclass(frozen=True, slots=True)
 class BuildTasks:
     """Build tasks."""
@@ -2251,9 +2243,12 @@ class BuildTasks:
     tasks_mp: tuple[my_task.Task, ...]
 
 
+# </snip CLS_JUICE_BUILD_TASKS>
+
+
 @ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
 def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
-    """Run the thing.
+    """Step 3 - ~~Fly~~ Run the thing.
 
     This stage is responsible for mapping out source project, generating
     tasks, and sending tasks to executors.
@@ -2266,8 +2261,9 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
        just so.
 
     Therefore, I've made logic of task generation very explicit. Also, this
-    step does some of the cheap tasks, like creating build dir and symlinks.
+    step does some of the cheaper tasks, like creating build dir and symlinks.
     """
+    # <snip MAIN_EX_JUICER_GEN_TASKS>
     # filter assets by their juiceable type
     asset_sprites: list[my_asset.Sprite] = []
     asset_backgrounds: list[my_asset.Background] = []
@@ -2507,7 +2503,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
         tasks_threaded=tuple(tasks_threaded),
         tasks_mp=tuple(tasks_mp),
     )
-
+    # </snip MAIN_EX_JUICER_GEN_TASKS>
     return build_tasks  # noqa: RET504
 
 
