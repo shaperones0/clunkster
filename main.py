@@ -2542,7 +2542,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     etc.), which might not be fully applicable for your project. You
     should review this code extra thoroughly before pasting it...
     """
-    # --- COG_START: MAIN_EX_JUICER_GEN_GML ---
+    # <snip MAIN_JUICER_GEN_GML>
     print('Generating Clunkster scripts...')
 
     dir_scripts = my_asset.Script.type_get_dir(JUICER.dir_out)
@@ -2796,10 +2796,11 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
         '\n'.join(gml_dehydrate), **text_params
     )
 
-    # MD: Once the GML files are generated and integrated, the project
-    # MD: should become launchable and playable. Once you verify that, you
-    # MD: continue onto the improved version of Project Juicer below.
-    # --- COG_END: MAIN_EX_JUICER_GEN_GML ---
+    # <md>
+    # Once the GML files are generated, the project should become playable.
+    # Last possible step would be adding the automatic compile.
+    # </md>
+    # </snip MAIN_JUICER_GEN_GML>
 
 
 def main_juicer2_gm_compile() -> None:

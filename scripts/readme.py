@@ -1540,13 +1540,26 @@ ___
         ))
     })}
 
-{exs.code_begin('ex_juicer_processing', 'Juicer: running the tasks')}
+{exs.code_begin('ex_juicer_run', 'Juicer: running the tasks')}
 {docs['main_juicer_run']}
 {exs.render((
         exs.stub('GLOB_CLS_UI'),
         exs.stub('VAR_JUICE_BUILD_TASKS'),
         exs.stub('CLS_JUICER_CONFIG'),
         snips['MAIN_JUICER_RUN']
+    ))}
+
+{exs.code_begin('ex_juicer_gen_gml', 'Juicer: generate the `.gml` files')}
+{docs['main_juicer_gen_gml']}
+{exs.render((
+        exs.stub('LINT_RULES'),
+        exs.stub('CONTEXT_RULES'),
+        exs.stub('CLS_ASSET_EXT'),
+        exs.stub('DEF_ASSET_CLUSTERS'),
+        exs.stub('DEF_ASSET_WET_FNAME'),
+        exs.stub('CLS_JUICER_CONFIG'),
+        exs.stub('VAR_ASSETS'),
+        snips['MAIN_JUICER_GEN_GML']
     ))}
 
 
