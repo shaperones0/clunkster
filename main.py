@@ -2543,6 +2543,10 @@ def main_juicer_run(tasks: BuildTasks) -> None:
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     """It is time to finally integrate Clunkster into the project.
 
+    For this we won't be "creating" scripts, but more like replacing ones
+    that exist in the project. The list of scripts to be added into
+    the project is [right down the road](#integration-into-the-project).
+
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You
     should review this code extra thoroughly before pasting it...
