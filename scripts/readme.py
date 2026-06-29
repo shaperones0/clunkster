@@ -1238,7 +1238,6 @@ checks based on more advanced usage tracing.
         exs.stub('LINT_RULES'),
         exs.stub('CONTEXT_RULES'),
         snips['EXTRA_ROOTS'],
-        snips['DEF_TYPE_FILTER'],
         exs.stub('CLS_ASSET_EXT'),
         exs.stub('DEF_ASSET_CLUSTERS'),
         exs.stub('CLS_DEPENDENCY'),

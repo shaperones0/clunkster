@@ -31,11 +31,10 @@ test-cov: ## Run tests and print a terminal coverage report
 
 .PHONY: readme
 readme:	## Autogen in readme (examples and whatnot)
-	@cog -r README.md
-	@cog -r README.md
+	@uv run python -m scripts.readme
 
 .PHONY: check
-check: format lint test ## Run all local checks, fixes, and tests
+check: format lint test readme ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="
 
 .PHONY: help

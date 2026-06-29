@@ -539,7 +539,7 @@ with Player  {
             } else {
                 dance_camera_update()
             }
-        } 
+        }
     }
     instance_create(0, 0, GameOver)
     instance_destroy()
@@ -753,7 +753,13 @@ To elaborate:
 - we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
 - dynamic loading of sprites and backgrounds presents us with a few new game maker bugs that we need to address:
     - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
-    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code
+    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+```gml
+if background_width0>0 && background_height0>0 {
+    background_xscale0=room_width/background_width0
+    background_yscale0=room_height/background_height0
+}
+```
 - since for some projects Juicing is the only way to run the project, builds must be fast:
     - processing tasks must support caching
     - asset dirs without processing can be symlinked
@@ -777,6 +783,9 @@ With that said, the project building strategy becomes:
     - multiprocessing for processing tasks (image encoding, audio compression)
     - threading for copy tasks
     - the rest can happen synchronously right at the task generation
+
+Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
+original path relative to the project root>`
 
 ## Integration into the project
 
@@ -982,7 +991,7 @@ if !ds_map_exists(global._sndreg,argument0+":REG") {
 }
 
 //rate
-//NOTE: I recommend avoiding unit_samples and unit_seconds, as FMOD's 
+//NOTE: I recommend avoiding unit_samples and unit_seconds, as FMOD's
 // native format is unit_unitary
 var _rate;if argument_count>1 _rate=argument[1] else _rate=44100
 dsmap(global._sndreg,argument0+":RATE",_rate)
@@ -1093,7 +1102,7 @@ Following examples represent parts of the workflow for the game this tool was in
 
 ## 1 - Reading project
 
-This section is about discovering assets from project files, doing initial 
+This section is about discovering assets from project files, doing initial
 validations and assigning clusters to the assets.
 
 ### Example 1.1 - Finding assets
@@ -1120,9 +1129,10 @@ from abc import ABC
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint, project as my_read
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
+from clunkster import project as my_proj
 from clunkster.asset import Asset
-
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtAudio(my_asset.AssetSingleFile, ABC):
@@ -1188,7 +1198,6 @@ class AssetExtSfx3(AssetExtAudio):
     def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
 
-
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
     my_asset.Background,
@@ -1204,17 +1213,14 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
 )
 
 PROJECT: Path
-LINT: my_lint.LinterSession
+LINT = my_lint.LinterSession()
 
 
 def global_set_project(project_root: Path) -> None:
     """Convenience function for initializing the project."""
-
     global PROJECT, LINT
     PROJECT = project_root
-    my_read.reg_root(PROJECT)
-    LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
-
+    my_proj.set_root(PROJECT)
 
 assets: list[Asset] = []
 
@@ -1275,29 +1281,34 @@ import collections.abc as col
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint, project as my_read
-from clunkster.text import location as my_location
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
+from clunkster import project as my_proj
 from clunkster.parse import tree as my_parse_tree
-
+from clunkster.text import location as my_location
 
 # see ex1.1
 class AssetExtAudio: ...
-
-
 class AssetExtBgm: ...
-
-
 class AssetExtSfx: ...
-
-
 class AssetExtSfx3: ...
 
+class LintTreeDuplicateFolder(
+    my_lint.LinterViolationLocated, my_lint.LinterViolationMessage
+):
+    """Duplicate ``tree.yyd`` folder violation."""
 
-class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
     rule = 'T100'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, *, node: my_parse_tree.TreeNode, location: my_location.Location):
+    def __init__(
+        self, *, node: my_parse_tree.TreeNode, location: my_location.Location
+    ) -> None:
+        """Initialize violation.
+
+        :param node: Offending tree node.
+        :param location: Source location.
+        """
         self.tree_node = node
         self.loc = location
         super().__init__()
@@ -1310,15 +1321,22 @@ class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViol
     @override
     @property
     def message(self) -> str:
-        thing = "Folder" if self.tree_node.is_folder else "Asset???"
-        return f'Duplicate {thing}: \'{self.tree_node.name}\''
+        thing = 'Folder' if self.tree_node.is_folder else 'Asset???'
+        return f"Duplicate {thing}: '{self.tree_node.name}'"
 
 
 class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
+    """Duplicate asset violation."""
+
     rule = 'T101'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
+        """Initialize violation.
+
+        :param dupes: Names of the duplicate assets.
+        :param message_pref: Message prefix.
+        """
         super().__init__()
         self.dupes = tuple(dupes)
         self.message_pref = message_pref
@@ -1326,8 +1344,7 @@ class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
     @override
     @property
     def message(self) -> str:
-        return f"{self.message_pref}: {' '.join(self.dupes)}"
-
+        return f'{self.message_pref}: {" ".join(self.dupes)}'
 
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
@@ -1347,13 +1364,12 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
 PROJECT: Path = ...
 LINT: my_lint.LinterSession = ...
 
-
 def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
     tree_file = asset_cls.type_get_tree_file(PROJECT)
-    line_map = my_read.line_map(tree_file)
+    line_map = my_proj.line_map(tree_file)
     seen_children: dict[str, set[str]] = {}
 
-    for node in my_parse_tree.nodes(my_read.lines(tree_file)):
+    for node in my_parse_tree.nodes(my_proj.lines(tree_file)):
         # format the tuple into path string (e.g., "/Player/SkinA")
         path_str = '/' + '/'.join(node.parent_path)
 
@@ -1363,18 +1379,21 @@ def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
         if node.name in seen_children[path_str]:
             loc_line = node.line_num
             loc_column = node.depth + 1  # uses tab characters
-            LINT.push(LintTreeDuplicateFolder(
-                node=node,
-                location=my_location.Location(
-                    file=tree_file,
-                    loc_line=loc_line,
-                    loc_column=loc_column,
-                    loc_index=line_map.get_abs_index(loc_line, loc_column),
+            LINT.push(
+                LintTreeDuplicateFolder(
+                    node=node,
+                    location=my_location.Location(
+                        file=tree_file,
+                        loc_line=loc_line,
+                        loc_column=loc_column,
+                        loc_index=line_map.get_abs_index(
+                            loc_line, loc_column
+                        ),
+                    ),
                 )
-            ))
+            )
         else:
             seen_children[path_str].add(node.name)
-
 
 # check that there are no duplicates
 asset_names: set[str] = set()
@@ -1394,16 +1413,19 @@ for asset_type in CLUSTERABLE_ASSETS:
             ).items()
             if count > 1
         ]
-        LINT.push(LintTreeDuplicateAsset(
-            dupes=dupes,
-            message_pref='Duplicate assets in one type'
-        ))
+        LINT.push(
+            LintTreeDuplicateAsset(
+                dupes=dupes, message_pref='Duplicate assets in one type'
+            )
+        )
     inters = asset_names.intersection(assets_set)
     if inters:
-        LINT.push(LintTreeDuplicateAsset(
-            dupes=inters,
-            message_pref='Duplicate assets across multiple types'
-        ))
+        LINT.push(
+            LintTreeDuplicateAsset(
+                dupes=inters,
+                message_pref='Duplicate assets across multiple types',
+            )
+        )
     asset_names.update(assets_set)
 
     # collect errors before parsing tree.yyd
@@ -1434,6 +1456,9 @@ validation. Now we detect unused or extra names.
 Also, this script has a neat table output for clusters per asset type,
 It can be useful to discern where exactly any extra names are located.
 
+Also, since this stage is used as an actual part of the pipeline, it uses
+the fancy printing shims.
+
 ```py
 import collections.abc as col
 import dataclasses
@@ -1441,7 +1466,10 @@ from abc import ABC
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint
+from rich import table as r_table
+
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
 from clunkster.asset import Asset
 
 ALIAS: dict[str, list[str]] = {
@@ -1468,6 +1496,7 @@ ALIAS_INV: dict[str, str]
 
 
 def global_set_alias(alias: dict[str, list[str]]) -> None:
+    """Global alias setting helper."""
     global ALIAS, ALIAS_INV
     ALIAS = alias
 
@@ -1475,7 +1504,7 @@ def global_set_alias(alias: dict[str, list[str]]) -> None:
     for name, clusters in ALIAS.items():
         for cluster in clusters:
             if cluster in ALIAS_INV:
-                raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
+                raise ValueError(f"Invalid ALIAS (duplicate: '{cluster}')")
             ALIAS_INV[cluster] = name
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -1543,22 +1572,30 @@ class AssetExtSfx3(AssetExtAudio):
         return Path('data') / 'sounds'
 
 def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
+    """Get asset's initial cluster before aliasing."""
     return asset.tree_path[0] if asset.tree_path else 'Common'
 
 
 def asset_cluster(asset: my_asset.Asset) -> str:
+    """Get asset's cluster."""
     if isinstance(asset, my_asset.AssetHasPath):
         cluster = asset_cluster_raw(asset)
         alias = ALIAS_INV.get(cluster)
         return cluster if alias is None else alias
-    return "Unknown?"
+    return 'Unknown?'
 
 class LintAliasMismatch(my_lint.LinterViolationMessage):
+    """Alias mismatch violation."""
 
     rule = 'A100'
     severity = my_lint.Severity.WARNING
 
-    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
+        """Initialize violation.
+
+        :param dupes: Duplicate alias names.
+        :param message_pref: Message prefix.
+        """
         super().__init__()
         self.dupes = tuple(dupes)
         self.message_pref = message_pref
@@ -1566,7 +1603,7 @@ class LintAliasMismatch(my_lint.LinterViolationMessage):
     @override
     @property
     def message(self) -> str:
-        return f"{self.message_pref}: {' '.join(self.dupes)}"
+        return f'{self.message_pref}: {" ".join(self.dupes)}'
 
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
@@ -1618,32 +1655,40 @@ for asset_type in CLUSTERABLE_ASSETS:
     table_type_to_clusters[asset_type] = list(cluster_set)
 
 # generate the table
-clusters_all = sorted(
-    {name for clusters in table_type_to_clusters.values() for name in clusters}
+clusters_all = {
+    name
+    for clusters in table_type_to_clusters.values()
+    for name in clusters
+}
+clusters_all_sorted = sorted(clusters_all)
+
+table = r_table.Table(
+    '[bold]Type', *sorted(clusters_all), title='Clusters', padding=0
 )
-print('All clusters:', *clusters_all)
 for asset_type, clusters in table_type_to_clusters.items():
     cluster_set = set(clusters)
-    row = [
-        clm if clm in cluster_set else ' ' * len(clm)
-        for clm in clusters_all
-    ]
-    print(f'[{asset_type.type_name():>10}]:', '|'.join(row))
+    row = (
+        clm if clm in cluster_set else '' for clm in clusters_all_sorted
+    )
+    table.add_row(asset_type.type_name(), *row)
+CON.print(table)
 
 # lint
 lint_unused_aliases = lint_existing_aliases - lint_used_aliases
 lint_extra_aliases = lint_used_aliases - lint_existing_aliases
 if lint_unused_aliases:
-    LINT.push(LintAliasMismatch(
-        dupes=lint_unused_aliases,
-        message_pref='Unused aliases'
-    ))
+    LINT.push(
+        LintAliasMismatch(
+            dupes=lint_unused_aliases, message_pref='Unused aliases'
+        )
+    )
 if lint_extra_aliases:
     # after the initial project setup, I'd upgrade this to raise
-    LINT.push(LintAliasMismatch(
-        dupes=lint_extra_aliases,
-        message_pref='Extra aliases'
-    ))
+    LINT.push(
+        LintAliasMismatch(
+            dupes=lint_extra_aliases, message_pref='Extra aliases'
+        )
+    )
 LINT.consume()
 LINT.assert_empty()
 ```
@@ -1654,7 +1699,7 @@ Keep using the table thing until all aliases are gone.
 
 ## 2 - References
 
-This section is about finding asset references in `.gml` files, and running 
+This section is about finding asset references in `.gml` files, and running
 validations based on them.
 
 ### Example 2.1 - Reference scanning
@@ -1678,36 +1723,28 @@ import collections.abc as col
 import dataclasses
 from pathlib import Path
 
-import tqdm
 from ahocorasick import Automaton
 
-from clunkster import asset as my_asset, lint as my_lint, project as my_read
-from clunkster.text import location as my_location
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
+from clunkster import project as my_proj
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
-
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress
+from clunkster.text import location as my_location
 
 # see ex1.1
 class AssetExtAudio: ...
-
-
 class AssetExtBgm: ...
-
-
 class AssetExtSfx: ...
-
-
 class AssetExtSfx3: ...
-
 
 # see ex1.3
 def asset_cluster_raw(): ...
-
-
 def asset_cluster(): ...
 
-
 def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
+    """Get asset's scannable code files."""
     if isinstance(asset, my_asset.Object):
         yield asset.get_object_metadata_file(project_root)
         yield asset.get_object_gml_file(project_root)
@@ -1720,7 +1757,6 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
         yield asset.get_script_gml_file(project_root)
     # add finders for new asset types
 
-
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
@@ -1729,7 +1765,6 @@ class Dependency:
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
-
 
 # see ex1.1
 PROJECT: Path = ...
@@ -1752,11 +1787,10 @@ scans = tuple(
     for asset in assets
     for file_path in asset_scannables(asset, PROJECT)
 )
-for asset, file_path in tqdm.tqdm(
-        scans, total=len(scans), desc='Scanning'
-):
-    text = my_read.read(file_path)
-    line_map = my_read.line_map(file_path)
+
+for asset, file_path in ui_progress(scans):
+    text = my_proj.read(file_path)
+    line_map = my_proj.line_map(file_path)
     matches: list[my_scan_dep.DependencyMatch] = list(
         my_scan_dep.scan(
             text,
@@ -1781,7 +1815,7 @@ for asset, file_path in tqdm.tqdm(
             )
         )
 
-print(f'\nDone! Found {total_matches} total dependency references.')
+ui_out(f'Found {total_matches} total dependency references.')
 ```
 
 ### Example 2.2 - Lint: unused assets
@@ -1801,10 +1835,12 @@ Take the output of this with a grain of salt.
 import collections.abc as col
 from abc import ABC
 from pathlib import Path
-from typing import override, Self
+from typing import Self, override
 
-from clunkster import asset as my_asset, lint as my_lint
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
 from clunkster.asset import Asset
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress
 
 # see ex1.1
 class AssetExtAudio: ...
@@ -1817,6 +1853,7 @@ def asset_cluster_raw(): ...
 def asset_cluster(): ...
 
 def asset_sort_key(asset: Asset) -> tuple[str, ...]:
+    """Get asset's sort key."""
     if isinstance(asset, my_asset.AssetHasPath):
         return type(asset).type_name(), '/'.join(asset.tree_path), asset.name
 
@@ -1830,10 +1867,12 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
 
     @override
     @classmethod
-    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+    def format_many(
+        cls, errors: col.Iterable[Self], *, verbose: bool = False
+    ) -> str:
         errors = list(errors)
         if not errors:
-            return f"=== {cls.rule}: no issues"
+            return f'=== {cls.rule}: no issues'
 
         # group by clusters
         cluster_errors: dict[str, list[Self]] = {}
@@ -1841,7 +1880,10 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
             asset = err.asset
             cluster_errors.setdefault(asset_cluster(asset), []).append(err)
 
-        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        lines = [
+            f'=== {cls.rule}: {len(errors)} issue(s) across '
+            f'{len(cluster_errors)} clusters:'
+        ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
 
@@ -1851,15 +1893,21 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
                 if verbose:
                     lines.append(err.format_verbose())
                 else:
-                    lines.append(f"  {err.format_li()}")
+                    lines.append(f'  {err.format_li()}')
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
 class LintUnused(LintAssetCluster):
+    """Unused asset violation."""
+
     rule = 'U100'
     severity = my_lint.Severity.WARNING
 
     def __init__(self, asset: Asset) -> None:
+        """Initialize violation.
+
+        :param asset: The unused asset.
+        """
         super().__init__()
         self._asset = asset
 
@@ -1882,7 +1930,7 @@ all_assets = {asset.name: asset for asset in assets}
 
 # populate used set from dependencies
 used_asset_names: set[str] = set()
-for dep in dependencies:
+for dep in ui_progress(dependencies):
     # ignore self-references
     if dep.source_asset.name == dep.target_asset.name:
         continue
@@ -1895,9 +1943,9 @@ for name in orphan_names:
 # unwrap
 violations_cnt = LINT.consume(LintUnused)
 if violations_cnt:
-    print(f"\nFound {violations_cnt} violations.")
+    ui_out(f'\nFound {violations_cnt} violations.')
 else:
-    print("\nSomehow all clear...")
+    ui_out('\nSomehow all clear...')
 ```
 
 ### Example 2.3 - Lint: cross-cluster references
@@ -1942,9 +1990,11 @@ hidden bugs.
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint
-from clunkster.text import location as my_location
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
 from clunkster.asset import Asset
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress
+from clunkster.text import location as my_location
 
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
@@ -1976,11 +2026,21 @@ class Dependency: ...
 # see ex2.2
 class LintAssetCluster: ...
 
-class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.LinterViolationMessage):
+class LintCrossref(
+    my_lint.LinterViolationLocated,
+    LintAssetCluster,
+    my_lint.LinterViolationMessage,
+):
+    """Cross-cluster reference violation."""
+
     rule = 'C100'
     severity = my_lint.Severity.ERROR
 
     def __init__(self, dependency: Dependency) -> None:
+        """Initialize the violation.
+
+        :param dependency: Offending dependency edge.
+        """
         super().__init__()
         self._dependency = dependency
 
@@ -2001,10 +2061,7 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
         target = self._dependency.target_asset
         ctx = self._dependency.contexts
         ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
-        return (
-            f"{target.name} [{asset_cluster(target)}]"
-            f'{ctx_str}'
-        )
+        return f'{target.name} [{asset_cluster(target)}]{ctx_str}'
 
 # see ex1.1
 PROJECT: Path = ...
@@ -2013,7 +2070,7 @@ LINT: my_lint.LinterSession = ...
 # see ex2.1
 dependencies: list[Dependency] = ...
 
-for dep in dependencies:
+for dep in ui_progress(dependencies):
     source = dep.source_asset
     target = dep.target_asset
 
@@ -2048,14 +2105,14 @@ for dep in dependencies:
 # you can turn on verbose=True
 violations_cnt = LINT.consume(LintCrossref)
 if violations_cnt:
-    print(f"\nFound {violations_cnt} violations.")
+    ui_out(f'\nFound {violations_cnt} violations.')
 else:
-    print("\nClear!!!")
+    ui_out('Clear!!!')
 ```
 
 ## 3 - Dependency Graph
 
-This section is about building a graph out of dependencies, and running 
+This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.
 
 ### Example 3.1 - Generate dependency graphs
@@ -2094,15 +2151,13 @@ graphs ever becomes a bottleneck you may omit those and only calculate the
 `reachability_map: dict[str, set[str]]`
 
 ```py
-import collections.abc as col
 import dataclasses
-import sys
 
 import rustworkx as rx
-import tqdm
 
 from clunkster import asset as my_asset
 from clunkster.asset import Asset
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress
 
 # see ex2.3
 LINT_RULES: dict[str, set[str]] = ...
@@ -2114,17 +2169,6 @@ EXTRA_ROOTS: set[str] = {
     'World'
     # ...
 }
-
-def filter_type[TFilter](
-    f_type: type[TFilter], items: col.Iterable[object]
-) -> col.Iterator[TFilter]:
-    """Filter given iterable based on type.
-
-    :param f_type: Type to filter for.
-    :param items: The iterable to filter.
-    :return: Iterator of items of type ``f_type``.
-    """
-    return (item for item in items if isinstance(item, f_type))
 
 # see ex1.1
 class AssetExtAudio: ...
@@ -2201,7 +2245,9 @@ def build_graph(
 # group rooms by their allowed clusters
 cluster_groups: dict[frozenset[str], list[my_asset.Room]] = {}
 
-for asset_room in filter_type(my_asset.Room, assets):
+for asset_room in assets:
+    if not isinstance(asset_room, my_asset.Room):
+        continue
     room_cluster = asset_cluster(asset_room)
     allowed_clusters = LINT_RULES.get(
         room_cluster, {room_cluster, 'Common'}
@@ -2210,20 +2256,17 @@ for asset_room in filter_type(my_asset.Room, assets):
         asset_room
     )
 
-print('Clusterset to rooms:')
+ui_out('Clusterset to rooms:')
 for cluster_set, rooms in cluster_groups.items():
-    print(*cluster_set)
+    ui_out(*cluster_set)
     for room in rooms:
-        print(' ', room.name)
-    print()
+        ui_out(' ', room.name)
+    ui_out()
 
 room_graph_data: dict[str, RoomGraph] = {}
 
 # process clustersets
-print('Building graphs:')
-clusterset_names_len = max(
-    len(' '.join(cluster_set)) for cluster_set in cluster_groups
-)
+ui_out('Building graphs:')
 for cluster_set, rooms in cluster_groups.items():
     graph, name_to_index = build_graph(set(cluster_set))
 
@@ -2232,11 +2275,8 @@ for cluster_set, rooms in cluster_groups.items():
         name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
     ]
 
-    task_name = ' '.join(sorted(cluster_set)).rjust(clusterset_names_len)
-
-    for room in tqdm.tqdm(
-        rooms, desc=task_name, leave=True, file=sys.stdout
-    ):
+    ui_out('- ' + ' '.join(sorted(cluster_set)))
+    for room in ui_progress(rooms):
         room_name = room.name
         if room_name not in name_to_index:
             continue
@@ -2272,8 +2312,10 @@ been skipping over in the simpler linter.
 ```py
 from pathlib import Path
 
-from clunkster import asset as my_asset, lint as my_lint
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
 from clunkster.asset import Asset
+from clunkster.pipeline.ui.adapter import ui_out
 
 # see ex2.3
 LINT_RULES: dict[str, set[str]] = ...
@@ -2339,9 +2381,9 @@ for asset in assets:
 
 violations_cnt = LINT.consume(LintUnused)
 if violations_cnt:
-    print(f'\nFound {violations_cnt} unreachable assets.')
+    ui_out(f'\nFound {violations_cnt} unreachable assets.')
 else:
-    print("\nClear??? omg")
+    ui_out('\nClear??? omg')
 ```
 
 ### Example 3.3 - Lint: room cluster boundaries
@@ -2360,12 +2402,14 @@ the exact offenders. Also, I recommend re-running the tool after each fix.
 ```py
 import collections.abc as col
 from pathlib import Path
-from typing import override, Self
+from typing import Self, override
 
 import rustworkx as rx
 
-from clunkster import asset as my_asset, lint as my_lint
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
 from clunkster.asset import Asset
+from clunkster.pipeline.ui.adapter import ui_out, ui_progress
 
 # see ex2.3
 LINT_RULES: dict[str, set[str]] = ...
@@ -2396,10 +2440,27 @@ class Dependency: ...
 class RoomGraph: ...
 
 class LintCrossrefGraph(my_lint.LinterViolationAsset):
+    """Room cluster boundary violation."""
+
     rule = 'C101'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, room: my_asset.Room, room_allowed_clusters: set[str], target_name: str, target_cluster: str, trace: str) -> None:
+    def __init__(
+        self,
+        room: my_asset.Room,
+        room_allowed_clusters: set[str],
+        target_name: str,
+        target_cluster: str,
+        trace: str,
+    ) -> None:
+        """Initialize the violation.
+
+        :param room: Offending room.
+        :param room_allowed_clusters: Room's allowed clusters.
+        :param target_name: Offending asset name.
+        :param target_cluster: Offending asset's cluster.
+        :param trace: Trace info.
+        """
         super().__init__()
         self.room = room
         self.room_allowed_clusters = room_allowed_clusters
@@ -2414,10 +2475,12 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
 
     @override
     @classmethod
-    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+    def format_many(
+        cls, errors: col.Iterable[Self], *, verbose: bool = False
+    ) -> str:
         errors = list(errors)
         if not errors:
-            return f"=== {cls.rule}: no issues"
+            return f'=== {cls.rule}: no issues'
 
         # group by clusters
         cluster_errors: dict[str, list[Self]] = {}
@@ -2428,7 +2491,10 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
             if room.name not in rooms_allowed_clusters:
                 rooms_allowed_clusters[room.name] = err.room_allowed_clusters
 
-        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        lines = [
+            f'=== {cls.rule}: {len(errors)} issue(s) across '
+            f'{len(cluster_errors)} clusters:'
+        ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
             # sort
@@ -2440,7 +2506,10 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                 room_errors.setdefault(room.name, []).append(err)
             for room, errors in sorted(room_errors.items()):
                 lines.append(f'Violations in Room: {room}')
-                lines.append(f'-- Allowed Clusters: {" ".join(rooms_allowed_clusters[room])}')
+                lines.append(
+                    f'-- Allowed Clusters: '
+                    f'{" ".join(rooms_allowed_clusters[room])}'
+                )
 
                 # group by target
                 target_errors: dict[str, list[Self]] = {}
@@ -2448,10 +2517,9 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                     target_errors.setdefault(err.target_name, []).append(err)
                 for target, errors in sorted(target_errors.items()):
                     lines.append(f'  {target} [{errors[0].target_cluster}]')
-                    for err in errors:
-                        lines.append(f'    {err.trace}')
+                    lines.extend(f'    {err.trace}' for err in errors)
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
 
 # see ex1.1
 PROJECT: Path = ...
@@ -2472,7 +2540,7 @@ asset_to_cluster: dict[str, str] = {
 }
 total_violations = 0
 
-for rg in room_graph_data.values():
+for rg in ui_progress(list(room_graph_data.values())):
     room_cluster = asset_to_cluster.get(rg.room.name)
     if not room_cluster:
         continue
@@ -2513,13 +2581,16 @@ for rg in room_graph_data.values():
         )
         if target_idx in room_paths:
             path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
-            LINT.push(LintCrossrefGraph(
-                room=rg.room,
-                room_allowed_clusters=allowed_clusters,
-                target_name=illegal_name,
-                target_cluster=target_cluster,
-                trace=f'Traceback via Room Root: {" -> ".join(path_names)}'
-            ))
+            LINT.push(
+                LintCrossrefGraph(
+                    room=rg.room,
+                    room_allowed_clusters=allowed_clusters,
+                    target_name=illegal_name,
+                    target_cluster=target_cluster,
+                    trace=f'Traceback via Room Root: '
+                    f'{" -> ".join(path_names)}',
+                )
+            )
             path_found = True
 
         # trace 2 - implicit contamination via global controllers
@@ -2529,34 +2600,40 @@ for rg in room_graph_data.values():
             )
             if target_idx in p_paths:
                 path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
-                LINT.push(LintCrossrefGraph(
-                    room=rg.room,
-                    room_allowed_clusters=allowed_clusters,
-                    target_name=illegal_name,
-                    target_cluster=target_cluster,
-                    trace=f'Traceback via Persistent Root ({p_name}): {" -> ".join(path_names)}'
-                ))
+                LINT.push(
+                    LintCrossrefGraph(
+                        room=rg.room,
+                        room_allowed_clusters=allowed_clusters,
+                        target_name=illegal_name,
+                        target_cluster=target_cluster,
+                        trace=f'Traceback via Persistent Root ({p_name}): '
+                        f'{" -> ".join(path_names)}',
+                    )
+                )
 
                 path_found = True
                 break
 
         if not path_found:
-            LINT.push(LintCrossrefGraph(
-                room=rg.room,
-                room_allowed_clusters=allowed_clusters,
-                target_name=illegal_name,
-                target_cluster=target_cluster,
-                trace='Traceback: Path unknown (Possibly misconfigured structure)'
-            ))
+            LINT.push(
+                LintCrossrefGraph(
+                    room=rg.room,
+                    room_allowed_clusters=allowed_clusters,
+                    target_name=illegal_name,
+                    target_cluster=target_cluster,
+                    trace='Traceback: Path unknown (Possibly '
+                    'misconfigured structure)',
+                )
+            )
 
     if total_violations > 1000:  # noqa: PLR2004
-        print('\nLinter exceeded 1000 violations, bailing out')
+        ui_out('\nLinter exceeded 1000 violations, bailing out')
         break
 violations_cnt = LINT.consume(LintCrossrefGraph)
 if violations_cnt:
-    print(f'Found {violations_cnt} violations')
+    ui_out(f'Found {violations_cnt} violations')
 else:
-    print('No errors! Awesome!')
+    ui_out('No errors! Awesome!')
 ```
 
 Once you've cleared this one, you may call the game qualified for using
@@ -2568,7 +2645,7 @@ Congrats on defeating the tutorial boss.
 
 In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: [clusters](#example-13---clusters)), the game must satisfy both clusterization linters (see: [ex2.3](#example-23---lint-cross-cluster-references) and [ex3.3](#example-33---lint-room-cluster-boundaries)) in order for the resulting build to run well.
 
-We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you 
+We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
 won't get to run them individually until everything is done.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
@@ -2601,6 +2678,7 @@ and it makes more sense to just pre-bake correct scale manually.
 Use the regex `bg_stretch.=1` to find all the offenders with `grep`.
 
 ```py
+import collections.abc as col
 import subprocess
 import warnings
 from pathlib import Path
@@ -2620,22 +2698,21 @@ class AssetExtSfx: ...
 class AssetExtSfx3: ...
 
 def juice_sprite(
-    sprite: my_asset.Sprite, project_root: Path, out_file: Path
+    *,
+    meta: my_asset.SpriteMetadata,
+    images: col.Iterable[Path],
+    out_file: Path,
 ) -> None:
     """Juice a sprite into external ``.gmspr`` file.
 
-    :param sprite: Sprite object.
-    :param project_root: Project root directory.
+    :param meta: Sprite metadata.
+    :param images: Sprite images.
     :param out_file: File to write resulting ``.gmspr`` bytes to.
     """
-    # read original metadata
-    meta = sprite.get_sprite_metadata(project_root)
-
     frames_bgra: list[bytes] = []
     width, height = 0, 0
 
-    for image_index in range(meta.frames):
-        img_path = sprite.get_sprite_image(project_root, image_index)
+    for img_path in images:
         with Image.open(img_path) as img:
             img = img.convert('RGBA')
             if width == 0:
@@ -2669,20 +2746,15 @@ def juice_sprite(
 
 
 def juice_background(
-    bg: my_asset.Background, project_root: Path, out_file: Path
+    *, meta: my_asset.BackgroundMetadata, image: Path, out_file: Path
 ) -> None:
     """Juice a background into external ``.gmbck`` file.
 
-    :param bg: Background object.
-    :param project_root: Project root directory.
+    :param meta: Background metadata (``exists`` flag must be 1).
+    :param image: Background image.
     :param out_file: File to write resulting ``.gmbck`` bytes to.
     """
-    # read the original metadata
-    meta = bg.get_background_metadata(project_root)
-
-    # meta.exists == 0 was already filtered out
-    img_path = bg.get_background_image(project_root)
-    with Image.open(img_path) as img:
+    with Image.open(image) as img:
         img = img.convert('RGBA')
         width, height = img.size
         pixel_data = img.tobytes('raw', 'BGRA')
@@ -2757,8 +2829,20 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
         )
 
 
-def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> None:
-    """Fix objects masks not updating when replacing sprites."""
+def juice_obj_fix_mask(
+    *,
+    obj_name: str,
+    obj_has_parent: bool,
+    input_gml: str,
+    output_gml_path: Path,
+) -> None:
+    """Fix objects masks not updating when replacing sprites.
+
+    :param obj_name: Object name.
+    :param obj_has_parent: Whether the object has parent.
+    :param input_gml: Input GML text.
+    :param output_gml_path: Output GML path.
+    """
     # exact action blocks, we'll validate against that;
     #  notice that endings are deliberately LF, that's how .gm82 save
     #  format works
@@ -2783,30 +2867,29 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
     # objects with no code (like SpikeLeft, SpikeRight and SpikeDown
     #  being just children of SpikeUp with no alterations other than
     #  sprite) should have their code created
-    if not gml_path.exists():
-        gml_path.touch()
+    if not output_gml_path.exists():
+        output_gml_path.touch()
 
-    gml_text = gml_path.read_text(encoding='utf-8')
     # check that the text was properly saved with LFs
-    assert '\r\n' not in gml_text
+    assert '\r\n' not in input_gml, 'Object was saved with CRLF'
 
     # check different cases
-    if target_event in gml_text:
+    if target_event in input_gml:
         # CASE A: Room Start already exists
 
         # split event at event declaration and its trailing newline
-        parts = gml_text.split(target_event + '\n')
+        parts = input_gml.split(target_event + '\n')
 
         if len(parts) != 2:  # noqa: PLR2004
             # handle edge case where the event is at the very end of
             #  the file with no trailing newline
-            if gml_text.endswith(target_event):
-                parts = gml_text.split(target_event)
+            if input_gml.endswith(target_event):
+                parts = input_gml.split(target_event)
                 parts[1] = '\n'
             else:
                 raise ValueError(
                     f'Validation Error: Multiple Room Start events or '
-                    f"malformed structure found in '{obj.name}.gml'."
+                    f"malformed structure found in '{obj_name}.gml'."
                 )
 
         event_body = parts[1]
@@ -2817,17 +2900,12 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
             new_event_body = (
                 event_body[:offset] + injection_code + event_body[offset:]
             )
-            print(obj.name, '- A1: starts with a code block')
 
         elif event_body.startswith(block_604 + block_603):
             # CASE A2: starts with call parent, followed by a code block
             offset = len(block_604) + len(block_603)
             new_event_body = (
                 event_body[:offset] + injection_code + event_body[offset:]
-            )
-            print(
-                obj.name,
-                '- A2: starts with call parent, followed by a code block',
             )
 
         elif event_body.startswith(block_604):
@@ -2840,13 +2918,8 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
                 + injection_code
                 + event_body[offset:]
             )
-            print(
-                obj.name,
-                '- A3: starts with call parent without code block '
-                'afterward???',
-            )
             warnings.warn(
-                f'Object {obj.name} starts with call parent without '
+                f'Object {obj_name} starts with call parent without '
                 f'code block??? Investigate.',
                 stacklevel=2,
             )
@@ -2854,44 +2927,36 @@ def juice_obj_fix_mask(obj: my_asset.Object, gml_path: Path, dir_out: Path) -> N
             # idk
             raise ValueError(
                 f'Validation Error: YYD ACTION match '
-                f"failed in '{obj.name}.gml'. The block immediately "
+                f"failed in '{obj_name}.gml'. The block immediately "
                 f"following '{target_event}' does not match YYD ACTION "
                 f'603 or 604 patterns.'
             )
 
         # rebuild, maintain LF
         new_text = parts[0] + target_event + '\n' + new_event_body
-        gml_path.write_text(new_text, encoding='utf-8', newline='\n')
+        output_gml_path.write_text(new_text, encoding='utf-8', newline='\n')
     else:
         # CASE B: Room Start doesn't exist
-        meta = obj.get_object_metadata(dir_out)
         # objects with no parent have this string blank
-        has_parent = bool(meta.parent)
 
         # append the event into the file
 
         # check newline
         #  since we could've just created the file, it is allowed
         #  to be empty
-        if gml_text and not gml_text.endswith('\n'):
-            gml_text += '\n'
+        if input_gml and not input_gml.endswith('\n'):
+            input_gml += '\n'
 
         new_block = target_event + '\n'
-        if has_parent:
+        if obj_has_parent:
             # CASE B1: use the "Call parent event" block
             new_block += block_604
-            print(
-                obj.name,
-                '- B1: no room start + has parent, must add Call parent event',
-            )
-        else:
-            print(obj.name, '- B2: no room start')
 
         # add the code block and injection
         new_block += block_603 + injection_code
-        gml_text += new_block
+        input_gml += new_block
 
-        gml_path.write_text(gml_text, encoding='utf-8', newline='\n')
+        output_gml_path.write_text(input_gml, encoding='utf-8', newline='\n')
 ```
 
 Now, I didn't add any code for you to test those functions. Those can be
