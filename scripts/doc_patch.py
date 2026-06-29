@@ -154,8 +154,7 @@ def template[**P](  # noqa: C901, PLR0915
                         snippet_states[i] = SnippetState.RESOLVED
                         last_exceptions.pop(i, None)
                 if not needs_another_pass:
-                    # TODO smart merge
-                    return render(resolved_snippets)
+                    return render(resolved_snippets) + '\n'
 
             # If we exit the while loop, we hit max_iterations
             error_msg = (

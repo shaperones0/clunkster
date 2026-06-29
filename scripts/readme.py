@@ -1562,6 +1562,12 @@ ___
         snips['MAIN_JUICER_GEN_GML']
     ))}
 
+{exs.code_begin('ex_juicer_gm_compile', 'Juicer: compile and launch')}
+{docs['main_juicer_gm_compile']}
+{exs.render((
+        exs.stub('CLS_JUICER_CONFIG'),
+        snips['MAIN_JUICER_GM_COMPILE'],
+    ))}
 
 """ # noqa: S608
 

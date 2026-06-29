@@ -2535,6 +2535,7 @@ def main_juicer_run(tasks: BuildTasks) -> None:
     # </snip MAIN_JUICER_RUN>
 
 
+@ui_auto_sink('Juicer: generating gml')
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     """It is time to finally integrate Clunkster into the project.
 
@@ -2543,7 +2544,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     should review this code extra thoroughly before pasting it...
     """
     # <snip MAIN_JUICER_GEN_GML>
-    print('Generating Clunkster scripts...')
+    ui_out('Generating Clunkster scripts...')
 
     dir_scripts = my_asset.Script.type_get_dir(JUICER.dir_out)
 
@@ -2803,7 +2804,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     # </snip MAIN_JUICER_GEN_GML>
 
 
-def main_juicer2_gm_compile() -> None:
+@ui_auto_sink('Juicer: generating gml')
+def main_juicer_gm_compile() -> None:
     r"""One last step is automatic compile.
 
     Game Maker's CLI for compiling is:
@@ -2821,8 +2823,8 @@ def main_juicer2_gm_compile() -> None:
     but I also added a new environment variable ``GM82_PATH`` just for that
     one guy.
     """
-    # --- COG_START: MAIN_EX_JUICER2_GM_COMPILE ---
-    print('Jostling Game Maker 8.2 compiler...')
+    # <snip MAIN_JUICER_GM_COMPILE>
+    ui_out('Jostling Game Maker 8.2 compiler...')
 
     project_file = JUICER.dir_out / JUICER.fname_gm82
     output_exe = JUICER.dir_out / 'game.exe'
@@ -2848,7 +2850,7 @@ def main_juicer2_gm_compile() -> None:
             'environment variable.'
         )
 
-    print(f'Compiling {output_exe.name}...')
+    ui_out(f'Compiling {output_exe.name}...')
 
     try:
         subprocess.run(  # noqa: S603
@@ -2857,14 +2859,19 @@ def main_juicer2_gm_compile() -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
         )
-        print('Build completely successfully!')
-        subprocess.run(str(output_exe), cwd=JUICER.dir_out)  # noqa: S603
+        ui_out('Build completely successfully!')
+        subprocess.Popen(  # noqa: S603
+            [str(output_exe)],
+            cwd=JUICER.dir_out,
+            creationflags=subprocess.DETACHED_PROCESS
+            | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
 
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f'GameMaker 8.2 compilation failed with exit code {e.returncode}'
         ) from e
-    # --- COG_END: MAIN_EX_JUICER2_GM_COMPILE ---
+    # </snip MAIN_JUICER_GM_COMPILE>
 
 
 def _run_tutorials() -> None:
