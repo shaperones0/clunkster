@@ -1512,7 +1512,7 @@ ___
         snips['CLS_JUICE_BUILD_TASKS'],
         snips['CLS_JUICER_CONFIG'],
         exs.stub('VAR_ASSETS'),
-        snips['MAIN_EX_JUICER_GEN_TASKS']
+        snips['MAIN_JUICER_GEN_TASKS']
     ))}
 
 {exs.code_reg_stub_src({
@@ -1534,10 +1534,20 @@ ___
             gen_stub_cls('ConfJuicer'),
             gen_stub_var('JUICER: ConfJuicer')
         )),
-        'VAR_JUICE_BUILD_TASKS': gen_stub_var('tasks: BuildTasks')
+        'VAR_JUICE_BUILD_TASKS': '\n'.join((
+            gen_stub_cls('BuildTasks'),
+            gen_stub_var('tasks: BuildTasks'),
+        ))
     })}
 
-
+{exs.code_begin('ex_juicer_processing', 'Juicer: running the tasks')}
+{docs['main_juicer_run']}
+{exs.render((
+        exs.stub('GLOB_CLS_UI'),
+        exs.stub('VAR_JUICE_BUILD_TASKS'),
+        exs.stub('CLS_JUICER_CONFIG'),
+        snips['MAIN_JUICER_RUN']
+    ))}
 
 
 """ # noqa: S608

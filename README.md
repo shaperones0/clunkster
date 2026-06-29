@@ -58,6 +58,7 @@ Super destructive tools:
     * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
   * [4 - Project Juicer](#4---project-juicer)
     * [Example 4.1 - Juicer: the juice](#example-41---juicer-the-juice)
+    * [Example 4.2 - Juicer: running the tasks](#example-42---juicer-running-the-tasks)
 
 # Rationale
 
@@ -3977,4 +3978,50 @@ build_tasks = BuildTasks(
     tasks_threaded=tuple(tasks_threaded),
     tasks_mp=tuple(tasks_mp),
 )
+```
+
+### Example 4.2 - Juicer: running the tasks
+Run generated build tasks.
+
+In contrast, this example is pretty small. Thanks to our brazillion
+abstractions.
+
+```py
+from clunkster.pipeline import cache as my_cache
+from clunkster.pipeline.events import dispatcher as my_event_dispatcher
+from clunkster.pipeline.executor import mp as my_exec_mp
+from clunkster.pipeline.executor import thread as my_exec_thread
+from clunkster.pipeline.ui import base as my_ui_base
+from clunkster.pipeline.ui.adapter import ui_out
+
+# see ex0.4
+CLS_UI: type[my_ui_base.Ui] = ...
+CLS_UI_ASYNC: type[my_ui_base.Ui] = ...
+
+# see ex4.2
+class BuildTasks: ...
+tasks: BuildTasks = ...
+
+# see ex4.2
+class ConfJuicer: ...
+JUICER: ConfJuicer = ...
+
+dispatcher = my_event_dispatcher.EventDispatcher()
+cache = my_cache.FileBuildCache(JUICER.file_cache)
+
+ui_out('Starting threaded tasks')
+with CLS_UI_ASYNC('Threaded tasks') as ui:
+    ui.register(dispatcher)
+    ui.update_total_progress(0, len(tasks.tasks_threaded))
+
+    my_exec_thread.execute_threaded(
+        tasks.tasks_threaded, cache, dispatcher
+    )
+
+ui_out('Starting mp tasks')
+with CLS_UI_ASYNC('Multiprocessing tasks') as ui:
+    ui.register(dispatcher)
+    ui.update_total_progress(0, len(tasks.tasks_mp))
+
+    my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
 ```

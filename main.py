@@ -2262,7 +2262,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
     Therefore, I've made logic of task generation very explicit. Also, this
     step does some of the cheaper tasks, like creating build dir and symlinks.
     """
-    # <snip MAIN_EX_JUICER_GEN_TASKS>
+    # <snip MAIN_JUICER_GEN_TASKS>
     # filter assets by their juiceable type
     asset_sprites: list[my_asset.Sprite] = []
     asset_backgrounds: list[my_asset.Background] = []
@@ -2502,16 +2502,22 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
         tasks_threaded=tuple(tasks_threaded),
         tasks_mp=tuple(tasks_mp),
     )
-    # </snip MAIN_EX_JUICER_GEN_TASKS>
+    # </snip MAIN_JUICER_GEN_TASKS>
     return build_tasks  # noqa: RET504
 
 
+@ui_auto_sink('Juicer: run tasks')
 def main_juicer_run(tasks: BuildTasks) -> None:
-    """Run generated build tasks."""
+    """Run generated build tasks.
+
+    In contrast, this example is pretty small. Thanks to our brazillion
+    abstractions.
+    """
+    # <snip MAIN_JUICER_RUN>
     dispatcher = my_event_dispatcher.EventDispatcher()
     cache = my_cache.FileBuildCache(JUICER.file_cache)
 
-    print('Starting threaded tasks')
+    ui_out('Starting threaded tasks')
     with CLS_UI_ASYNC('Threaded tasks') as ui:
         ui.register(dispatcher)
         ui.update_total_progress(0, len(tasks.tasks_threaded))
@@ -2520,14 +2526,13 @@ def main_juicer_run(tasks: BuildTasks) -> None:
             tasks.tasks_threaded, cache, dispatcher
         )
 
-    print('Starting mp tasks')
+    ui_out('Starting mp tasks')
     with CLS_UI_ASYNC('Multiprocessing tasks') as ui:
         ui.register(dispatcher)
         ui.update_total_progress(0, len(tasks.tasks_mp))
 
         my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
-
-    print('Dun')
+    # </snip MAIN_JUICER_RUN>
 
 
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
