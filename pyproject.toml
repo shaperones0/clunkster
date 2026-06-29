@@ -35,11 +35,13 @@ fix = true
 quote-style = 'single'
 docstring-code-format = false
 
+exclude = ["scripts/readme.py"]
+
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'
 
 [tool.ruff.lint.isort]
-known-first-party = ['pult']
+known-first-party = ['clunkster']
 
 [tool.ruff.lint]
 select = [

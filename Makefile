@@ -2,6 +2,7 @@
 format: ## Auto-format and auto-fix code (for local development)
 	@echo "Formatting code: Ruff"
 	@uv run ruff format
+	@uv run ruff format --config scripts/readme.ruff.toml scripts/readme.py
 	@echo "Auto-fixing code: Ruff"
 	@uv run ruff check --fix
 

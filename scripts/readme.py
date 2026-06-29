@@ -32,7 +32,6 @@ def readme_txt() -> str:
     )
 
     # PyCharm: Alt+Enter -> Inject language -> Markdown
-    # fmt: off
     return f"""
 {exs.reset()}
 
@@ -260,7 +259,7 @@ if place_meeting(x, y, SpikeIce) {{
 }}
 ```
 
-Now the Player directly references `SpikeIce`. The {exs.href("ex_lint_crossref", "analyzer")} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
+Now the Player directly references `SpikeIce`. The {exs.href('ex_lint_crossref', 'analyzer')} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
 
 This can be solved in a few ways.
 
@@ -1230,7 +1229,7 @@ else {{
 
 Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
 
-{head.next_section("Setting up").render_header()}
+{head.next_section('Setting up').render_header()}
 
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
 - Project
@@ -1238,173 +1237,245 @@ This is the setup section. It covers settings up the project, linters, and other
 
 {exs.code_begin('ex_setup_main', 'Setup: Project')}
 {docs['main_ex_setup_main']}
-{exs.render((
-        snips['PROJECT'],
-        snips['MAIN_EX_SETUP_MAIN']
-    ))}
-{exs.code_reg_stub_src({
-        'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession')
-    })}
+{
+        exs.render(
+            (
+                snips['PROJECT'],
+                snips['MAIN_EX_SETUP_MAIN'],
+            )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession'),
+            }
+        )
+    }
 
 {exs.code_begin('ex_setup_widgets', 'Setup: Widgets')}
 {docs['main_ex_setup_widgets']}
-{exs.render((
-        snips['CLS_WIDGETS'],
-        snips['WIDGETS'],
-        snips['MAIN_EX_SETUP_WIDGETS'],
-
-    ))}
-{exs.code_reg_stub_src({
-        'CLS_WIDGETS': '\n'.join((
-            gen_stub_cls('WidgetRenderer'),
-            gen_stub_func('global_widget_renderer'),
-        )),
-        'WIDGETS': '\n'.join((
-            gen_stub_cls('WidgetRenderer'),
-            gen_stub_var('WIDGET: WidgetRenderer'),
-        )),
-    })}
+{
+        exs.render(
+            (
+                snips['CLS_WIDGETS'],
+                snips['WIDGETS'],
+                snips['MAIN_EX_SETUP_WIDGETS'],
+            )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'CLS_WIDGETS': '\n'.join(
+                    (
+                        gen_stub_cls('WidgetRenderer'),
+                        gen_stub_func('global_widget_renderer'),
+                    )
+                ),
+                'WIDGETS': '\n'.join(
+                    (
+                        gen_stub_cls('WidgetRenderer'),
+                        gen_stub_var('WIDGET: WidgetRenderer'),
+                    )
+                ),
+            }
+        )
+    }
 
 With that out of the way you may start the {exs.href('ex_start', 'first real examples')}. However, I recommend reading a bit about the [pipeline architecture](#pipeline-architecture), which should give you proper understanding on what to do if things don't work out.
 
 {exs.code_begin('ex_setup_rich', 'Setup: Rich UI')}
 {docs['main_ex_setup_rich']}
-{exs.render((
-        exs.stub('CLS_WIDGETS'),
-        snips['UI_RICH'],
-        snips['MAIN_EX_SETUP_RICH'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('CLS_WIDGETS'),
+                snips['UI_RICH'],
+                snips['MAIN_EX_SETUP_RICH'],
+            )
+        )
+    }
 
 {exs.code_begin('ex_setup_example', 'Full example (pipeline excerpt)')}
 
 Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for a more thorough example as well).
 
-{exs.render((
-        s_py(
-            'CLS_UI: type[my_ui_base.Ui] = my_ui_simple.UiSimple\n'
-            'CLS_UI_ASYNC: type[my_ui_base.UiAsync] = my_ui_simple.UiSimpleAsync'
-        ),
-        snips['DEF_EXAMPLE'],
-    ))}
-{exs.code_reg_stub_src({
-        'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[my_ui_base.Ui]', 'CLS_UI_ASYNC: type[my_ui_base.Ui]')
-    })}
+{
+        exs.render(
+            (
+                s_py('CLS_UI: type[my_ui_base.Ui] = my_ui_simple.UiSimple\nCLS_UI_ASYNC: type[my_ui_base.UiAsync] = my_ui_simple.UiSimpleAsync'),
+                snips['DEF_EXAMPLE'],
+            )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[my_ui_base.Ui]', 'CLS_UI_ASYNC: type[my_ui_base.Ui]'),
+            }
+        )
+    }
 
-{head.next_section("Reading project").render_header()}
+{head.next_section('Reading project').render_header()}
 
 This section is about discovering assets from project files, doing initial
 validations and assigning clusters to the assets.
 
-{exs.code_begin("ex_start", "Finding assets")}
+{exs.code_begin('ex_start', 'Finding assets')}
 
 {docs['main_ex_start']}
-{exs.render((
-        exs.stub('PROJECT'),
-        snips['CLS_ASSET_EXT'],
-        snips['CLUSTERABLE_ASSETS'],
-        snips['MAIN_EX_START'],
-    ))}
-{exs.code_reg_stub_src({
-        'CLS_ASSET_EXT': gen_stub_cls(
-                'AssetExtAudio',
-                'AssetExtBgm',
-                'AssetExtSfx',
-                'AssetExtSfx3',
-            ),
-    })}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                snips['CLS_ASSET_EXT'],
+                snips['CLUSTERABLE_ASSETS'],
+                snips['MAIN_EX_START'],
+            )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'CLS_ASSET_EXT': gen_stub_cls(
+                    'AssetExtAudio',
+                    'AssetExtBgm',
+                    'AssetExtSfx',
+                    'AssetExtSfx3',
+                ),
+            }
+        )
+    }
 
 {exs.code_begin('ex_lint_tree', 'Lint: `tree.yyd` files')}
 
 {docs['main_ex_lint_tree']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('CLS_ASSET_EXT'),
-        snips['CLS_LINT_TREE'],
-        snips['CLUSTERABLE_ASSETS'],
-        snips['MAIN_EX_LINT_TREE'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('CLS_ASSET_EXT'),
+                snips['CLS_LINT_TREE'],
+                snips['CLUSTERABLE_ASSETS'],
+                snips['MAIN_EX_LINT_TREE'],
+            )
+        )
+    }
 
 {exs.code_begin('ex_aliases', 'Clusters')}
 {docs['main_ex_aliases']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('WIDGETS'),
-        exs.stub('CLS_ASSET_EXT'),
-        snips['ALIAS'],
-        snips['DEF_ASSET_CLUSTERS'],
-        snips['CLS_LINT_ALIAS'],
-        snips['CLUSTERABLE_ASSETS'],
-        snips['MAIN_EX_ALIASES'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('WIDGETS'),
+                exs.stub('CLS_ASSET_EXT'),
+                snips['ALIAS'],
+                snips['DEF_ASSET_CLUSTERS'],
+                snips['CLS_LINT_ALIAS'],
+                snips['CLUSTERABLE_ASSETS'],
+                snips['MAIN_EX_ALIASES'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'VAR_ASSETS': gen_stub_var('assets: list[Asset]'),
-        'DEF_ASSET_CLUSTERS': gen_stub_func('asset_cluster_raw', 'asset_cluster')
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'VAR_ASSETS': gen_stub_var('assets: list[Asset]'),
+                'DEF_ASSET_CLUSTERS': gen_stub_func('asset_cluster_raw', 'asset_cluster'),
+            }
+        )
+    }
 
-{head.next_section("References").render_header()}
+{head.next_section('References').render_header()}
 
 This section is about finding asset references in `.gml` files, and running
 validations based on them.
 
 {exs.code_begin('ex_scan_sync', 'Reference scanning')}
 {docs['main_ex_scan_sync']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        snips['DEF_ASSET_SCANNABLES'],
-        snips['CLS_DEPENDENCY'],
-        exs.stub('VAR_ASSETS'),
-        snips['MAIN_EX_SCAN_SYNC'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                snips['DEF_ASSET_SCANNABLES'],
+                snips['CLS_DEPENDENCY'],
+                exs.stub('VAR_ASSETS'),
+                snips['MAIN_EX_SCAN_SYNC'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'CLS_DEPENDENCY': gen_stub_cls('Dependency'),
-        'VAR_DEPS': gen_stub_var('dependencies: list[Dependency]'),
-        'DEF_ASSET_SCANNABLES': gen_stub_func('asset_scannables')
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'CLS_DEPENDENCY': gen_stub_cls('Dependency'),
+                'VAR_DEPS': gen_stub_var('dependencies: list[Dependency]'),
+                'DEF_ASSET_SCANNABLES': gen_stub_func('asset_scannables'),
+            }
+        )
+    }
 
 {exs.code_begin('ex_lint_unused', 'Lint: unused assets')}
 {docs['main_ex_lint_unused']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        snips['DEF_ASSET_SORT_KEY'],
-        exs.stub('CLS_DEPENDENCY'),
-        snips['CLS_LINT_ASSET_CLUSTER'],
-        snips['CLS_LINT_UNUSED'],
-        exs.stub('VAR_ASSETS'),
-        exs.stub('VAR_DEPS'),
-        snips['MAIN_EX_LINT_UNUSED'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                snips['DEF_ASSET_SORT_KEY'],
+                exs.stub('CLS_DEPENDENCY'),
+                snips['CLS_LINT_ASSET_CLUSTER'],
+                snips['CLS_LINT_UNUSED'],
+                exs.stub('VAR_ASSETS'),
+                exs.stub('VAR_DEPS'),
+                snips['MAIN_EX_LINT_UNUSED'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'CLS_LINT_ASSET_CLUSTER': gen_stub_cls('LintAssetCluster'),
-        'CLS_LINT_UNUSED': gen_stub_cls('LintUnused'),
-        'DEF_ASSET_SORT_KEY': gen_stub_func('asset_sort_key'),
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'CLS_LINT_ASSET_CLUSTER': gen_stub_cls('LintAssetCluster'),
+                'CLS_LINT_UNUSED': gen_stub_cls('LintUnused'),
+                'DEF_ASSET_SORT_KEY': gen_stub_func('asset_sort_key'),
+            }
+        )
+    }
 
 {exs.code_begin('ex_lint_crossref', 'Lint: cross-cluster references')}
 {docs['main_ex_lint_crossref']}
-{exs.render((
-        exs.stub('PROJECT'),
-        snips['LINT_RULES'],
-        snips['CONTEXT_RULES'],
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        exs.stub('CLS_DEPENDENCY'),
-        exs.stub('CLS_LINT_ASSET_CLUSTER'),
-        snips['CLS_LINT_CROSSREF'],
-        exs.stub('VAR_DEPS'),
-        snips['MAIN_EX_LINT_CROSSREF'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                snips['LINT_RULES'],
+                snips['CONTEXT_RULES'],
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('CLS_DEPENDENCY'),
+                exs.stub('CLS_LINT_ASSET_CLUSTER'),
+                snips['CLS_LINT_CROSSREF'],
+                exs.stub('VAR_DEPS'),
+                snips['MAIN_EX_LINT_CROSSREF'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'LINT_RULES': gen_stub_var('LINT_RULES: dict[str, set[str]]'),
-        'CONTEXT_RULES': gen_stub_var('CONTEXT_RULES: dict[str, set[str]]'),
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'LINT_RULES': gen_stub_var('LINT_RULES: dict[str, set[str]]'),
+                'CONTEXT_RULES': gen_stub_var('CONTEXT_RULES: dict[str, set[str]]'),
+            }
+        )
+    }
 
 {head.next_section('Dependency Graph').render_header()}
 
@@ -1413,60 +1484,76 @@ checks based on more advanced usage tracing.
 
 {exs.code_begin('ex_graph', 'Generate dependency graphs')}
 {docs['main_ex_graph']}
-{exs.render((
-        exs.stub('LINT_RULES'),
-        exs.stub('CONTEXT_RULES'),
-        snips['EXTRA_ROOTS'],
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        exs.stub('CLS_DEPENDENCY'),
-        snips['CLS_ROOM_GRAPH'],
-        exs.stub('VAR_ASSETS'),
-        exs.stub('VAR_DEPS'),
-        snips['MAIN_EX_GRAPH'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('LINT_RULES'),
+                exs.stub('CONTEXT_RULES'),
+                snips['EXTRA_ROOTS'],
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('CLS_DEPENDENCY'),
+                snips['CLS_ROOM_GRAPH'],
+                exs.stub('VAR_ASSETS'),
+                exs.stub('VAR_DEPS'),
+                snips['MAIN_EX_GRAPH'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'VAR_ROOM_DATA': gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
-        'EXTRA_ROOTS': gen_stub_var('EXTRA_ROOTS: set[str]'),
-        'CLS_ROOM_GRAPH': gen_stub_cls('RoomGraph')
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'VAR_ROOM_DATA': gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
+                'EXTRA_ROOTS': gen_stub_var('EXTRA_ROOTS: set[str]'),
+                'CLS_ROOM_GRAPH': gen_stub_cls('RoomGraph'),
+            }
+        )
+    }
 
 {exs.code_begin('ex_lint_unused_graph', 'Lint: unreachable assets')}
 {docs['main_ex_lint_unused_graph']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('LINT_RULES'),
-        exs.stub('CONTEXT_RULES'),
-        exs.stub('EXTRA_ROOTS'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('CLS_DEPENDENCY'),
-        exs.stub('CLS_ROOM_GRAPH'),
-        exs.stub('CLS_LINT_UNUSED'),
-        exs.stub('VAR_ASSETS'),
-        exs.stub('VAR_DEPS'),
-        exs.stub('VAR_ROOM_DATA'),
-        snips['MAIN_EX_LINT_UNUSED_GRAPH'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('LINT_RULES'),
+                exs.stub('CONTEXT_RULES'),
+                exs.stub('EXTRA_ROOTS'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('CLS_DEPENDENCY'),
+                exs.stub('CLS_ROOM_GRAPH'),
+                exs.stub('CLS_LINT_UNUSED'),
+                exs.stub('VAR_ASSETS'),
+                exs.stub('VAR_DEPS'),
+                exs.stub('VAR_ROOM_DATA'),
+                snips['MAIN_EX_LINT_UNUSED_GRAPH'],
+            )
+        )
+    }
 
 {exs.code_begin('ex_lint_crossref_graph', 'Lint: room cluster boundaries')}
 {docs['main_ex_lint_crossref_graph']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('LINT_RULES'),
-        exs.stub('CONTEXT_RULES'),
-        exs.stub('EXTRA_ROOTS'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        exs.stub('DEF_ASSET_SORT_KEY'),
-        exs.stub('CLS_DEPENDENCY'),
-        exs.stub('CLS_ROOM_GRAPH'),
-        snips['CLS_LINT_CROSSREF_GRAPH'],
-        exs.stub('VAR_ASSETS'),
-        exs.stub('VAR_DEPS'),
-        exs.stub('VAR_ROOM_DATA'),
-        snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('LINT_RULES'),
+                exs.stub('CONTEXT_RULES'),
+                exs.stub('EXTRA_ROOTS'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('DEF_ASSET_SORT_KEY'),
+                exs.stub('CLS_DEPENDENCY'),
+                exs.stub('CLS_ROOM_GRAPH'),
+                snips['CLS_LINT_CROSSREF_GRAPH'],
+                exs.stub('VAR_ASSETS'),
+                exs.stub('VAR_DEPS'),
+                exs.stub('VAR_ROOM_DATA'),
+                snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
+            )
+        )
+    }
 
 {head.next_section('Project Juicer').render_header()}
 
@@ -1484,95 +1571,117 @@ Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/)
 This example is a bit bigger than usual, mostly because before we get to execute any meaningful code we must define a fair bit of classes and functions.
 
 {docs['main_juicer_processing']}
-{exs.render((
-        exs.stub('CLS_ASSET_EXT'),
-        snips['DEFS_JUICE']
-    ))}
+{exs.render((exs.stub('CLS_ASSET_EXT'), snips['DEFS_JUICE']))}
 
 ___
 
 {docs['main_juicer_classes']}
-{exs.render((
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEFS_JUICE'),
-        snips['DEF_ASSET_WET_FNAME'],
-        snips['CLS_JUICE_TASKS']
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEFS_JUICE'),
+                snips['DEF_ASSET_WET_FNAME'],
+                snips['CLS_JUICE_TASKS'],
+            )
+        )
+    }
 
 Notice how none of both of the functions or Tasks above depend on ``PROJECT``, or any other global state. Awesome!
 
 ___
 
 {docs['main_juicer_gen_tasks']}
-{exs.render((
-        exs.stub('PROJECT'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        exs.stub('CLS_JUICE_TASKS'),
-        snips['CLS_JUICE_BUILD_TASKS'],
-        snips['CLS_JUICER_CONFIG'],
-        exs.stub('VAR_ASSETS'),
-        snips['MAIN_JUICER_GEN_TASKS']
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('CLS_JUICE_TASKS'),
+                snips['CLS_JUICE_BUILD_TASKS'],
+                snips['CLS_JUICER_CONFIG'],
+                exs.stub('VAR_ASSETS'),
+                snips['MAIN_JUICER_GEN_TASKS'],
+            )
+        )
+    }
 
-{exs.code_reg_stub_src({
-        'DEFS_JUICE': gen_stub_func(
-            'juice_sprite',
-            'juice_background',
-            'juice_audio',
-            'juice_obj_fix_mask',
-        ),
-        'CLS_JUICE_TASKS': gen_stub_cls(
-            'TaskEncodeSprite',
-            'TaskEncodeBackground',
-            'TaskCompressAudio',
-            'TaskFixMaskObjects',
-        ),
-        'DEF_ASSET_WET_FNAME': gen_stub_func('asset_wet_fname'),
-        'CLS_JUICE_BUILD_TASKS': gen_stub_cls('BuildTasks'),
-        'CLS_JUICER_CONFIG': '\n'.join((
-            gen_stub_cls('ConfJuicer'),
-            gen_stub_var('JUICER: ConfJuicer')
-        )),
-        'VAR_JUICE_BUILD_TASKS': '\n'.join((
-            gen_stub_cls('BuildTasks'),
-            gen_stub_var('tasks: BuildTasks'),
-        ))
-    })}
+{
+        exs.code_reg_stub_src(
+            {
+                'DEFS_JUICE': gen_stub_func(
+                    'juice_sprite',
+                    'juice_background',
+                    'juice_audio',
+                    'juice_obj_fix_mask',
+                ),
+                'CLS_JUICE_TASKS': gen_stub_cls(
+                    'TaskEncodeSprite',
+                    'TaskEncodeBackground',
+                    'TaskCompressAudio',
+                    'TaskFixMaskObjects',
+                ),
+                'DEF_ASSET_WET_FNAME': gen_stub_func('asset_wet_fname'),
+                'CLS_JUICE_BUILD_TASKS': gen_stub_cls('BuildTasks'),
+                'CLS_JUICER_CONFIG': '\n'.join(
+                    (
+                        gen_stub_cls('ConfJuicer'),
+                        gen_stub_var('JUICER: ConfJuicer'),
+                    )
+                ),
+                'VAR_JUICE_BUILD_TASKS': '\n'.join(
+                    (
+                        gen_stub_cls('BuildTasks'),
+                        gen_stub_var('tasks: BuildTasks'),
+                    )
+                ),
+            }
+        )
+    }
 
 {exs.code_begin('ex_juicer_run', 'Juicer: running the tasks')}
 {docs['main_juicer_run']}
-{exs.render((
-        exs.stub('GLOB_CLS_UI'),
-        exs.stub('VAR_JUICE_BUILD_TASKS'),
-        exs.stub('CLS_JUICER_CONFIG'),
-        snips['MAIN_JUICER_RUN']
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('GLOB_CLS_UI'),
+                exs.stub('VAR_JUICE_BUILD_TASKS'),
+                exs.stub('CLS_JUICER_CONFIG'),
+                snips['MAIN_JUICER_RUN'],
+            )
+        )
+    }
 
 {exs.code_begin('ex_juicer_gen_gml', 'Juicer: generate the `.gml` files')}
 {docs['main_juicer_gen_gml']}
-{exs.render((
-        exs.stub('LINT_RULES'),
-        exs.stub('CONTEXT_RULES'),
-        exs.stub('CLS_ASSET_EXT'),
-        exs.stub('DEF_ASSET_CLUSTERS'),
-        exs.stub('DEF_ASSET_WET_FNAME'),
-        exs.stub('CLS_JUICER_CONFIG'),
-        exs.stub('VAR_ASSETS'),
-        snips['MAIN_JUICER_GEN_GML']
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('LINT_RULES'),
+                exs.stub('CONTEXT_RULES'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('DEF_ASSET_WET_FNAME'),
+                exs.stub('CLS_JUICER_CONFIG'),
+                exs.stub('VAR_ASSETS'),
+                snips['MAIN_JUICER_GEN_GML'],
+            )
+        )
+    }
 
 {exs.code_begin('ex_juicer_gm_compile', 'Juicer: compile and launch')}
 {docs['main_juicer_gm_compile']}
-{exs.render((
-        exs.stub('CLS_JUICER_CONFIG'),
-        snips['MAIN_JUICER_GM_COMPILE'],
-    ))}
+{
+        exs.render(
+            (
+                exs.stub('CLS_JUICER_CONFIG'),
+                snips['MAIN_JUICER_GM_COMPILE'],
+            )
+        )
+    }
 
-""" # noqa: S608
-
-
-# fmt: on
+"""  # noqa: S608
 
 
 def _main() -> None:

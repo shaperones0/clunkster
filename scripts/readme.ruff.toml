@@ -1,0 +1,5 @@
+line-length = 65535
+
+[format]
+quote-style = "single"
+docstring-code-format = false
