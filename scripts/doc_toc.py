@@ -50,4 +50,4 @@ def generate_toc(filepath: str = 'README.md') -> col.Iterator[str]:
             level = len(level_chars)
             indent = '  ' * (level - 1)
 
-            yield f'{indent}* [{title}](#{str_to_anchor(title)})'
+            yield f'{indent}- [{title}](#{str_to_anchor(title)})'

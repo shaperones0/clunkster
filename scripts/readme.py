@@ -398,9 +398,14 @@ LINT_RULES: dict[str, set[str]] = {{
     'Common': {{'Common'}},
 
     'IceStage': {{
-        'Common',       # explicitly include the common cluster
-        'CommonNorth',  # include the regional common cluster
-        'IceStage'      # include anything from itself
+        # explicitly include the common cluster
+        'Common',
+
+        # include the regional common cluster
+        'CommonNorth',
+
+        # include anything from itself
+        'IceStage',
     }},
 
     # this will make any Ice Stage room load all 3 of those clusters
@@ -1688,6 +1693,7 @@ def _main() -> None:
     for _ in range(2):
         # twice because um
         FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
+    print('Readme generated.')
 
 
 if __name__ == '__main__':

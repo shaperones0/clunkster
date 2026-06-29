@@ -9,6 +9,7 @@ Given the architectural differences across GameMaker projects, Clunkster is orga
 Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see it these tools fit your project's needs.
 
 Non-destructive tools:
+
 - Linter: `tree.yyd` validator
 - Linter: unused assets detector (see [ex2.2](#example-22---lint-unused-assets) and [ex3.2](#example-32---lint-unreachable-assets))
 - (TODO) Linter: heavy assets detector (RAM & disk size)
@@ -16,51 +17,53 @@ Non-destructive tools:
 - Linter: room indirect reference validator via dependency graph (see [ex3.3](#example-33---lint-room-cluster-boundaries))
 
 Lightly destructive tools:
+
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
 - (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/)
 
 Super destructive tools:
+
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
 - Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
 
 # TOC
 
-* [Rationale](#rationale)
-  * [Linters](#linters)
-  * [Prerequisites](#prerequisites)
-    * [[HowTo] Prerequisites - Project & Asset organization](#howto-prerequisites---project--asset-organization)
-    * [[HowTo] Prerequisites - Eradicating dynamic asset referencing](#howto-prerequisites---eradicating-dynamic-asset-referencing)
-    * [[HowTo] Prerequisites - Building dependency flow](#howto-prerequisites---building-dependency-flow)
-    * [[HowTo] Prerequisites - Timelines...](#howto-prerequisites---timelines)
-    * [[HowTo] Prerequisites - State contamination via Globals and Persistence](#howto-prerequisites---state-contamination-via-globals-and-persistence)
-    * [[HowTo] Prerequisites - Proper use of the Ignore Pragma](#howto-prerequisites---proper-use-of-the-ignore-pragma)
-  * [Dehydration](#dehydration)
-  * [Juicing](#juicing)
-  * [Pipeline architecture](#pipeline-architecture)
-  * [Integration into the project](#integration-into-the-project)
-* [Examples](#examples)
-  * [0 - Setting up](#0---setting-up)
-    * [Example 0.1 - Setup: Project](#example-01---setup-project)
-    * [Example 0.2 - Setup: Widgets](#example-02---setup-widgets)
-    * [Example 0.3 - Setup: Rich UI](#example-03---setup-rich-ui)
-    * [Example 0.4 - Full example (pipeline excerpt)](#example-04---full-example-pipeline-excerpt)
-  * [1 - Reading project](#1---reading-project)
-    * [Example 1.1 - Finding assets](#example-11---finding-assets)
-    * [Example 1.2 - Lint: `tree.yyd` files](#example-12---lint-treeyyd-files)
-    * [Example 1.3 - Clusters](#example-13---clusters)
-  * [2 - References](#2---references)
-    * [Example 2.1 - Reference scanning](#example-21---reference-scanning)
-    * [Example 2.2 - Lint: unused assets](#example-22---lint-unused-assets)
-    * [Example 2.3 - Lint: cross-cluster references](#example-23---lint-cross-cluster-references)
-  * [3 - Dependency Graph](#3---dependency-graph)
-    * [Example 3.1 - Generate dependency graphs](#example-31---generate-dependency-graphs)
-    * [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
-    * [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
-  * [4 - Project Juicer](#4---project-juicer)
-    * [Example 4.1 - Juicer: the juice](#example-41---juicer-the-juice)
-    * [Example 4.2 - Juicer: running the tasks](#example-42---juicer-running-the-tasks)
-    * [Example 4.3 - Juicer: generate the `.gml` files](#example-43---juicer-generate-the-gml-files)
-    * [Example 4.4 - Juicer: compile and launch](#example-44---juicer-compile-and-launch)
+- [Rationale](#rationale)
+  - [Linters](#linters)
+  - [Prerequisites](#prerequisites)
+    - [[HowTo] Prerequisites - Project & Asset organization](#howto-prerequisites---project--asset-organization)
+    - [[HowTo] Prerequisites - Eradicating dynamic asset referencing](#howto-prerequisites---eradicating-dynamic-asset-referencing)
+    - [[HowTo] Prerequisites - Building dependency flow](#howto-prerequisites---building-dependency-flow)
+    - [[HowTo] Prerequisites - Timelines...](#howto-prerequisites---timelines)
+    - [[HowTo] Prerequisites - State contamination via Globals and Persistence](#howto-prerequisites---state-contamination-via-globals-and-persistence)
+    - [[HowTo] Prerequisites - Proper use of the Ignore Pragma](#howto-prerequisites---proper-use-of-the-ignore-pragma)
+  - [Dehydration](#dehydration)
+  - [Juicing](#juicing)
+  - [Pipeline architecture](#pipeline-architecture)
+  - [Integration into the project](#integration-into-the-project)
+- [Examples](#examples)
+  - [0 - Setting up](#0---setting-up)
+    - [Example 0.1 - Setup: Project](#example-01---setup-project)
+    - [Example 0.2 - Setup: Widgets](#example-02---setup-widgets)
+    - [Example 0.3 - Setup: Rich UI](#example-03---setup-rich-ui)
+    - [Example 0.4 - Full example (pipeline excerpt)](#example-04---full-example-pipeline-excerpt)
+  - [1 - Reading project](#1---reading-project)
+    - [Example 1.1 - Finding assets](#example-11---finding-assets)
+    - [Example 1.2 - Lint: `tree.yyd` files](#example-12---lint-treeyyd-files)
+    - [Example 1.3 - Clusters](#example-13---clusters)
+  - [2 - References](#2---references)
+    - [Example 2.1 - Reference scanning](#example-21---reference-scanning)
+    - [Example 2.2 - Lint: unused assets](#example-22---lint-unused-assets)
+    - [Example 2.3 - Lint: cross-cluster references](#example-23---lint-cross-cluster-references)
+  - [3 - Dependency Graph](#3---dependency-graph)
+    - [Example 3.1 - Generate dependency graphs](#example-31---generate-dependency-graphs)
+    - [Example 3.2 - Lint: unreachable assets](#example-32---lint-unreachable-assets)
+    - [Example 3.3 - Lint: room cluster boundaries](#example-33---lint-room-cluster-boundaries)
+  - [4 - Project Juicer](#4---project-juicer)
+    - [Example 4.1 - Juicer: the juice](#example-41---juicer-the-juice)
+    - [Example 4.2 - Juicer: running the tasks](#example-42---juicer-running-the-tasks)
+    - [Example 4.3 - Juicer: generate the `.gml` files](#example-43---juicer-generate-the-gml-files)
+    - [Example 4.4 - Juicer: compile and launch](#example-44---juicer-compile-and-launch)
 
 # Rationale
 
@@ -73,10 +76,12 @@ To solve this, you can split the large project into logical clusters. You have "
 To lighten the load, unneeded assets can be replaced with lightweight stubs right in the project.
 
 For dev builds, the tool can nuke all assets except for ones from specified clusters. Optionally, the stubs can be made more noticeable:
+
 - sprites and backgrounds become pink-black checkerboards
 - sounds get replaced with buzz.wav and/or [fiddlesticks.mp3](https://developer.valvesoftware.com/wiki/Missing_content)
 
 Prod builds are similar, but we add dynamic loading. The project is copied, only Common cluster is kept in the base executable. The stage-specific assets are packaged into external files ("wet" versions). When the player enters a new stage, the game dynamically loads ("hydrates") the required assets from the disk. Optionally the stubs can be made less noticeable (though you probably should still make them loud):
+
 - sprites and backgrounds become 2x2 transparent
 - sounds get replaced with null.wav
 
@@ -85,6 +90,7 @@ Prod builds are similar, but we add dynamic loading. The project is copied, only
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
 From those dependencies, the tool can:
+
 - find orphaned assets that are not referenced by anything
 - find assets that reference other assets in disallowed clusters
 - construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.
@@ -92,7 +98,7 @@ From those dependencies, the tool can:
 ## Prerequisites
 
 1. Use this tool only if it's necessary.
-    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
+   - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
 2. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
 3. Follow good project keeping practices
    - Keep asset names clean (press broom icon on IDE's top toolbar to run required checks)
@@ -105,13 +111,13 @@ From those dependencies, the tool can:
    - DON'T use the dastardly "Treat uninitialized variables as 0 (BAD!!!)" option
    - Minimize the number of persistent objects (they'll get tagged as referenced in every room)
 4. Follow good coding practices
-    - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
-      - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
-      - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
-      - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
-      - ^ That rule includes assigning assets to constants
-    - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like ``sound_balance``), which only reference assets but don't instantiate them
-    - DON'T hide room transitions behind `room` variable assignments.
+   - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
+     - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
+     - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
+     - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
+     - ^ That rule includes assigning assets to constants
+   - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like `sound_balance`), which only reference assets but don't instantiate them
+   - DON'T hide room transitions behind `room` variable assignments.
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
@@ -119,11 +125,12 @@ Following sections elaborate on prerequisites, reasons behind them, antipatterns
 
 ### [HowTo] Prerequisites - Project & Asset organization
 
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [[ex1.3](#example-13---clusters)]). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see \[[ex1.3](#example-13---clusters)\]). Therefore, some amount of project keeping is required.
 
 ❌ Bad:
 
 Sprites:
+
 ```
 +Enemies
     |sprite83
@@ -135,7 +142,9 @@ Sprites:
 +StageFinalBoss_2_Fix_Final
     |enemy
 ```
+
 Backgrounds:
+
 ```
 +Stage3
     |bgStage1
@@ -148,6 +157,7 @@ While the tool doesn't require you to name things properly, no duplicates can ex
 ✅ Good:
 
 Sprites:
+
 ```
 +sprEnemies
     |sprEnemySpawner
@@ -159,7 +169,9 @@ Sprites:
 +sprStageFinal
     |sprEnemyBuffed
 ```
+
 Backgrounds:
+
 ```
 +bgStageA
     |bStageA
@@ -172,13 +184,8 @@ With this well organized asset tree you can write an `ALIAS` config so they get 
 
 ```python
 ALIAS: dict[str, list[str]] = {
-    'StageA': [
-        'sprStageA',
-        'bgStageA'
-    ],
-    'StageC': [
-        'bgStageC'
-    ],
+    'StageA': ['sprStageA', 'bgStageA'],
+    'StageC': ['bgStageC'],
     'Common': [
         'sprEnemies',
         # tCommon was automatically assigned Common cluster,
@@ -229,6 +236,7 @@ switch current_level {
 ```
 
 ✅ Good: ... or arrays
+
 ```gml
 var _amb;
 _amb[0] = "sfx_ambience0"
@@ -367,43 +375,45 @@ with Player {
 ```
 
 A few things to digest from here:
-1) `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth`. After all, when the `CommonNorth` cluster is loaded, everything from it becomes available.
-2) The new function `room_is_ice` - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this context guards behind itself (the `IceStage` in our case):
+
+1. `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth`. After all, when the `CommonNorth` cluster is loaded, everything from it becomes available.
+2. The new function `room_is_ice` - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this context guards behind itself (the `IceStage` in our case):
+
 ```python
 CONTEXT_RULES: dict[str, set[str]] = {
     # guard for ice stage -specific things
     'room_is_ice': {
         'IceStage'
-
         # notice that we don't put any other more
         # "common" stages in here
     },
-
     # guard for things that are allowed in CommonNorth,
     # but don't require any more specific logic
     # (e.g. from IceStage)
-    'room_is_north': {
-        'CommonNorth'
-    }
+    'room_is_north': {'CommonNorth'},
 }
 ```
+
 Now everything protected by this guard can freely reference any `IceStage` asset.
 
-3) Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
+3. Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
+
 ```python
 LINT_RULES: dict[str, set[str]] = {
     # common assets cannot borrow from Stage specific folders
     'Common': {'Common'},
-
     'IceStage': {
-        'Common',       # explicitly include the common cluster
-        'CommonNorth',  # include the regional common cluster
-        'IceStage'      # include anything from itself
+        # explicitly include the common cluster
+        'Common',
+        # include the regional common cluster
+        'CommonNorth',
+        # include anything from itself
+        'IceStage',
     },
-
     # this will make any Ice Stage room load all 3 of those clusters
 }
 ```
+
 Now everything in `CommonNorth` can be freely accessed by `IceStage`.
 
 > Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
@@ -488,11 +498,13 @@ instance_create(x, y, global.next_cutscene_actor)
 ❌ Bad: Overusing Persistence
 
 Persistent objects act similarly to global variables. If you do something like:
+
 ```gml
 with WeatherBlizzard {
     ControllerWeather.current_weather = id
 }
 ```
+
 and then `WeatherBlizzard`'s home cluster of `CommonNorth` gets unloaded, you might get the same result as the previous example.
 
 ✅ Good: Pass abstract strings or enums and let a stage-specific director object spawn the correct asset locally.
@@ -506,12 +518,14 @@ if global.next_cutscene_actor == "fairy" {
 ```
 
 ✅ Good: Don't forget to register all persistent objects in `EXTRA_ROOTS`:
+
 ```python
 EXTRA_ROOTS: set[str] = {
     'World'
     # ...
 }
 ```
+
 As a side note, all dependencies of each Extra Root will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
 
 ### [HowTo] Prerequisites - Proper use of the Ignore Pragma
@@ -705,6 +719,7 @@ default:
 ## Dehydration
 
 Following terms are used:
+
 - prepare: the process of stripping the asset from the project.
 - store-dry-prod: how the stripped asset is represented inside resulting prod build (invisible stubs).
 - store-dry-dev: how the stripped asset is represented inside resulting dev build (stubs that yell loudly when referenced).
@@ -715,34 +730,53 @@ Following terms are used:
 ___
 
 **Backgrounds**: impactful, high priority.
+
 - prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmbck` files.
 - store-dry-prod: transparent 2x2.
 - store-dry-dev: pink-black checkerboard with transparent padding
 - store-wet: `.gmbck` files.
 - hydrate: use `background_replace_background` to load externally.
 - dehydrate: use `background_replace_background` to replace back with dry stub.
-____
+
+___
+
 **Fonts**: not numerous enough to be impactful, difficult.
-____
+
+___
+
 **Objects**: slightly impactful, risky (and difficult).
-____
+
+___
+
 **Paths**: not impactful.
-____
+
+___
+
 **Room**: not impactful, risky.
-____
+
+___
+
 **Scripts**: impossible to create dynamically without big rewrites.
-____
+
+___
+
 **Sprites**: impactful, high priority.
+
 - prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmspr` files
 - store-dry-prod: transparent 2x2 with same number of frames as original.
 - store-dry-dev: pink-black checkerboard with transparent padding.
 - store-wet: `.gmspr` files.
 - hydrate: use `sprite_replace_sprite` to load externally.
 - dehydrate: use `sprite_replace_sprite` to replace back with dry stub.
-____
+
+___
+
 **Sounds**: very impactful, TODO.
-____
+
+___
+
 **External (audio)**: impactful, high priority.
+
 - prepare:
   - put sounds from same cluster into their folders,
   - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
@@ -759,43 +793,45 @@ ____
 For the Project Juicer our goal is to "build" a game maker project. The goal is, simply put, to copy most of the project, apply dehydration to the assets that require it.
 
 To elaborate:
+
 - we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
 - dynamic loading of sprites and backgrounds presents us with a few new game maker bugs that we need to address:
-    - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
-    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+  - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
+  - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+
 ```gml
 if background_width0>0 && background_height0>0 {
     background_xscale0=room_width/background_width0
     background_yscale0=room_height/background_height0
 }
 ```
+
 - since for some projects Juicing is the only way to run the project, builds must be fast:
-    - processing tasks must support caching
-    - asset dirs without processing can be symlinked
-    - heavy tasks (audio compression, image encoding) should be multiprocessed
-    - copy tasks (numerous but IO-bound) can be put into threading
+  - processing tasks must support caching
+  - asset dirs without processing can be symlinked
+  - heavy tasks (audio compression, image encoding) should be multiprocessed
+  - copy tasks (numerous but IO-bound) can be put into threading
 
 The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Those are elaborated in the Juicer classes example (TODO link).
 
 With that said, the project building strategy becomes:
+
 - do an `iterdir` on project root
-    - if element is a folder
-        - if it belongs to an asset type that needs processing (smartly handle data folder)
-            - generate processing/copy tasks
-        - otherwise
-            - check if this folder is allowed to exist in the project
-            - symlink
-    - if element is a file
-        - check if this file is allowed to exist in the project
-        - copy (without a task)
+  - if element is a folder
+    - if it belongs to an asset type that needs processing (smartly handle data folder)
+      - generate processing/copy tasks
+    - otherwise
+      - check if this folder is allowed to exist in the project
+      - symlink
+  - if element is a file
+    - check if this file is allowed to exist in the project
+    - copy (without a task)
 - execute the tasks (notice which things are tasks and which aren't)
-    - multiprocessing for processing tasks (image encoding, audio compression)
-    - threading for copy tasks
-    - the rest can happen synchronously right at the task generation
+  - multiprocessing for processing tasks (image encoding, audio compression)
+  - threading for copy tasks
+  - the rest can happen synchronously right at the task generation
 
-Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
-original path relative to the project root>`
-
+Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their original path relative to the project root>`
 
 ## Pipeline architecture
 
@@ -809,16 +845,16 @@ Following outlines our solutions. Most of them are housed in [pipeline folder](h
 - `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching and house the `execute` method that actually does the thing.
 - `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are already present, and input files haven't changed, are skipped.
 - `executor`: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.
-    - `executor/base.py`: Shared util logic.
-    - `executor/mp.py`: Multiprocessing executor.
-    - `executor/thread.py`: Threading executor.
+  - `executor/base.py`: Shared util logic.
+  - `executor/mp.py`: Multiprocessing executor.
+  - `executor/thread.py`: Threading executor.
 - `events`: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.
-    - `events/event.py`: The actual event models.
-    - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
-    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes through the event to underlying dispatcher. However, concurrent executors implement their own sinks:
-        - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
-        - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
-    - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
+  - `events/event.py`: The actual event models.
+  - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
+  - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes through the event to underlying dispatcher. However, concurrent executors implement their own sinks:
+    - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
+    - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
+  - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
 
 The overall architecture can be expressed by this diagram:
 
@@ -864,9 +900,9 @@ graph TD
 With simple and justifiable systems out of the way, next things might seem questionable:
 
 - `ui`: UI abstraction system.
-    - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
-    - `ui/simple.py`: Simple UI implementation, using prints.
-    - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
+  - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
+  - `ui/simple.py`: Simple UI implementation, using prints.
+  - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
 
 UI abstraction architecture can also be expressed in a diagram:
 
@@ -940,7 +976,7 @@ Following describes the base implementation of those scripts, as well as some ti
 
 1. `clunkster_init()` - Initializes Clunkster logic
 
-``` gml
+```gml
 ///clunkster_init()
 //Initialize Clunkster globals
 
@@ -955,7 +991,7 @@ See example of proper Game Start logic below.
 
 2. `clunkster_room_start()` - System's Room Start event, responsible for cleaning up unloaded assets.
 
-``` gml
+```gml
 ///clunkster_room_start()
 //Clunkster's Room Start event
 //Cleanup cluster no longer needed for this room
@@ -978,7 +1014,7 @@ Put it at Room Start, in some `World`-like object.
 
 3. `clunkster_room_goto(target_room)` - Interceptor of `room_goto` calls, which is responsible for loading any asset required by target room.
 
-``` gml
+```gml
 ///clunkster_room_goto(room)
 //Intercept room_goto and load necessary clusters
 
@@ -1005,7 +1041,7 @@ Next are registry-related functions.
 
 4. `clunkster_registry_begin()` - Switch registry mode ON.
 
-``` gml
+```gml
 ///clunkster_registry_begin()
 
 global.__clunk_reg_mode=1
@@ -1013,7 +1049,7 @@ global.__clunk_reg_mode=1
 
 5. `clunkster_registry_end()` - Switch registry mode OFF.
 
-``` gml
+```gml
 ///clunkster_registry_end()
 
 global.__clunk_reg_mode=0
@@ -1021,7 +1057,7 @@ global.__clunk_reg_mode=0
 
 6. `clunkster_is_reg()` - Check whether in registry mode.
 
-``` gml
+```gml
 ///clunkster_is_reg()
 //Check whether in registry mode
 
@@ -1032,7 +1068,7 @@ And finally, the autogenerated scripts. In raw project they remain mostly empty.
 
 7. `clunkster_gen_type()`
 
-``` gml
+```gml
 ///clunkster_gen_type()
 //Returns the type of project.
 //Expect "dev" for builds with no dynamic asset loading
@@ -1046,7 +1082,7 @@ return ""
 
 8. `clunkster_gen_init_audio()`
 
-``` gml
+```gml
 ///clunkster_gen_init_audio()
 //Initialize audio sources with stubs
 //sound_add_ext("null.wav",kind,streamed,"snd_actual")
@@ -1056,7 +1092,7 @@ return ""
 
 9. `clunkster_gen_get_room_clusters(target_room)`
 
-``` gml
+```gml
 ///clunkster_gen_get_room_clusters(target_room)
 //Get clusters that must be loaded for given room
 //Populates global.__clunk_req_clusters
@@ -1066,7 +1102,7 @@ return ""
 
 10. `clunkster_gen_hydrate_cluster(cluster_name)`
 
-``` gml
+```gml
 ///clunkster_gen_hydrate_cluster(cluster_name)
 //Loads data from specified cluster in one block
 
@@ -1075,7 +1111,7 @@ return ""
 
 11. `clunkster_gen_dehydrate_cluster(cluster_name)`
 
-``` gml
+```gml
 ///clunkster_gen_dehydrate_cluster(cluster_name)
 //Unloads data from specified cluster in one block
 
@@ -1084,7 +1120,7 @@ return ""
 
 12. `clunkster_gen_validate_ctx()`
 
-``` gml
+```gml
 ///clunkster_gen_validate_ctx()
 //Validates context guards
 
@@ -1097,7 +1133,7 @@ For example, if you have some values associated with audio source (like volume b
 
 `sndreg_init`:
 
-``` gml
+```gml
 ///sndreg_init()
 //Initialize sound registry
 
@@ -1107,7 +1143,7 @@ global._sndlist=ds_list_create()
 
 `sndreg_ext` - Fills in all data of an audio at once:
 
-``` gml
+```gml
 ///sndreg_ext(snd,og_samplerate=44100,vol=1,[loopstart,loopend=-1])
 //Fill in all params at once
 
@@ -1138,7 +1174,7 @@ if argument_count>3 {
 
 `sndreg_populate` - This is where you define all those values:
 
-``` gml
+```gml
 ///sndreg_populate()
 //Populate sound registry with necessary sound data
 
@@ -1156,7 +1192,7 @@ if room_is_ice_stage() {
 
 `sndreg_apply` - Apply registry values to a sound:
 
-``` gml
+```gml
 ///sndreg_apply(snd)
 if sound_exists(argument0) {
     //volume
@@ -1195,7 +1231,7 @@ else {
 
 `sndreg_apply_all` - Apply registry values to all registered sounds; this one should be used right after registry population, if project type is raw.
 
-``` gml
+```gml
 ///sndreg_apply_all()
 //Apply audio stuff to all sounds
 
@@ -1209,7 +1245,7 @@ for (_i=0;_i<_ac;_i+=1) {
 
 This allows us to write a clean Game Start logic:
 
-``` gml
+```gml
 clunkster_registry_begin()
 sndreg_populate()
 clunkster_registry_end()
@@ -1230,10 +1266,12 @@ Examples are generated from the [main pipeline file](https://github.com/shaperon
 ## 0 - Setting up
 
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
+
 - Project
 - Widgets
 
 ### Example 0.1 - Setup: Project
+
 Setup project and linter session.
 
 Mandatory stuff includes setting few important variables:
@@ -1260,18 +1298,13 @@ def global_set_project(project_root: Path) -> None:
 global_set_project(Path('path/to/the/project'))
 ```
 
-Notice the humble helper function `global_set_project` and what it does.
-Calling `my_proj.set_root(PROJECT)` is very important.
-
+Notice the humble helper function `global_set_project` and what it does. Calling `my_proj.set_root(PROJECT)` is very important.
 
 ### Example 0.2 - Setup: Widgets
+
 Populate abstract widgets used down the line.
 
-Since most of UI is abstracted, examples don't use `print` or other
-methods of output, but rather more abstract `ui_out` and other shims
-from the same module. More complicated UI requires abstract widgets. The
-ones required by the tool are outlined here, as well as their sample
-implementation with `print`.
+Since most of UI is abstracted, examples don't use `print` or other methods of output, but rather more abstract `ui_out` and other shims from the same module. More complicated UI requires abstract widgets. The ones required by the tool are outlined here, as well as their sample implementation with `print`.
 
 ```py
 import collections.abc as col
@@ -1340,6 +1373,7 @@ global_widget_renderer(WidgetRendererSimple())
 With that out of the way you may start the [first real examples](#example-11---finding-assets). However, I recommend reading a bit about the [pipeline architecture](#pipeline-architecture), which should give you proper understanding on what to do if things don't work out.
 
 ### Example 0.3 - Setup: Rich UI
+
 The other UI option is [rich](https://github.com/textualize/rich).
 
 We have to add the widget renderer and `Ui` implementations.
@@ -1641,25 +1675,20 @@ def main_example() -> None:
 
 ## 1 - Reading project
 
-This section is about discovering assets from project files, doing initial
-validations and assigning clusters to the assets.
+This section is about discovering assets from project files, doing initial validations and assigning clusters to the assets.
 
 ### Example 1.1 - Finding assets
 
 Let's start with some simple scanning.
 
-Clunkster already provides utils for scanning builtin assets and
-single-file external assets (such as audio for `gm82snd`). However,
-registering those external assets is left as a task for the user.
+Clunkster already provides utils for scanning builtin assets and single-file external assets (such as audio for `gm82snd`). However, registering those external assets is left as a task for the user.
 
 Also notice the global variables:
 
-- `PROJECT` should point at the folder where project's `.gm82` file
-  is located.
+- `PROJECT` should point at the folder where project's `.gm82` file is located.
 - `LINT` is the error accumulator that is used by tools down the line.
 
-The convenience function `global_set_project` is provided to set up
-given path as the source project root.
+The convenience function `global_set_project` is provided to set up given path as the source project root.
 
 ```py
 import collections.abc as col
@@ -1768,23 +1797,17 @@ for asset_type in CLUSTERABLE_ASSETS:
 print(f'Discovered {len(assets)} total assets.')
 ```
 
-I recommend checking the resulting `assets` array for any weirdness in
-debug before going further.
-
+I recommend checking the resulting `assets` array for any weirdness in debug before going further.
 
 ### Example 1.2 - Lint: `tree.yyd` files
 
 Now we must check integrity of `tree.yyd` files and asset names.
 
-Asset discovery and clusterization is based on scanning `tree.yyd`
-files, so we have to ensure that they have no duplicate folders.
+Asset discovery and clusterization is based on scanning `tree.yyd` files, so we have to ensure that they have no duplicate folders.
 
-This example also serves as an introduction to Clunkster's linter system.
-It implements things like accumulating errors to printed in a list view,
-sorting and grouping them by type, verbose output, etc.
+This example also serves as an introduction to Clunkster's linter system. It implements things like accumulating errors to printed in a list view, sorting and grouping them by type, verbose output, etc.
 
-In order to make reports as thorough as possible, Clunkster provides
-various classes and mixins for customizing violation scope:
+In order to make reports as thorough as possible, Clunkster provides various classes and mixins for customizing violation scope:
 
 - `LinterViolation`: base violation, not bound to any file or asset
 - `LinterViolationMessage`: adds a short error message
@@ -1793,19 +1816,13 @@ various classes and mixins for customizing violation scope:
 - `LinterViolationAsset`: mixin that binds error to a specific asset
 
 For linting `tree.yyd` files we want to check that:
-1. all asset names are unique: handled by `LintTreeDuplicateAsset`, this
-  violation is abstract and isn't really bound to a specific file,
-  since duplicate assets can exist across multiple types.
-2. no duplicate folders in tree: handled by `LintTreeDuplicateFolder`,
-  this violation is done only within same asset type and is bound to a
-  location in specific `tree.yyd` file.
 
-All the linter violations should have their ID (like A100) and severity.
-Default violation processor would print info messages, turn warn messages
-into warnings and raise errors.
+1. all asset names are unique: handled by `LintTreeDuplicateAsset`, this violation is abstract and isn't really bound to a specific file, since duplicate assets can exist across multiple types.
+2. no duplicate folders in tree: handled by `LintTreeDuplicateFolder`, this violation is done only within same asset type and is bound to a location in specific `tree.yyd` file.
 
-Since any inconsistency will cause big issues in the pipeline, every
-violation is marked as error.
+All the linter violations should have their ID (like A100) and severity. Default violation processor would print info messages, turn warn messages into warnings and raise errors.
+
+Since any inconsistency will cause big issues in the pipeline, every violation is marked as error.
 
 ```py
 import collections
@@ -1975,21 +1992,16 @@ LINT.consume()
 ```
 
 ### Example 1.3 - Clusters
+
 Generate clusters.
 
-Once we validated assets and trees, we can do cluster generation. We'll
-look at the top level folder name. In order to merge things like
-`"StageA"` and `"stage_a"` into single cluster `"StageA"`, we'll
-use the alias system.
+Once we validated assets and trees, we can do cluster generation. We'll look at the top level folder name. In order to merge things like `"StageA"` and `"stage_a"` into single cluster `"StageA"`, we'll use the alias system.
 
-Now, the alias dictioanry can become quite large, so I added additional
-validation. Now we detect unused or extra names.
+Now, the alias dictioanry can become quite large, so I added additional validation. Now we detect unused or extra names.
 
-Also, this script has a neat table output for clusters per asset type,
-It can be useful to discern where exactly any extra names are located.
+Also, this script has a neat table output for clusters per asset type, It can be useful to discern where exactly any extra names are located.
 
-Also, since this stage is used as an actual part of the pipeline, it uses
-the fancy printing shims.
+Also, since this stage is used as an actual part of the pipeline, it uses the fancy printing shims.
 
 ```py
 import collections.abc as col
@@ -2172,28 +2184,19 @@ LINT.assert_empty()
 
 Keep using the table thing until all aliases are gone.
 
-
-
 ## 2 - References
 
-This section is about finding asset references in `.gml` files, and running
-validations based on them.
+This section is about finding asset references in `.gml` files, and running validations based on them.
 
 ### Example 2.1 - Reference scanning
+
 Reference scanner.
 
-In order to run dependency linters, we need to scan the actual references.
-We'll use [`pyahocorasick`](github.com/WojciechMula/pyahocorasick)
-library to make it decently fast.
+In order to run dependency linters, we need to scan the actual references. We'll use [`pyahocorasick`](github.com/WojciechMula/pyahocorasick) library to make it decently fast.
 
-Text occurences found like this reflect occurrences in static code,
-but with some exceptions (strings, comments). Filtering through
-such is implemented in Clunkster.
+Text occurences found like this reflect occurrences in static code, but with some exceptions (strings, comments). Filtering through such is implemented in Clunkster.
 
-Also, for pure data registry scripts (like `sound_balance`), which,
-technically reference every asset, but don't instantiate them,
-we added a special directive: `//!clunkster: ignore`. Add it in any
-GML scripts that should be skipped.
+Also, for pure data registry scripts (like `sound_balance`), which, technically reference every asset, but don't instantiate them, we added a special directive: `//!clunkster: ignore`. Add it in any GML scripts that should be skipped.
 
 ```py
 import collections.abc as col
@@ -2296,15 +2299,12 @@ ui_out(f'Found {total_matches} total dependency references.')
 ```
 
 ### Example 2.2 - Lint: unused assets
+
 Find and report assets that are never referenced by anything.
 
-Removing unused assets is a quick way to clean up a project.
-We can do this with a simple set difference: Total Assets
-minus Used Assets. However, this will not catch isolated reference loops
-(e.g., A references B, B references A, but neither is used by the game).
+Removing unused assets is a quick way to clean up a project. We can do this with a simple set difference: Total Assets minus Used Assets. However, this will not catch isolated reference loops (e.g., A references B, B references A, but neither is used by the game).
 
-Also, some things that are indirectly referenced by the engine (like
-with rooms and `room_goto_next()`) might still get reported.
+Also, some things that are indirectly referenced by the engine (like with rooms and `room_goto_next()`) might still get reported.
 
 Take the output of this with a grain of salt.
 
@@ -2426,19 +2426,14 @@ else:
 ```
 
 ### Example 2.3 - Lint: cross-cluster references
+
 Validate cluster boundaries.
 
-Simple check of clusters on both ends of dependency edge will filter
-out the majority of "stageA object referenced stageB asset" cases.
+Simple check of clusters on both ends of dependency edge will filter out the majority of "stageA object referenced stageB asset" cases.
 
 However, this iteration (and following linters) have a few special rules:
 
-1. Most clusters are allowed to reference only themselves and Common
-cluster, but some may need to reference certain more localized "nonlocal"
-cluster. Such as when one collab maker creates multiple stages, and has
-many common scripts and util objects shared between them, but, technically,
-not between the rest of the collab. Such rules should be defined in
-`LINT_RULES`.
+1. Most clusters are allowed to reference only themselves and Common cluster, but some may need to reference certain more localized "nonlocal" cluster. Such as when one collab maker creates multiple stages, and has many common scripts and util objects shared between them, but, technically, not between the rest of the collab. Such rules should be defined in `LINT_RULES`.
 
 2. We allow special context guard scripts in a form of:
 
@@ -2447,21 +2442,14 @@ if room_is_stageA() {
     ...
 }
 ```
-Those guards allow references to any foreign cluster inside them. Such
-guards must be defined in `CONTEXT_RULES`. Read more on those in the
-[GML chapter](#integration-into-the-project).
 
-3. References to rooms are severed. Since the only way to meaningfully
-"instantiate" a room is to go there, for all intents and purposes
-whatever references a room doesn't really depend on it.
+Those guards allow references to any foreign cluster inside them. Such guards must be defined in `CONTEXT_RULES`. Read more on those in the [GML chapter](#integration-into-the-project).
 
-Make sure to fill in the `LINT_RULES` and `CONTEXT_RULES` - they'll
-be used by future linters as well.
+3. References to rooms are severed. Since the only way to meaningfully "instantiate" a room is to go there, for all intents and purposes whatever references a room doesn't really depend on it.
 
-Note: I strongly advise clearing out the project to satisfy this linter
-(even though this might take a lot of effort). Skipping it would make
-using Project Juicer and other project-transforming tools a nightmare of
-hidden bugs.
+Make sure to fill in the `LINT_RULES` and `CONTEXT_RULES` - they'll be used by future linters as well.
+
+Note: I strongly advise clearing out the project to satisfy this linter (even though this might take a lot of effort). Skipping it would make using Project Juicer and other project-transforming tools a nightmare of hidden bugs.
 
 ```py
 from pathlib import Path
@@ -2589,43 +2577,27 @@ else:
 
 ## 3 - Dependency Graph
 
-This section is about building a graph out of dependencies, and running
-checks based on more advanced usage tracing.
+This section is about building a graph out of dependencies, and running checks based on more advanced usage tracing.
 
 ### Example 3.1 - Generate dependency graphs
+
 Build dependency graph.
 
-Reference scanner gave us a set of dependency edges, from which we can
-build a dependency graph. Graphs are done via
-[`rustworkx`](https://github.com/Qiskit/rustworkx).
+Reference scanner gave us a set of dependency edges, from which we can build a dependency graph. Graphs are done via [`rustworkx`](https://github.com/Qiskit/rustworkx).
 
-Our main application of this graph would be finding a set of used assets in
-each room, and feeding that info into linters.
+Our main application of this graph would be finding a set of used assets in each room, and feeding that info into linters.
 
 There's two thing that makes this entire process a bit messy.
 
-First, our context guards depend on the current room being processed.
-This means, that rooms have slightly different graphs from each other. The
-cleanest (but far not optimal) way of doing this is to create different
-graphs for different sets of clusters.
+First, our context guards depend on the current room being processed. This means, that rooms have slightly different graphs from each other. The cleanest (but far not optimal) way of doing this is to create different graphs for different sets of clusters.
 
-Second, persistent objects. We can't cleanly trace where those objects
-travel through the game, so we have to make a few compromises. We'll allow
-only 2 types of persistent objects:
+Second, persistent objects. We can't cleanly trace where those objects travel through the game, so we have to make a few compromises. We'll allow only 2 types of persistent objects:
 
-1. Highly localized objects (like room transitions), that don't instantiate
-  state-specific assets beyong their spawn room. I think it'd be wise
-  to validate that those objects are in Common cluster, for safety.
+1. Highly localized objects (like room transitions), that don't instantiate state-specific assets beyong their spawn room. I think it'd be wise to validate that those objects are in Common cluster, for safety.
 
-2. Ubiqitous `World` object, which is present in every room. We mark
-  those objectsi in `EXTRA_ROOTS`, so they get artificially added into
-the reachability sets.
+2. Ubiqitous `World` object, which is present in every room. We mark those objectsi in `EXTRA_ROOTS`, so they get artificially added into the reachability sets.
 
-Note: even though we calculate graphs for each room, saving them is
-optional. Beyond reachability set generation, they are only used in
-better output of second cross-reference linter down the line. If saving
-graphs ever becomes a bottleneck you may omit those and only calculate the
-`reachability_map: dict[str, set[str]]`
+Note: even though we calculate graphs for each room, saving them is optional. Beyond reachability set generation, they are only used in better output of second cross-reference linter down the line. If saving graphs ever becomes a bottleneck you may omit those and only calculate the `reachability_map: dict[str, set[str]]`
 
 ```py
 import dataclasses
@@ -2780,11 +2752,10 @@ for cluster_set, rooms in cluster_groups.items():
 ```
 
 ### Example 3.2 - Lint: unreachable assets
+
 Identify unreachable assets.
 
-With our newly build reachability map we can indentify which assets are
-never referenced in any room. This would solve closed loops we've
-been skipping over in the simpler linter.
+With our newly build reachability map we can indentify which assets are never referenced in any room. This would solve closed loops we've been skipping over in the simpler linter.
 
 ```py
 from pathlib import Path
@@ -2864,17 +2835,14 @@ else:
 ```
 
 ### Example 3.3 - Lint: room cluster boundaries
+
 Validate room and their dependencies clustering boundaries.
 
-Final step of linting process is validating cluster boundaries
-on rooms as a whole.
+Final step of linting process is validating cluster boundaries on rooms as a whole.
 
-Note 1: this tool is intended to be used only after resolved every
-issue raised by simpler crossref linter.
+Note 1: this tool is intended to be used only after resolved every issue raised by simpler crossref linter.
 
-Note 2: this tool will output a lot of violations for each offending
-dependency edge, therefore some deduction is required in order to pinpoint
-the exact offenders. Also, I recommend re-running the tool after each fix.
+Note 2: this tool will output a lot of violations for each offending dependency edge, therefore some deduction is required in order to pinpoint the exact offenders. Also, I recommend re-running the tool after each fix.
 
 ```py
 import collections.abc as col
@@ -3113,8 +3081,7 @@ else:
     ui_out('No errors! Awesome!')
 ```
 
-Once you've cleared this one, you may call the game qualified for using
-the dangerous toys down the line.
+Once you've cleared this one, you may call the game qualified for using the dangerous toys down the line.
 
 Congrats on defeating the tutorial boss.
 
@@ -3124,8 +3091,7 @@ Now that the project is cleared out, it is time for some useful tools.
 
 In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: [clusters](#example-13---clusters)), the game must satisfy both clusterization linters (see: [ex2.3](#example-23---lint-cross-cluster-references) and [ex3.3](#example-33---lint-room-cluster-boundaries)) in order for the resulting build to run well.
 
-We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
-won't get to run them individually until everything is done.
+We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you won't get to run them individually until everything is done.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
 
@@ -3135,18 +3101,11 @@ This example is a bit bigger than usual, mostly because before we get to execute
 
 First step - the actual processing functions.
 
-As it's outlined in [Juicing](#juicing), processing will be applied only to
-sprites, backgrounds and external audio. Plus fixing object's masks and
-room's stretch backgrounds.
+As it's outlined in [Juicing](#juicing), processing will be applied only to sprites, backgrounds and external audio. Plus fixing object's masks and room's stretch backgrounds.
 
-Object's masks require doing changes to every object, so this thing belongs
-in the processing stage.
+Object's masks require doing changes to every object, so this thing belongs in the processing stage.
 
-Room's stretch backgrounds, however, are a bit too expensive to be put into
-processing stage. Rooms are good candidates for simply symlinking their
-folders (gazillion tiny files), and sacrificing that for some lousy
-stretching backgrounds is not the play. Plus, those are usually very rare,
-and it makes more sense to just pre-bake correct scale manually.
+Room's stretch backgrounds, however, are a bit too expensive to be put into processing stage. Rooms are good candidates for simply symlinking their folders (gazillion tiny files), and sacrificing that for some lousy stretching backgrounds is not the play. Plus, those are usually very rare, and it makes more sense to just pre-bake correct scale manually.
 
 Use the regex `bg_stretch.=1` to find all the offenders with `grep`.
 
@@ -3439,10 +3398,8 @@ Step 2 - wrap the asset processing functions into Tasks.
 Few design notes:
 
 1. make sure tasks contents stay lightweight enough to be sent over IPC
-2. make sure task's execute method stays pure (doesn't rely on global
-   variables or other pre-initialized state)
-3. use keyword-only arguments for constructors because those paths are
-   easy to mess up
+2. make sure task's execute method stays pure (doesn't rely on global variables or other pre-initialized state)
+3. use keyword-only arguments for constructors because those paths are easy to mess up
 
 ```py
 import shutil
@@ -3651,23 +3608,20 @@ class TaskFixMaskObjects(my_task.TaskGeneric):
         )
 ```
 
-Notice how none of both of the functions or Tasks above depend on ``PROJECT``, or any other global state. Awesome!
+Notice how none of both of the functions or Tasks above depend on `PROJECT`, or any other global state. Awesome!
 
 ___
 
 Step 3 - ~~Fly~~ Run the thing.
 
-This stage is responsible for mapping out source project, generating
-tasks, and sending tasks to executors.
+This stage is responsible for mapping out source project, generating tasks, and sending tasks to executors.
 
 Few things make this process a bit messy:
 
 1. External audio is not a top level folder.
-2. We must also account for Common assets, and make sure they get copied
-   just so.
+2. We must also account for Common assets, and make sure they get copied just so.
 
-Therefore, I've made logic of task generation very explicit. Also, this
-step does some of the cheaper tasks, like creating build dir and symlinks.
+Therefore, I've made logic of task generation very explicit. Also, this step does some of the cheaper tasks, like creating build dir and symlinks.
 
 ```py
 import dataclasses
@@ -3983,10 +3937,10 @@ build_tasks = BuildTasks(
 ```
 
 ### Example 4.2 - Juicer: running the tasks
+
 Run generated build tasks.
 
-In contrast, this example is pretty small. Thanks to our brazillion
-abstractions.
+In contrast, this example is pretty small. Thanks to our brazillion abstractions.
 
 ```py
 from clunkster.pipeline import cache as my_cache
@@ -4029,11 +3983,10 @@ with CLS_UI_ASYNC('Multiprocessing tasks') as ui:
 ```
 
 ### Example 4.3 - Juicer: generate the `.gml` files
+
 It is time to finally integrate Clunkster into the project.
 
-This code contains traces of my own project configuration (sound registry,
-etc.), which might not be fully applicable for your project. You
-should review this code extra thoroughly before pasting it...
+This code contains traces of my own project configuration (sound registry, etc.), which might not be fully applicable for your project. You should review this code extra thoroughly before pasting it...
 
 ```py
 import itertools as it
@@ -4322,10 +4275,10 @@ scr_gen_dehydrate_cluster.write_text(
 )
 ```
 
-Once the GML files are generated, the project should become playable.
-Last possible step would be adding the automatic compile.
+Once the GML files are generated, the project should become playable. Last possible step would be adding the automatic compile.
 
 ### Example 4.4 - Juicer: compile and launch
+
 One last step is automatic compile.
 
 Game Maker's CLI for compiling is:
@@ -4333,13 +4286,14 @@ Game Maker's CLI for compiling is:
 ```
 GameMaker.exe [project.gm82] --build [exe]
 ```
+
 And Game Maker's exe is usually at:
 
 ```
 C:\Users\user\AppData\Roaming\GameMaker8.2\GameMaker.exe
 ```
-but I also added a new environment variable `GM82_PATH` just for that
-one guy.
+
+but I also added a new environment variable `GM82_PATH` just for that one guy.
 
 ```py
 import os
