@@ -1,1 +1,0 @@
-- mdformat (with ruff extension)

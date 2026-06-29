@@ -8,7 +8,6 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    'cogapp>=3.6.0',
     'deptry>=0.25.1',
     "gmcodec",
     "mdformat>=1.0.0",
