@@ -18,7 +18,7 @@ def parse_pairs(lines: col.Iterable[str]) -> col.Iterator[tuple[str, str]]:
         yield key, value
 
 
-def parse_dataclass[T](cls: type[T], lines: col.Iterator[str]) -> T:
+def parse_dataclass[T](cls: type[T], lines: col.Iterable[str]) -> T:
     """Parse ``key=value`` pairs from ``lines`` into given dataclass.
 
     Performs validation, only ``str`` and ``int`` fields are supported.

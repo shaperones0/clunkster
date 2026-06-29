@@ -3,10 +3,28 @@
     <words>
       <w>Clunkster</w>
       <w>clunkster's</w>
+      <w>clustereds</w>
       <w>clusterset</w>
       <w>clustersets</w>
-      <w>gbck</w>
+      <w>gmbck</w>
+      <w>gmspr</w>
+      <w>hbord</w>
+      <w>hoffset</w>
+      <w>hport</w>
+      <w>hsep</w>
+      <w>hspeed</w>
+      <w>hview</w>
+      <w>roompersistent</w>
+      <w>roomspeed</w>
       <w>scannables</w>
+      <w>vbord</w>
+      <w>voffset</w>
+      <w>vsep</w>
+      <w>vspeed</w>
+      <w>wview</w>
+      <w>xoffset</w>
+      <w>yoffset</w>
+      <w>yport</w>
     </words>
   </dictionary>
 </component>

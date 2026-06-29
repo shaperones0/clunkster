@@ -1,21 +1,10 @@
 """Build progress caching."""
 
 import collections.abc as col
-import hashlib
 import json
 from pathlib import Path
 
-
-def file_hash(*paths: Path) -> str:
-    """Calculate MD5 hash of all input files."""
-    hasher = hashlib.md5()
-    for filepath in sorted(paths):
-        if filepath.exists():
-            assert filepath.is_file()
-            with filepath.open('rb') as f:
-                for chunk in iter(lambda: f.read(4096), b''):
-                    hasher.update(chunk)
-    return hasher.hexdigest()
+from clunkster.pipeline.task import Task
 
 
 class FileBuildCache:
@@ -30,7 +19,7 @@ class FileBuildCache:
         :param cache_file: Path to the cache file.
         """
         self.cache_file = cache_file
-        self.data = {}
+        self.data: dict[str, str] = {}
         if self.cache_file.exists():
             with self.cache_file.open('r') as f:
                 self.data = json.load(f)
@@ -42,7 +31,7 @@ class FileBuildCache:
         current_hash: str,
         outputs: col.Iterable[Path],
     ) -> bool:
-        """Whether the task needs to be executed.
+        """Whether the task doesn't need to be executed.
 
         Checks whether task input's `current_hash` has changed, or
         output files are gone.
@@ -55,6 +44,14 @@ class FileBuildCache:
             return False
         return self.data.get(task_id) == current_hash
 
+    def task_is_fresh(self, task: Task) -> bool:
+        """Whether the task doesn't need to be executed."""
+        return self.is_fresh(
+            task_id=task.task_id,
+            current_hash=task.inputs_hash,
+            outputs=task.outputs,
+        )
+
     def update(self, task_id: str, current_hash: str) -> None:
         """Update task's hash.
 
@@ -65,5 +62,8 @@ class FileBuildCache:
 
     def save(self) -> None:
         """Save task's hashes back to cache file."""
-        with self.cache_file.open('w') as f:
+        temp_file = self.cache_file.with_suffix('.tmp')
+
+        with temp_file.open('w') as f:
             json.dump(self.data, f, indent=2)
+        temp_file.replace(self.cache_file)

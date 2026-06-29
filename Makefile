@@ -2,6 +2,7 @@
 format: ## Auto-format and auto-fix code (for local development)
 	@echo "Formatting code: Ruff"
 	@uv run ruff format
+	@uv run ruff format --config scripts/readme.ruff.toml scripts/readme.py
 	@echo "Auto-fixing code: Ruff"
 	@uv run ruff check --fix
 
@@ -31,8 +32,8 @@ test-cov: ## Run tests and print a terminal coverage report
 
 .PHONY: readme
 readme:	## Autogen in readme (examples and whatnot)
-	@cog -r README.md
-	@cog -r README.md
+	@uv run python -m scripts.readme
+	@uv run python -m scripts.format_md
 
 .PHONY: check
 check: format lint test readme ## Run all local checks, fixes, and tests
