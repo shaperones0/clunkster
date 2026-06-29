@@ -54,11 +54,11 @@ Non-destructive tools:
 
 Lightly destructive tools:
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
-- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/)
+- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/) (see: {exs.href('ex_juicer_processing')} (part of Juicer))
 
 Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: [Dehydration](#dehydration))
+- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (See: {exs.href('ex_juicer_processing')}; [Dehydration](#dehydration))
 
 # TOC
 
