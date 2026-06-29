@@ -112,7 +112,7 @@ From those dependencies, the tool can:
       - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
       - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
       - ^ That rule includes assigning assets to constants
-    - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like ``sound_balance``), which only reference assets but don't instantiate them
+    - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like `sound_balance`), which only reference assets but don't instantiate them
     - DON'T hide room transitions behind `room` variable assignments.
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
@@ -767,13 +767,13 @@ For the Project Juicer our goal is to "build" a game maker project. The goal is,
 
 To elaborate:
 - we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
-- dynamic loading of sprites and backgrounds presents us with a few new game maker bugs that we need to address:
-    - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start would do the trick
-    - rooms' backgrounds stretch flag is compile time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+- dynamic loading of sprites and backgrounds presents us with a few game maker bugs that we need to address:
+    - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start does the trick
+    - rooms' backgrounds stretch flag is compile-time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
 ```gml
-if background_width0>0 && background_height0>0 {{
-    background_xscale0=room_width/background_width0
-    background_yscale0=room_height/background_height0
+if background_width[0]>0 && background_height[0]>0 {{
+    background_xscale[0]=room_width/background_width[0]
+    background_yscale[0]=room_height/background_height[0]
 }}
 ```
 - since for some projects Juicing is the only way to run the project, builds must be fast:
@@ -782,7 +782,7 @@ if background_width0>0 && background_height0>0 {{
     - heavy tasks (audio compression, image encoding) should be multiprocessed
     - copy tasks (numerous but IO-bound) can be put into threading
 
-The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Those are elaborated in the Juicer classes example (TODO link).
+The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Those are done in the library's respective pipeline abstraction (`task.py`, `cache.py`), as well as the {exs.href('ex_juicer_processing', 'Juicer classes example')}.
 
 With that said, the project building strategy becomes:
 - do an `iterdir` on project root
@@ -1592,7 +1592,7 @@ ___
         )
     }
 
-Notice how none of both of the functions or Tasks above depend on ``PROJECT``, or any other global state. Awesome!
+Notice how none of both of the functions or Tasks above depend on `PROJECT`, or any other global state. Awesome!
 
 ___
 
