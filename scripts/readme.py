@@ -648,7 +648,7 @@ if room_is_tutorial_or_final() {{
 
 And, since this registry, ideally, runs only on game start, in order to not loose data that we deliberately hidden behind guard, we can introduce a little ethical hack (that doesn't ruin our cluster-boundary model).
 
-Remember the `global._clunkster_reg_mode` from before? Here's out plan:
+Remember the `global._clunkster_reg_mode` from before? Here's our plan:
 
 New script `clunkster_init`:
 
