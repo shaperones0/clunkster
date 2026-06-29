@@ -2026,9 +2026,9 @@ def juice_obj_fix_mask(
 def main_juicer_processing() -> None:
     """First step - the actual processing functions.
 
-    As it's outlined in Juicing, processing will be applied only to sprites,
-    backgrounds and external audio. Plus fixing object's masks and room's
-    stretch backgrounds.
+    As it's outlined in [Juicing](#juicing), processing will be applied only to
+    sprites, backgrounds and external audio. Plus fixing object's masks and
+    room's stretch backgrounds.
 
     Object's masks require doing changes to every object, so this thing belongs
     in the processing stage.
@@ -2253,8 +2253,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
     This stage is responsible for mapping out source project, generating
     tasks, and sending tasks to executors.
 
-    While the logic was outlined in [Juicing](#juicing), few things make
-    this process a bit messy:
+    Few things make this process a bit messy:
 
     1. External audio is not a top level folder.
     2. We must also account for Common assets, and make sure they get copied
