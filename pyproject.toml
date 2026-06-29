@@ -128,6 +128,11 @@ ignore = [
     'PLR0912',
 ]
 
+'scripts/readme.py' = [
+    # no line length error in doc file
+    'E501'
+]
+
 [tool.deptry.per_rule_ignores]
 DEP002 = [
 

@@ -1,16 +1,14 @@
 """Source line map."""
 
 import bisect
-from dataclasses import dataclass
-from typing import Self
-from pathlib import Path
 import itertools as it
+from typing import Self
 
 
 class LineMap:
     """LUT to convert absolute str indices into line/column."""
 
-    __slots__ = ('line_starts', 'line_pref')
+    __slots__ = ('line_pref', 'line_starts')
 
     def __init__(self, line_starts: list[int]) -> None:
         """Initialize with raw line start offsets.
@@ -19,7 +17,7 @@ class LineMap:
         :param line_starts: The raw line offsets.
         """
         self.line_starts = line_starts
-        self.line_pref = list(it.accumulate(line_starts))   # prefix sum
+        self.line_pref = list(it.accumulate(line_starts))  # prefix sum
 
     @classmethod
     def from_text(cls, text: str) -> Self:
@@ -59,5 +57,4 @@ class LineMap:
         :param col: Column index.
         :return: Absolute string index (starts from 0).
         """
-
         return self.line_pref[line - 1] + col - 1

@@ -1,15 +1,24 @@
 """Readme generator."""
 
 from pathlib import Path
-from scripts import doc_parse, doc_extract, doc_patch, doc_toc, doc_headers, doc_code, doc_docstring
-from doc_code import shad, gen_stub_func, gen_stub_cls, gen_stub_var
 
+from scripts import (
+    doc_code,
+    doc_docstring,
+    doc_extract,
+    doc_headers,
+    doc_parse,
+    doc_patch,
+    doc_toc,
+)
+from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
 @doc_patch.template()
-def readme_txt():
+def readme_txt() -> str:
+    """Generate readme."""
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
@@ -22,6 +31,7 @@ def readme_txt():
     )
 
     # PyCharm: Alt+Enter -> Inject language -> Markdown
+    # fmt: off
     return f"""
 {exs.reset()}
 
@@ -532,7 +542,7 @@ with Player  {{
     }}
     else {{
         sound_play("player_death")
-    
+
         // Dance specific
         if is_in_game() && !global.paused {{
             if room != rDanceStage {{
@@ -540,7 +550,7 @@ with Player  {{
             }} else {{
                 dance_camera_update()
             }}
-        }} 
+        }}
     }}
     instance_create(0, 0, GameOver)
     instance_destroy()
@@ -785,7 +795,7 @@ With that said, the project building strategy becomes:
     - threading for copy tasks
     - the rest can happen synchronously right at the task generation
 
-Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their 
+Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
 original path relative to the project root>`
 
 ## Integration into the project
@@ -992,7 +1002,7 @@ if !ds_map_exists(global._sndreg,argument0+":REG") {{
 }}
 
 //rate
-//NOTE: I recommend avoiding unit_samples and unit_seconds, as FMOD's 
+//NOTE: I recommend avoiding unit_samples and unit_seconds, as FMOD's
 // native format is unit_unitary
 var _rate;if argument_count>1 _rate=argument[1] else _rate=44100
 dsmap(global._sndreg,argument0+":RATE",_rate)
@@ -1103,7 +1113,7 @@ Following examples represent parts of the workflow for the game this tool was in
 
 {head.next_section("Reading project").render_header()}
 
-This section is about discovering assets from project files, doing initial 
+This section is about discovering assets from project files, doing initial
 validations and assigning clusters to the assets.
 
 {exs.code_begin("ex_start", "Finding assets")}
@@ -1117,9 +1127,9 @@ validations and assigning clusters to the assets.
     ))}
 {exs.code_reg_stub_src({
         'CLS_ASSET_EXT': gen_stub_cls(
-                'AssetExtAudio', 
-                'AssetExtBgm', 
-                'AssetExtSfx', 
+                'AssetExtAudio',
+                'AssetExtBgm',
+                'AssetExtSfx',
                 'AssetExtSfx3',
             ),
         'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession')
@@ -1155,7 +1165,7 @@ validations and assigning clusters to the assets.
 
 {head.next_section("References").render_header()}
 
-This section is about finding asset references in `.gml` files, and running 
+This section is about finding asset references in `.gml` files, and running
 validations based on them.
 
 {exs.code_begin('ex_scan_sync', 'Reference scanning')}
@@ -1219,7 +1229,7 @@ validations based on them.
 
 {head.next_section('Dependency Graph').render_header()}
 
-This section is about building a graph out of dependencies, and running 
+This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.
 
 {exs.code_begin('ex_graph', 'Generate dependency graphs')}
@@ -1284,7 +1294,7 @@ checks based on more advanced usage tracing.
 
 In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
 
-We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you 
+We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
 won't get to run them individually until everything is done.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
@@ -1304,13 +1314,17 @@ Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/)
             'juice_obj_fix_mask'
         )
     })}
-"""
+""" # noqa: S608
 
-def main() -> None:
+
+# fmt: on
+
+
+def _main() -> None:
     for _ in range(2):
         # twice because um
         FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
 
 
 if __name__ == '__main__':
-    main()
+    _main()

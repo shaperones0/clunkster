@@ -35,7 +35,7 @@ readme:	## Autogen in readme (examples and whatnot)
 	@cog -r README.md
 
 .PHONY: check
-check: format lint test readme ## Run all local checks, fixes, and tests
+check: format lint test ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="
 
 .PHONY: help

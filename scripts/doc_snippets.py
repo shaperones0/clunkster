@@ -1,9 +1,7 @@
 """Markdown snippet model."""
 
-from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Self
-import collections.abc as col
+from enum import Enum, auto
 
 
 class SnippetType(Enum):
@@ -22,14 +20,16 @@ class Snippet:
 
 
 def s_py(code: str) -> Snippet:
+    """Shortcut for quick Python snippet."""
     return Snippet(
         type=SnippetType.PYTHON,
         content=code,
     )
 
+
 def s_md(code: str) -> Snippet:
+    """Shortcut for quick Markdown snippet."""
     return Snippet(
         type=SnippetType.MD,
         content=code,
     )
-

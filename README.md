@@ -1120,9 +1120,9 @@ from abc import ABC
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint
-from clunkster.text import read as my_read
+from clunkster import asset as my_asset, lint as my_lint, project as my_read
 from clunkster.asset import Asset
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class AssetExtAudio(my_asset.AssetSingleFile, ABC):
@@ -1188,6 +1188,7 @@ class AssetExtSfx3(AssetExtAudio):
     def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
 
+
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
     my_asset.Background,
@@ -1213,6 +1214,7 @@ def global_set_project(project_root: Path) -> None:
     PROJECT = project_root
     my_read.reg_root(PROJECT)
     LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
+
 
 assets: list[Asset] = []
 
@@ -1273,18 +1275,25 @@ import collections.abc as col
 from pathlib import Path
 from typing import override
 
-from clunkster import asset as my_asset, lint as my_lint
-from clunkster.text import location as my_location, read as my_read
+from clunkster import asset as my_asset, lint as my_lint, project as my_read
+from clunkster.text import location as my_location
 from clunkster.parse import tree as my_parse_tree
+
 
 # see ex1.1
 class AssetExtAudio: ...
+
+
 class AssetExtBgm: ...
+
+
 class AssetExtSfx: ...
+
+
 class AssetExtSfx3: ...
 
-class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
 
+class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
     rule = 'T100'
     severity = my_lint.Severity.ERROR
 
@@ -1306,7 +1315,6 @@ class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViol
 
 
 class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
-
     rule = 'T101'
     severity = my_lint.Severity.ERROR
 
@@ -1319,6 +1327,7 @@ class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
     @property
     def message(self) -> str:
         return f"{self.message_pref}: {' '.join(self.dupes)}"
+
 
 CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
     my_asset.Sprite,
@@ -1338,6 +1347,7 @@ CLUSTERABLE_ASSETS: tuple[type[my_asset.AssetHasPath], ...] = (
 PROJECT: Path = ...
 LINT: my_lint.LinterSession = ...
 
+
 def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
     tree_file = asset_cls.type_get_tree_file(PROJECT)
     line_map = my_read.line_map(tree_file)
@@ -1352,7 +1362,7 @@ def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
 
         if node.name in seen_children[path_str]:
             loc_line = node.line_num
-            loc_column = node.depth+1     # uses tab characters
+            loc_column = node.depth + 1  # uses tab characters
             LINT.push(LintTreeDuplicateFolder(
                 node=node,
                 location=my_location.Location(
@@ -1364,6 +1374,7 @@ def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
             ))
         else:
             seen_children[path_str].add(node.name)
+
 
 # check that there are no duplicates
 asset_names: set[str] = set()
@@ -1670,20 +1681,31 @@ from pathlib import Path
 import tqdm
 from ahocorasick import Automaton
 
-from clunkster import asset as my_asset, lint as my_lint
-from clunkster.text import location as my_location, read as my_read
+from clunkster import asset as my_asset, lint as my_lint, project as my_read
+from clunkster.text import location as my_location
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 
+
 # see ex1.1
 class AssetExtAudio: ...
+
+
 class AssetExtBgm: ...
+
+
 class AssetExtSfx: ...
+
+
 class AssetExtSfx3: ...
+
 
 # see ex1.3
 def asset_cluster_raw(): ...
+
+
 def asset_cluster(): ...
+
 
 def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
     if isinstance(asset, my_asset.Object):
@@ -1698,6 +1720,7 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
         yield asset.get_script_gml_file(project_root)
     # add finders for new asset types
 
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Dependency:
     """Full dependency data to be used in graph building."""
@@ -1706,6 +1729,7 @@ class Dependency:
     source_asset: my_asset.Asset
     target_asset: my_asset.Asset
     contexts: tuple[str, ...]
+
 
 # see ex1.1
 PROJECT: Path = ...

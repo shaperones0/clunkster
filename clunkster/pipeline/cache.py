@@ -31,7 +31,7 @@ class FileBuildCache:
         current_hash: str,
         outputs: col.Iterable[Path],
     ) -> bool:
-        """Whether the task needs to be executed.
+        """Whether the task doesn't need to be executed.
 
         Checks whether task input's `current_hash` has changed, or
         output files are gone.
@@ -45,6 +45,7 @@ class FileBuildCache:
         return self.data.get(task_id) == current_hash
 
     def task_is_fresh(self, task: Task) -> bool:
+        """Whether the task doesn't need to be executed."""
         return self.is_fresh(
             task_id=task.task_id,
             current_hash=task.inputs_hash,
@@ -61,7 +62,7 @@ class FileBuildCache:
 
     def save(self) -> None:
         """Save task's hashes back to cache file."""
-        temp_file = self.cache_file.with_suffix(".tmp")
+        temp_file = self.cache_file.with_suffix('.tmp')
 
         with temp_file.open('w') as f:
             json.dump(self.data, f, indent=2)

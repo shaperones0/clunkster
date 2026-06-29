@@ -2,26 +2,20 @@
 
 import collections
 import collections.abc as col
-import concurrent.futures
 import dataclasses
-import fnmatch
 import itertools as it
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
-import warnings
-from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import override, Self, Concatenate, Any
-from types import TracebackType
-import functools as ft
 import threading
+import warnings
+from abc import ABC
+from pathlib import Path
+from typing import Self, override
 
 import rustworkx as rx
-import tqdm
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
 from gmcodec import (
     core as gmc_core,
@@ -36,21 +30,48 @@ from gmcodec import (
     validate as gmc_validate,
 )
 from PIL import Image
-from rich import live as r_live, table as r_table, progress as r_progress, console as r_console, text as r_text, panel as r_panel
+from rich import (
+    console as r_console,
+)
+from rich import (
+    live as r_live,
+)
+from rich import (
+    table as r_table,
+)
+from rich import (
+    text as r_text,
+)
 
-from clunkster import asset as my_asset, lint as my_lint
-from clunkster.pipeline.events.dispatcher import EventDispatcher
-from clunkster.text import location as my_location, read as my_read
+from clunkster import asset as my_asset
+from clunkster import lint as my_lint
+from clunkster import project as my_proj
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
 from clunkster.pipeline import cache as my_cache
-from clunkster.pipeline.task import Task, TaskCopyRebase, TaskGeneric, TaskCopyTree, TaskCopy
-from clunkster.pipeline.executor import mp as my_exec_mp, thread as my_exec_thread
-from clunkster.pipeline.events import dispatcher as my_event_dispatcher, event as my_event, sink as my_event_sink
+from clunkster.pipeline.events import (
+    dispatcher as my_event_dispatcher,
+)
+from clunkster.pipeline.events import (
+    event as my_event,
+)
+from clunkster.pipeline.executor import (
+    mp as my_exec_mp,
+)
+from clunkster.pipeline.executor import (
+    thread as my_exec_thread,
+)
+from clunkster.pipeline.task import (
+    Task,
+    TaskCopy,
+    TaskCopyTree,
+    TaskGeneric,
+)
+from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
 from clunkster.pipeline.ui.base import Ui
-from clunkster.pipeline.ui.simple import UiSimple, UiSimpleAsync
-from clunkster.pipeline.ui.adapter import ui_out, ui_progress, ui_auto_sink
+from clunkster.text import location as my_location
+
 
 # <snip CLS_ASSET_EXT>
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -116,10 +137,14 @@ class AssetExtSfx3(AssetExtAudio):
     @classmethod
     def type_get_dir_rel(cls) -> Path:
         return Path('data') / 'sounds'
+
+
 # </snip CLS_ASSET_EXT>
+
 
 # <snip DEF_ASSET_SCANNABLES>
 def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
+    """Get asset's scannable code files."""
     if isinstance(asset, my_asset.Object):
         yield asset.get_object_metadata_file(project_root)
         yield asset.get_object_gml_file(project_root)
@@ -131,40 +156,55 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
     elif isinstance(asset, my_asset.Script):
         yield asset.get_script_gml_file(project_root)
     # add finders for new asset types
+
+
 # </snip DEF_ASSET_SCANNABLES>
+
 
 # <snip DEF_ASSET_SORT_KEY>
 def asset_sort_key(asset: Asset) -> tuple[str, ...]:
+    """Get asset's sort key."""
     if isinstance(asset, my_asset.AssetHasPath):
         return type(asset).type_name(), '/'.join(asset.tree_path), asset.name
 
     return type(asset).type_name(), asset.name
+
+
 # </snip DEF_ASSET_SORT_KEY>
+
 
 # <snip DEF_ASSET_CLUSTERS>
 def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
+    """Get asset's initial cluster before aliasing."""
     return asset.tree_path[0] if asset.tree_path else 'Common'
 
 
 def asset_cluster(asset: my_asset.Asset) -> str:
+    """Get asset's cluster."""
     if isinstance(asset, my_asset.AssetHasPath):
         cluster = asset_cluster_raw(asset)
         alias = ALIAS_INV.get(cluster)
         return cluster if alias is None else alias
-    return "Unknown?"
+    return 'Unknown?'
+
+
 # </snip DEF_ASSET_CLUSTERS>
+
 
 # <snip DEF_ASSET_WET_FNAME>
 def asset_wet_fname(asset: my_asset.Asset) -> str:
+    """Get asset's wet file name."""
     if isinstance(asset, AssetExtSfx):
         return f'{asset.name_clean}.wav'
-    elif isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
+    if isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
         return f'{asset.name_clean}.ogg'
-    elif isinstance(asset, my_asset.Sprite):
+    if isinstance(asset, my_asset.Sprite):
         return f'{asset.name}.gmspr'
-    elif isinstance(asset, my_asset.Background):
+    if isinstance(asset, my_asset.Background):
         return f'{asset.name}.gmbck'
     raise NotImplementedError('Asset type not supported')
+
+
 # </snip DEF_ASSET_WET_FNAME>
 
 # <snip CLUSTERABLE_ASSETS>
@@ -208,6 +248,7 @@ ALIAS_INV: dict[str, str]
 
 
 def global_set_alias(alias: dict[str, list[str]]) -> None:
+    """Global alias setting helper."""
     global ALIAS, ALIAS_INV
     ALIAS = alias
 
@@ -215,8 +256,10 @@ def global_set_alias(alias: dict[str, list[str]]) -> None:
     for name, clusters in ALIAS.items():
         for cluster in clusters:
             if cluster in ALIAS_INV:
-                raise ValueError(f'Invalid ALIAS (duplicate: \'{cluster}\')')
+                raise ValueError(f"Invalid ALIAS (duplicate: '{cluster}')")
             ALIAS_INV[cluster] = name
+
+
 # </snip ALIAS>
 
 # <snip LINT_RULES>
@@ -246,25 +289,27 @@ EXTRA_ROOTS: set[str] = {
 
 # <snip PROJECT>
 PROJECT: Path
-LINT: my_lint.LinterSession
+LINT = my_lint.LinterSession()
 
 
 def global_set_project(project_root: Path) -> None:
     """Convenience function for initializing the project."""
-
     global PROJECT, LINT
     PROJECT = project_root
-    my_read.reg_root(PROJECT)
-    LINT = my_lint.LinterSession(PROJECT, my_lint.CliConsumer())
+    my_proj.set_root(PROJECT)
+
+
 # </snip PROJECT>
 
 
-# <snip DISPATCHER_RICH>
+# <snip UI_RICH>
 # TODO why hardcode big width
 CON = r_console.Console(width=1024)
 
 
-def rich_render_row_progress(text: str, current: int, total: int, width: int = 60, color: str = "white") -> r_text.Text:
+def rich_render_row_progress(
+    text: str, current: int, total: int, width: int = 60, color: str = 'white'
+) -> r_text.Text:
     """Renders a string where the background color acts as a progress bar."""
     pct = 0.0 if total <= 0 else min(1.0, current / total)
 
@@ -273,96 +318,102 @@ def rich_render_row_progress(text: str, current: int, total: int, width: int = 6
 
     rich_text = r_text.Text('--- ')
     if fill_len > 0:
-        rich_text.append(text_padded[:fill_len], style=f"bold black on {color}")
+        rich_text.append(
+            text_padded[:fill_len], style=f'bold black on {color}'
+        )
     if fill_len < width:
-        rich_text.append(text_padded[fill_len:], style="bold white on default")
+        rich_text.append(text_padded[fill_len:], style='bold white on default')
 
     return rich_text
 
 
-
 class UiRich(Ui):
+    """Rich UI."""
+
     @override
     def __init__(self, step_name: str, width: int = 60) -> None:
+        """Initialize Rich UI."""
         self.step_name = step_name
         self.width = width
 
         # state
-        self.task_id = "..."
+        self.task_id = '...'
         self.current = 0
         self.total = 1
         self.statuses: list[str] = []
 
-        self.live = r_live.Live(self._generate_renderable(), refresh_per_second=10)
+        self.live = r_live.Live(
+            self._generate_renderable(), refresh_per_second=10
+        )
 
     def _generate_renderable(self) -> r_console.Group:
         # title + progress
-        bar_text = f"Task: {self.task_id} "
-        header = rich_render_row_progress(bar_text, self.current, self.total, self.width)
-
-        logs = r_text.Text("\n".join(self.statuses), style="dim")
-
-        return r_console.Group(
-            header,
-            logs
+        bar_text = f'Task: {self.task_id} '
+        header = rich_render_row_progress(
+            bar_text, self.current, self.total, self.width
         )
 
-    def _update(self):
+        logs = r_text.Text('\n'.join(self.statuses), style='dim')
+
+        return r_console.Group(header, logs)
+
+    def _update(self) -> None:
         self.live.update(self._generate_renderable())
 
     @override
-    def register(self, dispatcher: my_event_dispatcher.EventDispatcher):
-        dispatcher.clear()
-        dispatcher.register(my_event.TaskStarted, self.on_task_started)
-        dispatcher.register(my_event.ProgressStart, self.on_progress_start)
-        dispatcher.register(my_event.ProgressAdvance, self.on_progress_advance)
-        dispatcher.register(my_event.ProgressCompleted, self.on_progress_completed)
-        dispatcher.register(my_event.Status, self.on_status)
-        dispatcher.register(my_event.TaskFinished, self.on_task_finished)
-
-    def on_task_started(self, e: my_event.TaskStarted):
+    def on_task_started(self, e: my_event.TaskStarted) -> None:
         self.task_id = e.task_id
         self._update()
 
-    def on_progress_start(self, e: my_event.ProgressStart):
+    @override
+    def on_progress_start(self, e: my_event.ProgressStart) -> None:
         self.current = 0
         self.total = e.total
         self._update()
 
-    def on_progress_advance(self, e: my_event.ProgressAdvance):
+    @override
+    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
         self.current = e.completed
         self._update()
 
-    def on_progress_completed(self, _):
+    @override
+    def on_progress_completed(self, e: my_event.ProgressCompleted) -> None:
         self.current = self.total  # force fill
         self._update()
 
-    def on_status(self, e: my_event.Status):
-        self.statuses.append(f"| {e.text}")
+    @override
+    def on_status(self, e: my_event.Status) -> None:
+        self.statuses.append(f'| {e.text}')
         self._update()
 
-    def on_task_finished(self, e: my_event.TaskFinished):
+    @override
+    def on_task_finished(self, e: my_event.TaskFinished) -> None:
         self.current = self.total
         self._update()
 
     @override
-    def start(self):
+    def start(self) -> None:
         self.live.start()
 
     @override
-    def stop(self):
+    def stop(self) -> None:
         self.live.stop()
 
 
 @dataclasses.dataclass(slots=True)
 class WorkerState:
-    task_id: str = "Idle"
+    """Worker current state."""
+
+    task_id: str = 'Idle'
     current: int = 0
     total: int = 1
 
 
 class UiRichAsync(Ui):
-    def __init__(self, step_name: str, width: int = 120):
+    """Rich UI. Concurrents version."""
+
+    def __init__(self, step_name: str, width: int = 120) -> None:
+        """Initialize Concurrent Rich UI."""
         self.step_name = step_name
         self.width = width
 
@@ -371,43 +422,44 @@ class UiRichAsync(Ui):
         self.workers: dict[str, WorkerState] = {}
 
         self._lock = threading.Lock()
-        self.live = r_live.Live(self._generate_renderable(), refresh_per_second=10)
+        self.live = r_live.Live(
+            self._generate_renderable(), refresh_per_second=10
+        )
 
     def _generate_renderable(self) -> r_console.Group:
         # must be called within lock
 
         # progress in header
-        header_text = f" {self.step_name} ({self.total_current}/{self.total_target}) "
-        header_bar = rich_render_row_progress(header_text, self.total_current, self.total_target, self.width)
+        header_text = (
+            f' {self.step_name} ({self.total_current}/{self.total_target}) '
+        )
+        header_bar = rich_render_row_progress(
+            header_text, self.total_current, self.total_target, self.width
+        )
 
         # worker table
         table = r_table.Table(show_header=False, width=self.width, expand=True)
-        table.add_column("Worker")
+        table.add_column('Worker')
         table.add_column('Task')
 
         for worker_id, state in sorted(self.workers.items()):
-            row_bar = rich_render_row_progress(state.task_id, state.current, state.total, self.width - 2)
+            row_bar = rich_render_row_progress(
+                state.task_id, state.current, state.total, self.width - 2
+            )
             table.add_row(worker_id, row_bar)
 
         return r_console.Group(header_bar, table)
 
-    def _update(self):
+    def _update(self) -> None:
         # must be called within lock
         self.live.update(self._generate_renderable())
 
-    def update_total_progress(self, current: int, total: int):
+    def update_total_progress(self, current: int, total: int) -> None:
         """Called by main thread to update the overall step progress."""
         with self._lock:
             self.total_current = current
             self.total_target = total
             self._update()
-
-    @override
-    def register(self, dispatcher: EventDispatcher):
-        dispatcher.register(my_event.TaskStarted, self.on_task_started)
-        dispatcher.register(my_event.ProgressStart, self.on_progress_start)
-        dispatcher.register(my_event.ProgressAdvance, self.on_progress_advance)
-        dispatcher.register(my_event.TaskFinished, self.on_task_finished)
 
     def _get_worker(self, worker_id: str) -> WorkerState:
         # must be called within lock
@@ -416,14 +468,16 @@ class UiRichAsync(Ui):
             self.workers[worker_id] = WorkerState()
         return self.workers[worker_id]
 
-    def on_task_started(self, e: my_event.TaskStarted):
+    @override
+    def on_task_started(self, e: my_event.TaskStarted) -> None:
         with self._lock:
             worker = self._get_worker(e.worker_id)
             worker.task_id = e.task_id
             worker.current = 0
             self._update()
 
-    def on_progress_start(self, e: my_event.ProgressStart):
+    @override
+    def on_progress_start(self, e: my_event.ProgressStart) -> None:
         if e.worker_id == 'main':
             self.update_total_progress(0, self.total_target)
 
@@ -432,7 +486,8 @@ class UiRichAsync(Ui):
             worker.total = max(1, e.total)
             self._update()
 
-    def on_progress_advance(self, e: my_event.ProgressAdvance):
+    @override
+    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
         if e.worker_id == 'main':
             self.update_total_progress(e.completed, self.total_target)
             return
@@ -442,7 +497,8 @@ class UiRichAsync(Ui):
             worker.current = e.completed
             self._update()
 
-    def on_task_finished(self, e: my_event.TaskFinished):
+    @override
+    def on_task_finished(self, e: my_event.TaskFinished) -> None:
         if e.worker_id == 'main':
             self.update_total_progress(self.total_target, self.total_target)
             return
@@ -453,14 +509,15 @@ class UiRichAsync(Ui):
             self._update()
 
     @override
-    def start(self):
+    def start(self) -> None:
         self.live.start()
 
     @override
-    def stop(self):
+    def stop(self) -> None:
         self.live.stop()
 
-# </snip DISPATCHER_RICH>
+
+# </snip UI_RICH>
 
 CLS_UI: type[Ui] = UiRich
 CLS_UI_ASYNC: type[Ui] = UiRichAsync
@@ -479,6 +536,7 @@ class Dependency:
 
 # </snip CLS_DEPENDENCY>
 
+
 # <snip CLS_ROOM_GRAPH>
 @dataclasses.dataclass
 class RoomGraph:
@@ -488,7 +546,10 @@ class RoomGraph:
     reachable_names: set[str]
     graph: rx.PyDiGraph
     name2index: dict[str, int]
+
+
 # </snip CLS_ROOM_GRAPH>
+
 
 # <snip CLS_JUICER_CONFIG>
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -564,12 +625,22 @@ def main_ex_start() -> None:
 
 
 # <snip CLS_LINT_TREE>
-class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViolationMessage):
+class LintTreeDuplicateFolder(
+    my_lint.LinterViolationLocated, my_lint.LinterViolationMessage
+):
+    """Duplicate ``tree.yyd`` folder violation."""
 
     rule = 'T100'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, *, node: my_parse_tree.TreeNode, location: my_location.Location):
+    def __init__(
+        self, *, node: my_parse_tree.TreeNode, location: my_location.Location
+    ) -> None:
+        """Initialize violation.
+
+        :param node: Offending tree node.
+        :param location: Source location.
+        """
         self.tree_node = node
         self.loc = location
         super().__init__()
@@ -582,16 +653,22 @@ class LintTreeDuplicateFolder(my_lint.LinterViolationLocated, my_lint.LinterViol
     @override
     @property
     def message(self) -> str:
-        thing = "Folder" if self.tree_node.is_folder else "Asset???"
-        return f'Duplicate {thing}: \'{self.tree_node.name}\''
+        thing = 'Folder' if self.tree_node.is_folder else 'Asset???'
+        return f"Duplicate {thing}: '{self.tree_node.name}'"
 
 
 class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
+    """Duplicate asset violation."""
 
     rule = 'T101'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
+        """Initialize violation.
+
+        :param dupes: Names of the duplicate assets.
+        :param message_pref: Message prefix.
+        """
         super().__init__()
         self.dupes = tuple(dupes)
         self.message_pref = message_pref
@@ -599,7 +676,9 @@ class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
     @override
     @property
     def message(self) -> str:
-        return f"{self.message_pref}: {' '.join(self.dupes)}"
+        return f'{self.message_pref}: {" ".join(self.dupes)}'
+
+
 # </snip CLS_LINT_TREE>
 
 
@@ -641,10 +720,10 @@ def main_ex_lint_tree() -> None:
     # <snip MAIN_EX_LINT_TREE>
     def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
         tree_file = asset_cls.type_get_tree_file(PROJECT)
-        line_map = my_read.line_map(tree_file)
+        line_map = my_proj.line_map(tree_file)
         seen_children: dict[str, set[str]] = {}
 
-        for node in my_parse_tree.nodes(my_read.lines(tree_file)):
+        for node in my_parse_tree.nodes(my_proj.lines(tree_file)):
             # format the tuple into path string (e.g., "/Player/SkinA")
             path_str = '/' + '/'.join(node.parent_path)
 
@@ -653,16 +732,20 @@ def main_ex_lint_tree() -> None:
 
             if node.name in seen_children[path_str]:
                 loc_line = node.line_num
-                loc_column = node.depth+1     # uses tab characters
-                LINT.push(LintTreeDuplicateFolder(
-                    node=node,
-                    location=my_location.Location(
-                        file=tree_file,
-                        loc_line=loc_line,
-                        loc_column=loc_column,
-                        loc_index=line_map.get_abs_index(loc_line, loc_column),
+                loc_column = node.depth + 1  # uses tab characters
+                LINT.push(
+                    LintTreeDuplicateFolder(
+                        node=node,
+                        location=my_location.Location(
+                            file=tree_file,
+                            loc_line=loc_line,
+                            loc_column=loc_column,
+                            loc_index=line_map.get_abs_index(
+                                loc_line, loc_column
+                            ),
+                        ),
                     )
-                ))
+                )
             else:
                 seen_children[path_str].add(node.name)
 
@@ -684,16 +767,19 @@ def main_ex_lint_tree() -> None:
                 ).items()
                 if count > 1
             ]
-            LINT.push(LintTreeDuplicateAsset(
-                dupes=dupes,
-                message_pref='Duplicate assets in one type'
-            ))
+            LINT.push(
+                LintTreeDuplicateAsset(
+                    dupes=dupes, message_pref='Duplicate assets in one type'
+                )
+            )
         inters = asset_names.intersection(assets_set)
         if inters:
-            LINT.push(LintTreeDuplicateAsset(
-                dupes=inters,
-                message_pref='Duplicate assets across multiple types'
-            ))
+            LINT.push(
+                LintTreeDuplicateAsset(
+                    dupes=inters,
+                    message_pref='Duplicate assets across multiple types',
+                )
+            )
         asset_names.update(assets_set)
 
         # collect errors before parsing tree.yyd
@@ -710,13 +796,20 @@ def main_ex_lint_tree() -> None:
     LINT.consume()
     # </snip MAIN_EX_LINT_TREE>
 
+
 # <snip CLS_LINT_ALIAS>
 class LintAliasMismatch(my_lint.LinterViolationMessage):
+    """Alias mismatch violation."""
 
     rule = 'A100'
     severity = my_lint.Severity.WARNING
 
-    def __init__(self, dupes: col.Iterable[str], message_pref: str):
+    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
+        """Initialize violation.
+
+        :param dupes: Duplicate alias names.
+        :param message_pref: Message prefix.
+        """
         super().__init__()
         self.dupes = tuple(dupes)
         self.message_pref = message_pref
@@ -724,7 +817,9 @@ class LintAliasMismatch(my_lint.LinterViolationMessage):
     @override
     @property
     def message(self) -> str:
-        return f"{self.message_pref}: {' '.join(self.dupes)}"
+        return f'{self.message_pref}: {" ".join(self.dupes)}'
+
+
 # </snip CLS_LINT_ALIAS>
 
 
@@ -778,15 +873,20 @@ def main_ex_aliases() -> list[Asset]:
         table_type_to_clusters[asset_type] = list(cluster_set)
 
     # generate the table
-    clusters_all = {name for clusters in table_type_to_clusters.values() for name in clusters}
+    clusters_all = {
+        name
+        for clusters in table_type_to_clusters.values()
+        for name in clusters
+    }
     clusters_all_sorted = sorted(clusters_all)
 
-    table = r_table.Table('[bold]Type', *sorted(clusters_all), title='Clusters', padding=0)
+    table = r_table.Table(
+        '[bold]Type', *sorted(clusters_all), title='Clusters', padding=0
+    )
     for asset_type, clusters in table_type_to_clusters.items():
         cluster_set = set(clusters)
         row = (
-            clm if clm in cluster_set else ''
-            for clm in clusters_all_sorted
+            clm if clm in cluster_set else '' for clm in clusters_all_sorted
         )
         table.add_row(asset_type.type_name(), *row)
     CON.print(table)
@@ -795,16 +895,18 @@ def main_ex_aliases() -> list[Asset]:
     lint_unused_aliases = lint_existing_aliases - lint_used_aliases
     lint_extra_aliases = lint_used_aliases - lint_existing_aliases
     if lint_unused_aliases:
-        LINT.push(LintAliasMismatch(
-            dupes=lint_unused_aliases,
-            message_pref='Unused aliases'
-        ))
+        LINT.push(
+            LintAliasMismatch(
+                dupes=lint_unused_aliases, message_pref='Unused aliases'
+            )
+        )
     if lint_extra_aliases:
         # after the initial project setup, I'd upgrade this to raise
-        LINT.push(LintAliasMismatch(
-            dupes=lint_extra_aliases,
-            message_pref='Extra aliases'
-        ))
+        LINT.push(
+            LintAliasMismatch(
+                dupes=lint_extra_aliases, message_pref='Extra aliases'
+            )
+        )
     LINT.consume()
     LINT.assert_empty()
     # <md>
@@ -814,7 +916,7 @@ def main_ex_aliases() -> list[Asset]:
     return assets
 
 
-@ui_auto_sink(CLS_UI, step_name='Scanning references')
+@ui_auto_sink('Scanning references', cls_ui=CLS_UI)
 def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     """Reference scanner.
 
@@ -848,8 +950,8 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     )
 
     for asset, file_path in ui_progress(scans):
-        text = my_read.read(file_path)
-        line_map = my_read.line_map(file_path)
+        text = my_proj.read(file_path)
+        line_map = my_proj.line_map(file_path)
         matches: list[my_scan_dep.DependencyMatch] = list(
             my_scan_dep.scan(
                 text,
@@ -885,10 +987,12 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
 
     @override
     @classmethod
-    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+    def format_many(
+        cls, errors: col.Iterable[Self], *, verbose: bool = False
+    ) -> str:
         errors = list(errors)
         if not errors:
-            return f"=== {cls.rule}: no issues"
+            return f'=== {cls.rule}: no issues'
 
         # group by clusters
         cluster_errors: dict[str, list[Self]] = {}
@@ -896,7 +1000,10 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
             asset = err.asset
             cluster_errors.setdefault(asset_cluster(asset), []).append(err)
 
-        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        lines = [
+            f'=== {cls.rule}: {len(errors)} issue(s) across '
+            f'{len(cluster_errors)} clusters:'
+        ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
 
@@ -906,17 +1013,26 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
                 if verbose:
                     lines.append(err.format_verbose())
                 else:
-                    lines.append(f"  {err.format_li()}")
+                    lines.append(f'  {err.format_li()}')
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
+
+
 # </snip CLS_LINT_ASSET_CLUSTER>
+
 
 # <snip CLS_LINT_UNUSED>
 class LintUnused(LintAssetCluster):
+    """Unused asset violation."""
+
     rule = 'U100'
     severity = my_lint.Severity.WARNING
 
     def __init__(self, asset: Asset) -> None:
+        """Initialize violation.
+
+        :param asset: The unused asset.
+        """
         super().__init__()
         self._asset = asset
 
@@ -924,10 +1040,12 @@ class LintUnused(LintAssetCluster):
     @property
     def asset(self) -> Asset:
         return self._asset
+
+
 # </snip CLS_LINT_UNUSED>
 
 
-@ui_auto_sink(CLS_UI, "Lint: unused assets")
+@ui_auto_sink('Lint: unused assets', cls_ui=CLS_UI)
 def main_ex_lint_unused(
     dependencies: list[Dependency], assets: list[Asset]
 ) -> None:
@@ -961,18 +1079,28 @@ def main_ex_lint_unused(
     # unwrap
     violations_cnt = LINT.consume(LintUnused)
     if violations_cnt:
-        ui_out(f"\nFound {violations_cnt} violations.")
+        ui_out(f'\nFound {violations_cnt} violations.')
     else:
-        ui_out("\nSomehow all clear...")
+        ui_out('\nSomehow all clear...')
     # </snip MAIN_EX_LINT_UNUSED>
 
 
 # <snip CLS_LINT_CROSSREF>
-class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.LinterViolationMessage):
+class LintCrossref(
+    my_lint.LinterViolationLocated,
+    LintAssetCluster,
+    my_lint.LinterViolationMessage,
+):
+    """Cross-cluster reference violation."""
+
     rule = 'C100'
     severity = my_lint.Severity.ERROR
 
     def __init__(self, dependency: Dependency) -> None:
+        """Initialize the violation.
+
+        :param dependency: Offending dependency edge.
+        """
         super().__init__()
         self._dependency = dependency
 
@@ -993,14 +1121,13 @@ class LintCrossref(my_lint.LinterViolationLocated, LintAssetCluster, my_lint.Lin
         target = self._dependency.target_asset
         ctx = self._dependency.contexts
         ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
-        return (
-            f"{target.name} [{asset_cluster(target)}]"
-            f'{ctx_str}'
-        )
+        return f'{target.name} [{asset_cluster(target)}]{ctx_str}'
+
+
 # </snip CLS_LINT_CROSSREF>
 
 
-@ui_auto_sink(CLS_UI, "Lint: cross-cluster references")
+@ui_auto_sink('Lint: cross-cluster references', cls_ui=CLS_UI)
 def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     """Validate cluster boundaries.
 
@@ -1076,14 +1203,14 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     # you can turn on verbose=True
     violations_cnt = LINT.consume(LintCrossref)
     if violations_cnt:
-        ui_out(f"\nFound {violations_cnt} violations.")
+        ui_out(f'\nFound {violations_cnt} violations.')
     else:
-        ui_out("Clear!!!")
+        ui_out('Clear!!!')
 
     # </snip MAIN_EX_LINT_CROSSREF>
 
 
-@ui_auto_sink(CLS_UI, "Building graph")
+@ui_auto_sink('Building graph', cls_ui=CLS_UI)
 def main_ex_graph(
     assets: list[Asset], dependencies: list[Dependency]
 ) -> dict[str, RoomGraph]:
@@ -1201,9 +1328,7 @@ def main_ex_graph(
         ]
 
         ui_out('- ' + ' '.join(sorted(cluster_set)))
-        for room in ui_progress(
-            rooms
-        ):
+        for room in ui_progress(rooms):
             room_name = room.name
             if room_name not in name_to_index:
                 continue
@@ -1233,7 +1358,7 @@ def main_ex_graph(
     return room_graph_data
 
 
-@ui_auto_sink(CLS_UI, "Lint: unreachable assets")
+@ui_auto_sink('Lint: unreachable assets', cls_ui=CLS_UI)
 def main_ex_lint_unused_graph(
     assets: list[Asset], room_graph_data: dict[str, RoomGraph]
 ) -> None:
@@ -1274,16 +1399,33 @@ def main_ex_lint_unused_graph(
     if violations_cnt:
         ui_out(f'\nFound {violations_cnt} unreachable assets.')
     else:
-        ui_out("\nClear??? omg")
+        ui_out('\nClear??? omg')
     # </snip MAIN_EX_LINT_UNUSED_GRAPH>
 
 
 # <snip CLS_LINT_CROSSREF_GRAPH>
 class LintCrossrefGraph(my_lint.LinterViolationAsset):
+    """Room cluster boundary violation."""
+
     rule = 'C101'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, room: my_asset.Room, room_allowed_clusters: set[str], target_name: str, target_cluster: str, trace: str) -> None:
+    def __init__(
+        self,
+        room: my_asset.Room,
+        room_allowed_clusters: set[str],
+        target_name: str,
+        target_cluster: str,
+        trace: str,
+    ) -> None:
+        """Initialize the violation.
+
+        :param room: Offending room.
+        :param room_allowed_clusters: Room's allowed clusters.
+        :param target_name: Offending asset name.
+        :param target_cluster: Offending asset's cluster.
+        :param trace: Trace info.
+        """
         super().__init__()
         self.room = room
         self.room_allowed_clusters = room_allowed_clusters
@@ -1298,10 +1440,12 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
 
     @override
     @classmethod
-    def format_many(cls, errors: col.Iterable[Self], *, verbose: bool = False) -> str:
+    def format_many(
+        cls, errors: col.Iterable[Self], *, verbose: bool = False
+    ) -> str:
         errors = list(errors)
         if not errors:
-            return f"=== {cls.rule}: no issues"
+            return f'=== {cls.rule}: no issues'
 
         # group by clusters
         cluster_errors: dict[str, list[Self]] = {}
@@ -1312,7 +1456,10 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
             if room.name not in rooms_allowed_clusters:
                 rooms_allowed_clusters[room.name] = err.room_allowed_clusters
 
-        lines = [f"=== {cls.rule}: {len(errors)} issue(s) across {len(cluster_errors)} clusters:"]
+        lines = [
+            f'=== {cls.rule}: {len(errors)} issue(s) across '
+            f'{len(cluster_errors)} clusters:'
+        ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
             # sort
@@ -1324,7 +1471,10 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                 room_errors.setdefault(room.name, []).append(err)
             for room, errors in sorted(room_errors.items()):
                 lines.append(f'Violations in Room: {room}')
-                lines.append(f'-- Allowed Clusters: {" ".join(rooms_allowed_clusters[room])}')
+                lines.append(
+                    f'-- Allowed Clusters: '
+                    f'{" ".join(rooms_allowed_clusters[room])}'
+                )
 
                 # group by target
                 target_errors: dict[str, list[Self]] = {}
@@ -1332,14 +1482,15 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                     target_errors.setdefault(err.target_name, []).append(err)
                 for target, errors in sorted(target_errors.items()):
                     lines.append(f'  {target} [{errors[0].target_cluster}]')
-                    for err in errors:
-                        lines.append(f'    {err.trace}')
+                    lines.extend(f'    {err.trace}' for err in errors)
 
-        return "\n".join(lines)
+        return '\n'.join(lines)
+
+
 # </snip CLS_LINT_CROSSREF_GRAPH>
 
 
-@ui_auto_sink(CLS_UI, "Lint: room cluster boundaries")
+@ui_auto_sink('Lint: room cluster boundaries', cls_ui=CLS_UI)
 def main_ex_lint_crossref_graph(
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
@@ -1356,7 +1507,6 @@ def main_ex_lint_crossref_graph(
     dependency edge, therefore some deduction is required in order to pinpoint
     the exact offenders. Also, I recommend re-running the tool after each fix.
     """
-
     # <snip MAIN_EX_LINT_CROSSREF_GRAPH>
 
     # asset clusters lookup
@@ -1406,13 +1556,16 @@ def main_ex_lint_crossref_graph(
             )
             if target_idx in room_paths:
                 path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
-                LINT.push(LintCrossrefGraph(
-                    room=rg.room,
-                    room_allowed_clusters=allowed_clusters,
-                    target_name=illegal_name,
-                    target_cluster=target_cluster,
-                    trace=f'Traceback via Room Root: {" -> ".join(path_names)}'
-                ))
+                LINT.push(
+                    LintCrossrefGraph(
+                        room=rg.room,
+                        room_allowed_clusters=allowed_clusters,
+                        target_name=illegal_name,
+                        target_cluster=target_cluster,
+                        trace=f'Traceback via Room Root: '
+                        f'{" -> ".join(path_names)}',
+                    )
+                )
                 path_found = True
 
             # trace 2 - implicit contamination via global controllers
@@ -1422,25 +1575,31 @@ def main_ex_lint_crossref_graph(
                 )
                 if target_idx in p_paths:
                     path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
-                    LINT.push(LintCrossrefGraph(
-                        room=rg.room,
-                        room_allowed_clusters=allowed_clusters,
-                        target_name=illegal_name,
-                        target_cluster=target_cluster,
-                        trace=f'Traceback via Persistent Root ({p_name}): {" -> ".join(path_names)}'
-                    ))
+                    LINT.push(
+                        LintCrossrefGraph(
+                            room=rg.room,
+                            room_allowed_clusters=allowed_clusters,
+                            target_name=illegal_name,
+                            target_cluster=target_cluster,
+                            trace=f'Traceback via Persistent Root ({p_name}): '
+                            f'{" -> ".join(path_names)}',
+                        )
+                    )
 
                     path_found = True
                     break
 
             if not path_found:
-                LINT.push(LintCrossrefGraph(
-                    room=rg.room,
-                    room_allowed_clusters=allowed_clusters,
-                    target_name=illegal_name,
-                    target_cluster=target_cluster,
-                    trace='Traceback: Path unknown (Possibly misconfigured structure)'
-                ))
+                LINT.push(
+                    LintCrossrefGraph(
+                        room=rg.room,
+                        room_allowed_clusters=allowed_clusters,
+                        target_name=illegal_name,
+                        target_cluster=target_cluster,
+                        trace='Traceback: Path unknown (Possibly '
+                        'misconfigured structure)',
+                    )
+                )
 
         if total_violations > 1000:  # noqa: PLR2004
             ui_out('\nLinter exceeded 1000 violations, bailing out')
@@ -1461,10 +1620,10 @@ def main_ex_lint_crossref_graph(
 
 # <snip DEFS_JUICE>
 def juice_sprite(
-        *,
-        meta: my_asset.SpriteMetadata,
-        images: col.Iterable[Path],
-        out_file: Path
+    *,
+    meta: my_asset.SpriteMetadata,
+    images: col.Iterable[Path],
+    out_file: Path,
 ) -> None:
     """Juice a sprite into external ``.gmspr`` file.
 
@@ -1472,7 +1631,6 @@ def juice_sprite(
     :param images: Sprite images.
     :param out_file: File to write resulting ``.gmspr`` bytes to.
     """
-
     frames_bgra: list[bytes] = []
     width, height = 0, 0
 
@@ -1510,10 +1668,7 @@ def juice_sprite(
 
 
 def juice_background(
-        *,
-        meta: my_asset.BackgroundMetadata,
-        image: Path,
-        out_file: Path
+    *, meta: my_asset.BackgroundMetadata, image: Path, out_file: Path
 ) -> None:
     """Juice a background into external ``.gmbck`` file.
 
@@ -1597,11 +1752,11 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
 
 
 def juice_obj_fix_mask(
-        *,
-        obj_name: str,
-        obj_has_parent: bool,
-        input_gml: str,
-        output_gml_path: Path,
+    *,
+    obj_name: str,
+    obj_has_parent: bool,
+    input_gml: str,
+    output_gml_path: Path,
 ) -> None:
     """Fix objects masks not updating when replacing sprites.
 
@@ -1724,6 +1879,8 @@ def juice_obj_fix_mask(
         input_gml += new_block
 
         output_gml_path.write_text(input_gml, encoding='utf-8', newline='\n')
+
+
 # <md>
 # Now, I didn't add any code for you to test those functions. Those can be
 # "tested" in the fully assembling the pipeline at the end.
@@ -1764,12 +1921,18 @@ class TaskEncodeSprite(TaskGeneric):
     """Encode sprite into an external ``.gmspr`` file."""
 
     def __init__(
-            self,
-            *,
-            sprite: my_asset.Sprite,
-            dir_input_root: Path,
-            dir_wet_root: Path,
+        self,
+        *,
+        sprite: my_asset.Sprite,
+        dir_input_root: Path,
+        dir_wet_root: Path,
     ) -> None:
+        """Initialize the task.
+
+        :param sprite: Sprite to encode.
+        :param dir_input_root: Input project root.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
         file_metadata = sprite.get_sprite_metadata_file(dir_input_root)
         self.sprite_meta = sprite.get_sprite_metadata(dir_input_root)
         self.sprite_images = tuple(
@@ -1777,15 +1940,16 @@ class TaskEncodeSprite(TaskGeneric):
             for frame in range(self.sprite_meta.frames)
         )
 
-        self.file_output_gmspr = dir_wet_root / type(sprite).type_get_dir_rel() / asset_wet_fname(sprite)
+        self.file_output_gmspr = (
+            dir_wet_root
+            / type(sprite).type_get_dir_rel()
+            / asset_wet_fname(sprite)
+        )
 
         super().__init__(
             task_id=f'proc_spr_{sprite.name}',
-            inputs=(
-                file_metadata,
-                *self.sprite_images
-            ),
-            outputs=(self.file_output_gmspr,)
+            inputs=(file_metadata, *self.sprite_images),
+            outputs=(self.file_output_gmspr,),
         )
 
     @override
@@ -1795,32 +1959,40 @@ class TaskEncodeSprite(TaskGeneric):
             images=self.sprite_images,
             out_file=self.file_output_gmspr,
         )
-        pass
 
 
 class TaskEncodeBackground(TaskGeneric):
     """Encode background into an external ``.gmbck`` file."""
 
     def __init__(
-            self,
-            *,
-            background: my_asset.Background,
-            dir_input_root: Path,
-            dir_wet_root: Path,
+        self,
+        *,
+        background: my_asset.Background,
+        dir_input_root: Path,
+        dir_wet_root: Path,
     ) -> None:
+        """Initialize the task.
+
+        :param background: Background to encode.
+        :param dir_input_root: Input project root.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
         file_metadata = background.get_background_metadata_file(dir_input_root)
-        self.background_meta = background.get_background_metadata(dir_input_root)
+        self.background_meta = background.get_background_metadata(
+            dir_input_root
+        )
         self.background_image = background.get_background_image(dir_input_root)
 
-        self.file_output_gmbck = dir_wet_root / type(background).type_get_dir_rel() / asset_wet_fname(background)
+        self.file_output_gmbck = (
+            dir_wet_root
+            / type(background).type_get_dir_rel()
+            / asset_wet_fname(background)
+        )
 
         super().__init__(
             task_id=f'proc_bg_{background.name}',
-            inputs=(
-                file_metadata,
-                self.background_image
-            ),
-            outputs=(self.file_output_gmbck,)
+            inputs=(file_metadata, self.background_image),
+            outputs=(self.file_output_gmbck,),
         )
 
     @override
@@ -1836,18 +2008,27 @@ class TaskCompressAudio(TaskGeneric):
     """Compress audio."""
 
     def __init__(
-            self,
-            *,
-            audio: AssetExtAudio,
-            dir_wet_root: Path,
+        self,
+        *,
+        audio: AssetExtAudio,
+        dir_wet_root: Path,
     ) -> None:
+        """Initialize the task.
+
+        :param audio: Background to compress.
+        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        """
         self.audio = audio
-        self.file_output = dir_wet_root / type(audio).type_get_dir_rel() / asset_wet_fname(audio)
+        self.file_output = (
+            dir_wet_root
+            / type(audio).type_get_dir_rel()
+            / asset_wet_fname(audio)
+        )
 
         super().__init__(
             task_id=f'compress_{audio.name_clean}',
             inputs=(audio.file,),
-            outputs=(self.file_output,)
+            outputs=(self.file_output,),
         )
 
     @override
@@ -1859,25 +2040,39 @@ class TaskFixMaskObjects(TaskGeneric):
     """Copy object and inject mask fix."""
 
     def __init__(
-            self,
-            *,
-            obj: my_asset.Object,
-            dir_input_root: Path,
-            dir_out_root: Path,
+        self,
+        *,
+        obj: my_asset.Object,
+        dir_input_root: Path,
+        dir_out_root: Path,
     ) -> None:
+        """Initialize the task.
+
+        :param obj: Object to fix.
+        :param dir_input_root: Input project root.
+        :param dir_out_root: Output project root.
+        """
         self.file_input_meta = obj.get_object_metadata_file(dir_input_root)
         self.file_input_gml = obj.get_object_gml_file(dir_input_root)
 
-        self.file_output_meta = dir_out_root / self.file_input_meta.relative_to(dir_input_root)
-        self.file_output_gml = dir_out_root / self.file_input_gml.relative_to(dir_input_root)
+        self.file_output_meta = (
+            dir_out_root / self.file_input_meta.relative_to(dir_input_root)
+        )
+        self.file_output_gml = dir_out_root / self.file_input_gml.relative_to(
+            dir_input_root
+        )
 
         meta = obj.get_object_metadata(dir_input_root)
         self.obj_name = obj.name
         self.obj_has_parent = bool(meta.parent)
         # objects gml files are guaranteed to exist
         # using read module because this gml was likely already read before
-        self.obj_input_gml = my_read.read(obj.get_object_gml_file(dir_input_root))
-        self.obj_output_gml_file = dir_out_root / obj.get_object_gml_file(dir_input_root).relative_to(dir_input_root)
+        self.obj_input_gml = my_proj.read(
+            obj.get_object_gml_file(dir_input_root)
+        )
+        self.obj_output_gml_file = dir_out_root / obj.get_object_gml_file(
+            dir_input_root
+        ).relative_to(dir_input_root)
 
         super().__init__(
             task_id=f'fixmasks_{obj.name}',
@@ -1911,12 +2106,14 @@ def main_juicer_classes() -> None:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class BuildTasks:
+    """Build tasks."""
+
     tasks_threaded: tuple[Task, ...]
     tasks_mp: tuple[Task, ...]
 
 
-@ui_auto_sink(CLS_UI, "Juicer: generate tasks")
-def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
+@ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
+def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
     """Run the thing.
 
     This stage is responsible for mapping out source project, generating
@@ -1932,7 +2129,6 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     Therefore, I've made logic of task generation very explicit. Also, this
     step does some of the cheap tasks, like creating build dir and symlinks.
     """
-
     # filter assets by their juiceable type
     asset_sprites: list[my_asset.Sprite] = []
     asset_backgrounds: list[my_asset.Background] = []
@@ -1948,7 +2144,10 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         if isinstance(asset, AssetExtAudio):
             asset_audio.append(asset)
 
-    img_dry = JUICER.dir_dry / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
+    img_dry = (
+        JUICER.dir_dry
+        / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
+    )
     dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
     tasks_threaded: list[Task] = []
     tasks_mp: list[Task] = []
@@ -1959,31 +2158,32 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         # this ain't IO bound operation so do it in-place
         output_dir = JUICER.dir_out / pth.relative_to(PROJECT)
         if not output_dir.is_symlink():
-            output_dir.symlink_to(
-                pth,
-                target_is_directory=True
+            output_dir.symlink_to(pth, target_is_directory=True)
+
+    def copy_rebase(*files: Path) -> None:
+        tasks_threaded.append(
+            TaskCopy(
+                *(
+                    (_file, JUICER.dir_out / _file.relative_to(PROJECT))
+                    for _file in files
+                )
             )
+        )
 
     def type_copy_yyd(asset_type: type[my_asset.AssetBuiltin]) -> None:
-        tasks_threaded.append(TaskCopyRebase(
+        copy_rebase(
             asset_type.type_get_tree_file(PROJECT),
             asset_type.type_get_index_file(PROJECT),
-            dir_input_root=PROJECT,
-            dir_output_root=JUICER.dir_out
-        ))
+        )
 
     def map_root(dir_root: Path) -> None:
         """Map project root."""
         for pth in dir_root.iterdir():
             if pth.is_file():
                 if pth.suffix == '.gm82':
-                    tasks_threaded.append(TaskCopyRebase(
-                        pth,
-                        dir_input_root=PROJECT,
-                        dir_output_root=JUICER.dir_out
-                    ))
+                    copy_rebase(pth)
                 else:
-                    raise NotImplementedError("Unknown file in project root")
+                    raise NotImplementedError('Unknown file in project root')
                 continue
             assert pth.is_dir()
             match pth.name:
@@ -2015,10 +2215,12 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
                     # copy (we'll have to dynamically change a few scripts)
                     #  using copytree on the whole tree might be faster than
                     #  copying individual assets
-                    tasks_threaded.append(TaskCopyTree(
-                        pth,
-                        JUICER.dir_out / pth.relative_to(PROJECT),
-                    ))
+                    tasks_threaded.append(
+                        TaskCopyTree(
+                            pth,
+                            JUICER.dir_out / pth.relative_to(PROJECT),
+                        )
+                    )
                 case 'settings':
                     # symlink
                     pth_symlink(pth)
@@ -2033,18 +2235,13 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
 
     def map_data(dir_data: Path) -> None:
         """Map data folder."""
-
         # make sure data folder exists
         (JUICER.dir_out / dir_data.relative_to(PROJECT)).mkdir(exist_ok=True)
 
         # you wanna change names to reflect paths in AssetExtAudio classes
         for pth in dir_data.iterdir():
             if pth.is_file():
-                tasks_threaded.append(TaskCopyRebase(
-                    pth,
-                    dir_input_root=PROJECT,
-                    dir_output_root=JUICER.dir_out
-                ))
+                copy_rebase(pth)
                 continue
             match pth.name:
                 case 'music':
@@ -2052,13 +2249,15 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
                     map_audio()
                 case 'sounds':
                     # process sfx + sfx3
-                    pass    # done above
+                    pass  # done above
                 case _:
                     # copy idk
-                    tasks_threaded.append(TaskCopyTree(
-                        pth,
-                        JUICER.dir_out / pth.relative_to(PROJECT),
-                    ))
+                    tasks_threaded.append(
+                        TaskCopyTree(
+                            pth,
+                            JUICER.dir_out / pth.relative_to(PROJECT),
+                        )
+                    )
 
     def map_backgrounds() -> None:
         """Map backgrounds."""
@@ -2066,32 +2265,27 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         type_copy_yyd(my_asset.Background)
 
         for bg in asset_backgrounds:
-            if asset_cluster(bg) == "Common":
+            if asset_cluster(bg) == 'Common':
                 # copy as is
-                tasks_threaded.append(TaskCopyRebase(
+                copy_rebase(
                     bg.get_background_metadata_file(PROJECT),
                     bg.get_background_image(PROJECT),
-                    dir_input_root=PROJECT,
-                    dir_output_root=JUICER.dir_out
-                ))
+                )
                 continue
             # copy metadata
-            tasks_threaded.append(TaskCopyRebase(
-                bg.get_background_metadata_file(PROJECT),
-                dir_input_root=PROJECT,
-                dir_output_root=JUICER.dir_out
-            ))
+            copy_rebase(bg.get_background_metadata_file(PROJECT))
             # copy dry image
-            tasks_threaded.append(TaskCopy(
-                file_input=img_dry,
-                file_output=bg.get_background_image(JUICER.dir_out)
-            ))
+            tasks_threaded.append(
+                TaskCopy((img_dry, bg.get_background_image(JUICER.dir_out)))
+            )
             # generate wet image
-            tasks_mp.append(TaskEncodeBackground(
-                background=bg,
-                dir_input_root=PROJECT,
-                dir_wet_root=dir_wet / asset_cluster(bg)
-            ))
+            tasks_mp.append(
+                TaskEncodeBackground(
+                    background=bg,
+                    dir_input_root=PROJECT,
+                    dir_wet_root=dir_wet / asset_cluster(bg),
+                )
+            )
 
     def map_sprites() -> None:
         """Map sprites."""
@@ -2099,63 +2293,68 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         type_copy_yyd(my_asset.Sprite)
 
         for sprite in asset_sprites:
-            if asset_cluster(sprite) == "Common":
+            if asset_cluster(sprite) == 'Common':
                 # copy as is
-                tasks_threaded.append(TaskCopyTree(
-                    dir_input=sprite.get_sprite_folder(PROJECT),
-                    dir_output=sprite.get_sprite_folder(JUICER.dir_out)
-                ))
+                tasks_threaded.append(
+                    TaskCopyTree(
+                        dir_input=sprite.get_sprite_folder(PROJECT),
+                        dir_output=sprite.get_sprite_folder(JUICER.dir_out),
+                    )
+                )
                 continue
             # copy metadata
-            tasks_threaded.append(TaskCopyRebase(
-                sprite.get_sprite_metadata_file(PROJECT),
-                dir_input_root=PROJECT,
-                dir_output_root=JUICER.dir_out
-            ))
+            copy_rebase(sprite.get_sprite_metadata_file(PROJECT))
             # copy dry images
             meta = sprite.get_sprite_metadata(PROJECT)
-            for image_index in range(meta.frames):
-                tasks_threaded.append(TaskCopy(
-                    file_input=img_dry,
-                    file_output=sprite.get_sprite_image(JUICER.dir_out, image_index)
-                ))
+            # make separate tasks cause some images are large
+            tasks_threaded.extend(
+                TaskCopy(
+                    (
+                        img_dry,
+                        sprite.get_sprite_image(JUICER.dir_out, image_index),
+                    ),
+                )
+                for image_index in range(meta.frames)
+            )
+
             # generate wet image
-            tasks_mp.append(TaskEncodeSprite(
-                sprite=sprite,
-                dir_input_root=PROJECT,
-                dir_wet_root=dir_wet / asset_cluster(sprite)
-            ))
+            tasks_mp.append(
+                TaskEncodeSprite(
+                    sprite=sprite,
+                    dir_input_root=PROJECT,
+                    dir_wet_root=dir_wet / asset_cluster(sprite),
+                )
+            )
 
     def map_audio() -> None:
         """Map music."""
         # no yyd files
         for audio in asset_audio:
-            if asset_cluster(audio) == "Common":
+            if asset_cluster(audio) == 'Common':
                 # copy as is
-                tasks_threaded.append(TaskCopyRebase(
-                    audio.file,
-                    dir_input_root=PROJECT,
-                    dir_output_root=JUICER.dir_out
-                ))
+                copy_rebase(audio.file)
                 continue
             # no metadata or dry stuff
-            tasks_mp.append(TaskCompressAudio(
-                audio=audio,
-                dir_wet_root=dir_wet / asset_cluster(audio)
-            ))
+            tasks_mp.append(
+                TaskCompressAudio(
+                    audio=audio, dir_wet_root=dir_wet / asset_cluster(audio)
+                )
+            )
 
     def map_objects() -> None:
         """Map objects."""
         # copy yyd
         type_copy_yyd(my_asset.Object)
 
-        for obj in asset_objects:
-            # add all regardless of cluster
-            tasks_threaded.append(TaskFixMaskObjects(
+        # add all regardless of cluster
+        tasks_threaded.extend(
+            TaskFixMaskObjects(
                 obj=obj,
                 dir_input_root=PROJECT,
-                dir_out_root=JUICER.dir_out
-            ))
+                dir_out_root=JUICER.dir_out,
+            )
+            for obj in asset_objects
+        )
 
     # ensure output dir exists before creating symlinks
     JUICER.dir_out.mkdir(parents=True, exist_ok=True)
@@ -2168,30 +2367,31 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         tasks_mp=tuple(tasks_mp),
     )
 
-    return build_tasks
+    return build_tasks  # noqa: RET504
 
 
 def main_juicer_run(tasks: BuildTasks) -> None:
     """Run generated build tasks."""
-
     dispatcher = my_event_dispatcher.EventDispatcher()
     cache = my_cache.FileBuildCache(JUICER.file_cache)
 
-    print("Starting threaded tasks")
-    with UiRichAsync("Threaded tasks") as ui:
+    print('Starting threaded tasks')
+    with UiRichAsync('Threaded tasks') as ui:
         ui.register(dispatcher)
         ui.update_total_progress(0, len(tasks.tasks_threaded))
 
-        my_exec_thread.execute_threaded(tasks.tasks_threaded, cache, dispatcher)
+        my_exec_thread.execute_threaded(
+            tasks.tasks_threaded, cache, dispatcher
+        )
 
-    print("Starting mp tasks")
-    with UiRichAsync("Multiprocessing tasks") as ui:
+    print('Starting mp tasks')
+    with UiRichAsync('Multiprocessing tasks') as ui:
         ui.register(dispatcher)
         ui.update_total_progress(0, len(tasks.tasks_mp))
 
         my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
 
-    print("Dun")
+    print('Dun')
 
 
 def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
@@ -2260,7 +2460,10 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
         # get wet file location
 
         asset_name_to_file_wet[asset.name] = (
-            JUICER.rel_dir_wet / asset_cluster(asset) / type(asset).type_get_dir_rel() / asset_wet_fname(asset)
+            JUICER.rel_dir_wet
+            / asset_cluster(asset)
+            / type(asset).type_get_dir_rel()
+            / asset_wet_fname(asset)
         ).as_posix()
 
     # common params for writing anything related to game maker
@@ -2453,7 +2656,6 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     # --- COG_END: MAIN_EX_JUICER_GEN_GML ---
 
 
-
 def main_juicer2_gm_compile() -> None:
     r"""One last step is automatic compile.
 
@@ -2565,7 +2767,9 @@ def _load_private(config_dir: Path) -> None:
 
     # ALIAS
     _file_private_alias = config_dir / 'alias.json'
-    global_set_alias(json.loads(_file_private_alias.read_text(encoding='utf-8')))
+    global_set_alias(
+        json.loads(_file_private_alias.read_text(encoding='utf-8'))
+    )
 
     # LINT_RULES
     _file_private_lint_rules = config_dir / 'lint_rules.json'
@@ -2586,8 +2790,6 @@ def _load_private(config_dir: Path) -> None:
 
 def main() -> None:
     """Pipeline private entrypoint."""
-    import sys
-
     _load_private(Path(sys.argv[1]))
 
     # allow testing tutorials on private data as well

@@ -1,12 +1,13 @@
+"""Common executor utils."""
 
 import collections.abc as col
-from dataclasses import dataclass
 import traceback
+from dataclasses import dataclass
 
-from clunkster.pipeline.task import Task
 from clunkster.pipeline.cache import FileBuildCache
-from clunkster.pipeline.events.context import ExecutionContext
 from clunkster.pipeline.events import event
+from clunkster.pipeline.events.context import ExecutionContext
+from clunkster.pipeline.task import Task
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,17 +23,18 @@ def tasks_filter_stale(
     tasks: col.Iterable[Task],
     cache: FileBuildCache,
 ) -> tuple[list[Task], int]:
-    """Return stale tasks and number of cached tasks."""
+    """Filter tasks by their cache status.
 
+    :param tasks: Tasks to filter.
+    :param cache: Build cache.
+    :return: List of stale tasks (needs to be executed) and number of cached
+      tasks.
+    """
     stale: list[Task] = []
     cached = 0
 
     for task in tasks:
-        if cache.is_fresh(
-            task_id=task.task_id,
-            current_hash=task.inputs_hash,
-            outputs=task.outputs_cached,
-        ):
+        if cache.task_is_fresh(task):
             cached += 1
         else:
             stale.append(task)
@@ -43,7 +45,16 @@ def tasks_filter_stale(
 def tasks_apply_results(
     cache: FileBuildCache,
     results: col.Iterable[tuple[Task, ExecuteTaskResult]],
+    *,
+    assert_no_fail: bool = False,
 ) -> tuple[int, int]:
+    """Apply results of tasks into the cache.
+
+    :param cache: Build cache.
+    :param results: Iterable of tasks and their respective results.
+    :param assert_no_fail: Assert none of the tasks have failed.
+    :return: Number of succeeded tasks and number of failed tasks.
+    """
     success = 0
     failed = 0
 
@@ -52,18 +63,13 @@ def tasks_apply_results(
             cache.update(task.task_id, task.inputs_hash)
             success += 1
         else:
-            print(
-                f"\nTask {task.task_id} failed:"
-                f"\n{result.error}"
-            )
+            print(f'\nTask {task.task_id} failed:\n{result.error}')
             failed += 1
 
     cache.save()
 
-    if failed:
-        raise RuntimeError(
-            f"{failed} task(s) failed."
-        )
+    if assert_no_fail and failed:
+        raise RuntimeError(f'{failed} task(s) failed.')
 
     return success, failed
 
@@ -81,24 +87,27 @@ def task_exec(task: Task, ctx: ExecutionContext) -> ExecuteTaskResult:
     ctx.sink.emit(event.TaskStarted(task_id=task.task_id))
     try:
         task.execute()
-    except Exception as err:  # noqa: BLE001
-        ctx.sink.emit(event.TaskFinished(
-            task_id=task.task_id,
-            success=False,
-        ))
+    except Exception:  # noqa: BLE001
+        ctx.sink.emit(
+            event.TaskFinished(
+                task_id=task.task_id,
+                success=False,
+            )
+        )
         return ExecuteTaskResult(
             task_id=task.task_id,
             success=False,
             error=traceback.format_exc(),
         )
     else:
-        ctx.sink.emit(event.TaskFinished(
-            task_id=task.task_id,
-            success=True,
-        ))
+        ctx.sink.emit(
+            event.TaskFinished(
+                task_id=task.task_id,
+                success=True,
+            )
+        )
         return ExecuteTaskResult(
             task_id=task.task_id,
             success=True,
             error='',
         )
-
