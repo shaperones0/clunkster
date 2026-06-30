@@ -3628,7 +3628,9 @@ Few things make this process a bit messy:
 Therefore, I've made logic of task generation very explicit. Also, this step does some of the cheaper tasks, like creating build dir and symlinks.
 
 ```py
+import collections
 import dataclasses
+import itertools as it
 from pathlib import Path
 
 from clunkster import asset as my_asset
@@ -3933,6 +3935,17 @@ JUICER.dir_out.mkdir(parents=True, exist_ok=True)
 
 # run mapper
 map_root(PROJECT)
+
+# validate all tasks have unique ids juuust in case
+dupes = [
+    item
+    for item, count in collections.Counter(
+        task.task_id for task in it.chain(tasks_threaded, tasks_mp)
+    ).items()
+    if count > 1
+]
+if dupes:
+    raise ValueError(f'Duplicate task ids: {dupes}')
 
 build_tasks = BuildTasks(
     tasks_threaded=tuple(tasks_threaded),

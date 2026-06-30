@@ -128,7 +128,7 @@ class TaskCopy(TaskGeneric):
         super().__init__(
             task_id=f'copy_{
                 ":".join(project.try_rel(file) for file in files_input)
-            }',
+            }->{":".join(project.try_rel(file) for file in files_output)}',
             inputs=files_input,
             outputs=files_output,
         )
@@ -165,7 +165,7 @@ class TaskCopyTree(TaskGeneric):
         )
 
         super().__init__(
-            task_id=f'copytree_{self.dir_input}',
+            task_id=f'copytree_{self.dir_input}->{self.dir_output}',
             inputs=self.input_files,
             outputs=self.output_files,
         )

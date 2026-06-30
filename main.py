@@ -2502,6 +2502,17 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
     # run mapper
     map_root(PROJECT)
 
+    # validate all tasks have unique ids juuust in case
+    dupes = [
+        item
+        for item, count in collections.Counter(
+            task.task_id for task in it.chain(tasks_threaded, tasks_mp)
+        ).items()
+        if count > 1
+    ]
+    if dupes:
+        raise ValueError(f'Duplicate task ids: {dupes}')
+
     build_tasks = BuildTasks(
         tasks_threaded=tuple(tasks_threaded),
         tasks_mp=tuple(tasks_mp),
