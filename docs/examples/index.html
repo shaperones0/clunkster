@@ -1334,16 +1334,15 @@ implementation with <code>print</code>.</p>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="nd">@ui_auto_sink</span><span class="p">(</span><span class="s1">&#39;Example step&#39;</span><span class="p">,</span> <span class="n">cls_ui</span><span class="o">=</span><span class="n">CLS_UI</span><span class="p">)</span>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">main_example</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Example pipeline step.&quot;&quot;&quot;</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="c1"># no need to report start of the step</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Good weather up there&#39;</span><span class="p">)</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Makes me forget about my job: counting to 10&#39;</span><span class="p">)</span>
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">ui_progress</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)):</span>
-</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
-</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Number&#39;</span><span class="p">,</span> <span class="n">number</span><span class="p">)</span>
-</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Clear?!! No way&#39;</span><span class="p">)</span>
-</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>    <span class="c1"># no need to report end of the step</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="c1"># no need to report start of the step</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Good weather up there&#39;</span><span class="p">)</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Makes me forget about my job: counting to 10&#39;</span><span class="p">)</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="n">ui_progress</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)):</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Number&#39;</span><span class="p">,</span> <span class="n">number</span><span class="p">)</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Clear?!! No way&#39;</span><span class="p">)</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="c1"># no need to report end of the step</span>
 </span></code></pre></div>
 <h2 id="1-reading-project">1 - Reading project<a class="headerlink" href="#1-reading-project" title="Permanent link">&para;</a></h2>
 <p>This section is about discovering assets from project files, doing initial
@@ -2242,7 +2241,7 @@ of hidden bugs.</p>
 </span><span id="__span-10-120"><a id="__codelineno-10-120" name="__codelineno-10-120" href="#__codelineno-10-120"></a><span class="k">else</span><span class="p">:</span>
 </span><span id="__span-10-121"><a id="__codelineno-10-121" name="__codelineno-10-121" href="#__codelineno-10-121"></a>    <span class="n">ui_out</span><span class="p">(</span><span class="s1">&#39;Clear!!!&#39;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Normally, cleaning these up can take up to several days. I recommend giving <a href="../rationale/#prerequisites">Prerequisites</a> a read - there are useful cleanup examples, as well as some explanations on how to write <code>LINT_RULES</code> and <code>CONTEXT_RULES</code>. </p>
+<p>Normally, cleaning these up can take up to several days. I recommend giving <a href="../rationale/#prerequisites">Prerequisites</a> a read - there are useful cleanup examples, as well as some explanations on how to write <code>LINT_RULES</code> and <code>CONTEXT_RULES</code>.</p>
 <h2 id="3-dependency-graph">3 - Dependency Graph<a class="headerlink" href="#3-dependency-graph" title="Permanent link">&para;</a></h2>
 <p>This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.</p>
@@ -2762,9 +2761,9 @@ the dangerous toys down the line.</p>
 <h3 id="example-41-juicer-the-juice">Example 4.1 - Juicer: the juice<a class="headerlink" href="#example-41-juicer-the-juice" title="Permanent link">&para;</a></h3>
 <p>This example is a bit bigger than usual, mostly because before we get to execute any meaningful code we must define a fair bit of classes and functions.</p>
 <p>First step - the actual processing functions.</p>
-<p>As it's outlined in <a href="../rationale/#juicing">Juicing</a>, processing will be applied only to
-sprites, backgrounds and external audio. Plus fixing object's masks and
-room's stretch backgrounds.</p>
+<p>As it's outlined in <a href="../rationale/#juicing">Juicing</a>, processing will be
+applied only to sprites, backgrounds and external audio. Plus fixing
+object's masks and room's stretch backgrounds.</p>
 <p>Object's masks require doing changes to every object, so this thing belongs
 in the processing stage.</p>
 <p>Room's stretch backgrounds, however, are a bit too expensive to be put into
@@ -3652,7 +3651,8 @@ abstractions.</p>
 <p>It is time to finally integrate Clunkster into the project.</p>
 <p>For this we won't be "creating" scripts, but more like replacing ones
 that exist in the project. The list of scripts to be added into
-the project is <a href="../rationale/#integration-into-the-game">right down the road</a>.</p>
+the project is
+<a href="../rationale/#integration-into-the-game">right down the road</a>.</p>
 <p>This code contains traces of my own project configuration (sound registry,
 etc.), which might not be fully applicable for your project. You
 should review this code extra thoroughly before pasting it...</p>
@@ -4008,7 +4008,7 @@ one guy.</p>
 </span><span id="__span-21-53"><a id="__codelineno-21-53" name="__codelineno-21-53" href="#__codelineno-21-53"></a>    <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">output_exe</span><span class="p">)],</span>
 </span><span id="__span-21-54"><a id="__codelineno-21-54" name="__codelineno-21-54" href="#__codelineno-21-54"></a>    <span class="n">cwd</span><span class="o">=</span><span class="n">JUICER</span><span class="o">.</span><span class="n">dir_out</span><span class="p">,</span>
 </span><span id="__span-21-55"><a id="__codelineno-21-55" name="__codelineno-21-55" href="#__codelineno-21-55"></a>    <span class="n">creationflags</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">DETACHED_PROCESS</span>
-</span><span id="__span-21-56"><a id="__codelineno-21-56" name="__codelineno-21-56" href="#__codelineno-21-56"></a>                  <span class="o">|</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CREATE_NEW_PROCESS_GROUP</span><span class="p">,</span>
+</span><span id="__span-21-56"><a id="__codelineno-21-56" name="__codelineno-21-56" href="#__codelineno-21-56"></a>    <span class="o">|</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CREATE_NEW_PROCESS_GROUP</span><span class="p">,</span>
 </span><span id="__span-21-57"><a id="__codelineno-21-57" name="__codelineno-21-57" href="#__codelineno-21-57"></a><span class="p">)</span>
 </span></code></pre></div>
 

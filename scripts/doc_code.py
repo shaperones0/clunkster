@@ -101,10 +101,9 @@ class CodeGenerator:
 
     def file_begin(self, name: str) -> str:
         """Signify beginning (or restart) of a file."""
-
         self.head.file_begin(name)
         self.current_code_name = ''
-        return ""
+        return ''
 
     def code_begin(self, code_name: CodeName, header_title: str) -> str:
         """Shortcut for starting next code sample.
@@ -129,7 +128,7 @@ class CodeGenerator:
         for stub_name, stub_code in stub_name_to_stub.items():
             self.reg_stub_src(self.current_code_name, stub_name)
             self.reg_stub_code(stub_name, stub_code)
-        return ""
+        return ''
 
     def stub(self, snippet_name: SnippetName) -> str:
         """Render a stub with a link to its source.
@@ -153,7 +152,7 @@ class CodeGenerator:
         return self.head.header_href(key=code_name, text=text)
 
     def reg_head(
-            self, code_name: CodeName, header: doc_headers.Header
+        self, code_name: CodeName, header: doc_headers.Header
     ) -> None:
         """Register a header for given code sample.
 
@@ -163,7 +162,7 @@ class CodeGenerator:
         self.code_header[code_name] = header
 
     def reg_stub_src(
-            self, code_name: CodeName, stub_snippet_name: SnippetName
+        self, code_name: CodeName, stub_snippet_name: SnippetName
     ) -> None:
         """Register code sample as a source of given stub.
 
@@ -179,7 +178,7 @@ class CodeGenerator:
         self.snippet_owner[stub_snippet_name] = code_name
 
     def reg_stub_code(
-            self, stub_snippet_name: SnippetName, stub_code: str
+        self, stub_snippet_name: SnippetName, stub_code: str
     ) -> None:
         """Register stub source."""
         self.snippet_stub[stub_snippet_name] = stub_code

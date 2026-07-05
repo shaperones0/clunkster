@@ -1,17 +1,15 @@
 """Dumb Document system - the f-string hijack edition."""
 
 import ast
-import functools as ft
 import inspect
 import textwrap
 import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from enum import Enum, auto
 from typing import Self, cast
 
 from scripts.doc_render import render
-from scripts.doc_snippets import Snippet, s_md, s_py
+from scripts.doc_snippets import Snippet, s_md
 
 
 @dataclass(slots=True)
@@ -25,19 +23,23 @@ class FstringPartCode:
 
 
 class FuncParser[**P]:
+    """Parser for a renderer function."""
+
     def __init__(
-            self,
-            *,
-            func: Callable[P, str],
-            setup_code: types.CodeType,
-            parts: list[str | FstringPartCode]
-    ):
+        self,
+        *,
+        func: Callable[P, str],
+        setup_code: types.CodeType,
+        parts: list[str | FstringPartCode],
+    ) -> None:
+        """Initialize the parser."""
         self.func = func
         self.setup_code = setup_code
         self.parts = parts
 
     @classmethod
     def from_func(cls, func: Callable[P, str]) -> Self:
+        """Initialize the parser from the given function."""
         # parse and compile func's AST
         source = textwrap.dedent(inspect.getsource(func))
         tree = ast.parse(source)
@@ -47,7 +49,7 @@ class FuncParser[**P]:
         return_statement = func_body[-1]
 
         if not isinstance(return_statement, ast.Return) or not isinstance(
-                return_statement.value, ast.JoinedStr
+            return_statement.value, ast.JoinedStr
         ):
             raise TypeError(
                 "Template must end with a single `return f'...'` statement."
@@ -81,28 +83,25 @@ class FuncParser[**P]:
                         err=None,
                     )
                 )
-        return cls(
-            func=func,
-            setup_code=setup_code,
-            parts=fstring_parts
-        )
+        return cls(func=func, setup_code=setup_code, parts=fstring_parts)
 
     def execute(self, *args: P.args, **kwargs: P.kwargs) -> None:
+        """Execute the underlying function with given args."""
         # bind arguments to local params
-        fn = cast(types.FunctionType, self.func)    # i swear
+        fn = cast(types.FunctionType, self.func)  # i swear
         sig = inspect.signature(fn)
         bound_args = sig.bind(*args, **kwargs)
         bound_args.apply_defaults()
 
         # execution environment
         local_scope: dict[str, object] = dict(bound_args.arguments)
-        global_scope: dict[str, object] = fn.__globals__  # ty: ignore[unresolved-attribute]
+        global_scope: dict[str, object] = fn.__globals__
 
         exec(self.setup_code, global_scope, local_scope)  # noqa: S102
 
         # relaunching is now responsibility of the caller
 
-        for i, part in enumerate(self.parts):
+        for part in self.parts:
             if isinstance(part, str):
                 # outside text is markdown, rendering handled in render
                 continue
@@ -135,7 +134,8 @@ class FuncParser[**P]:
                 part.result = snippets
 
     def is_resolved(self) -> bool:
-        for i, part in enumerate(self.parts):
+        """Whether the underlying render is resolved."""
+        for part in self.parts:
             if isinstance(part, str):
                 # text needs no evaluating
                 continue
@@ -144,16 +144,19 @@ class FuncParser[**P]:
         return True
 
     def render_snippets(self) -> Iterator[Snippet]:
-        for i, part in enumerate(self.parts):
+        """Render underlying parts into snippets."""
+        for part in self.parts:
             if isinstance(part, str):
                 # bark down
                 yield s_md(part)
                 continue
             if part.result is None:
-                raise ValueError(f"Attempted rendering unresolved snippet '{{{part.code_str}}}'")
+                raise ValueError(
+                    f'Attempted rendering unresolved snippet '
+                    f"'{{{part.code_str}}}'"
+                )
             yield from part.result
 
     def render_str(self) -> str:
+        """Render underlying parts into str."""
         return render(self.render_snippets()).strip('\n') + '\n'
-
-

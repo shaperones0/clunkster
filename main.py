@@ -430,7 +430,6 @@ def main_ex_setup_rich() -> None:
 @ui_auto_sink('Example step', cls_ui=CLS_UI)
 def main_example() -> None:
     """Example pipeline step."""
-
     # no need to report start of the step
     ui_out('Good weather up there')
     time.sleep(1)
@@ -2019,9 +2018,9 @@ def juice_obj_fix_mask(
 def main_juicer_processing() -> None:
     """First step - the actual processing functions.
 
-    As it's outlined in [Juicing](rationale.md#juicing), processing will be applied only to
-    sprites, backgrounds and external audio. Plus fixing object's masks and
-    room's stretch backgrounds.
+    As it's outlined in [Juicing](rationale.md#juicing), processing will be
+    applied only to sprites, backgrounds and external audio. Plus fixing
+    object's masks and room's stretch backgrounds.
 
     Object's masks require doing changes to every object, so this thing belongs
     in the processing stage.
@@ -2546,7 +2545,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
     For this we won't be "creating" scripts, but more like replacing ones
     that exist in the project. The list of scripts to be added into
-    the project is [right down the road](rationale.md#integration-into-the-game).
+    the project is
+    [right down the road](rationale.md#integration-into-the-game).
 
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You
@@ -2878,7 +2878,7 @@ def main_juicer_gm_compile() -> None:
         [str(output_exe)],
         cwd=JUICER.dir_out,
         creationflags=subprocess.DETACHED_PROCESS
-                      | subprocess.CREATE_NEW_PROCESS_GROUP,
+        | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
     # </snip MAIN_JUICER_GM_COMPILE>
 

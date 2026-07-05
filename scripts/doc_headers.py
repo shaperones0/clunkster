@@ -1,10 +1,10 @@
 """Headings manager."""
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import override
-import unicodedata
 
 
 def str_to_anchor_gh(text: str) -> str:
@@ -34,8 +34,7 @@ def str_to_anchor_pymd(text: str) -> str:
     text = unicodedata.normalize('NFKD', text)
     text = text.encode('ascii', 'ignore').decode('ascii')
     text = re.sub(r'[^\w\s-]', '', text).strip().lower()
-    return re.sub(r'[{}\s]+'.format(separator), separator, text)
-
+    return re.sub(rf'[{separator}\s]+', separator, text)
 
 
 class Header(ABC):
@@ -79,10 +78,11 @@ class Header(ABC):
 
 
 class HeaderAnchorChoose(Header, ABC):
+    """Mixin for automatically choosing correct slug function."""
 
     @property
     @abstractmethod
-    def is_github(self):
+    def is_github(self) -> bool:
         """Whether the header is GitHub-flawored Markdown."""
 
     @override
@@ -96,9 +96,12 @@ class HeaderSimple(HeaderAnchorChoose):
     """Simplified header with constant property values."""
 
     def __init__(
-        self, level: int, header: str, header_mini: str | None = None,
-            *,
-            is_github: bool = False
+        self,
+        level: int,
+        header: str,
+        header_mini: str | None = None,
+        *,
+        is_github: bool = False,
     ) -> None:
         """Initialize simple header.
 
@@ -116,7 +119,7 @@ class HeaderSimple(HeaderAnchorChoose):
 
     @override
     @property
-    def is_github(self):
+    def is_github(self) -> bool:
         return self._is_github
 
     @override
@@ -158,7 +161,7 @@ class ExampleHeader(HeaderAnchorChoose):
 
     @override
     @property
-    def is_github(self):
+    def is_github(self) -> bool:
         return self._is_github
 
     @override
@@ -215,7 +218,7 @@ class ExampleHeaderManager(HeaderManager):
         self.key_to_header: dict[str, Header] = {}
         self.key_to_is_gh: dict[str, bool] = {}
         self.key_to_file: dict[str, str] = {}
-        self.file_current = ""
+        self.file_current = ''
         self.file_is_gh = False
 
     @override
@@ -229,6 +232,7 @@ class ExampleHeaderManager(HeaderManager):
         self.file_is_gh = False
 
     def file_set_gh(self) -> None:
+        """Set file as being rendered for GitHub."""
         self.file_is_gh = True
 
     def section_next(self, title: str, key: str | None = None) -> HeaderSimple:
@@ -260,15 +264,17 @@ class ExampleHeaderManager(HeaderManager):
         return header
 
     def header_add(self, key: str, header: Header) -> None:
+        """Add a header into the index."""
         assert self.file_current, "File wasn't initialized."
 
         self.key_to_header[key] = header
         self.key_to_is_gh[key] = self.file_is_gh
         self.key_to_file[key] = self.file_current
 
-    def header_parse(self, header_str: str, key: str, header_mini: str | None = None) -> str:
+    def header_parse(
+        self, header_str: str, key: str, header_mini: str | None = None
+    ) -> str:
         """Account for given header."""
-
         hashtag_cnt = 0
         for char in header_str:
             if char != '#':
@@ -276,12 +282,15 @@ class ExampleHeaderManager(HeaderManager):
             hashtag_cnt += 1
         assert hashtag_cnt > 0, "Given string wasn't Markdown heading"
 
-        self.header_add(key, HeaderSimple(
-            level=hashtag_cnt,
-            header=header_str[hashtag_cnt:].strip(),
-            header_mini=header_mini,
-            is_github=self.file_is_gh,
-        ))
+        self.header_add(
+            key,
+            HeaderSimple(
+                level=hashtag_cnt,
+                header=header_str[hashtag_cnt:].strip(),
+                header_mini=header_mini,
+                is_github=self.file_is_gh,
+            ),
+        )
 
         return header_str
 
@@ -291,11 +300,10 @@ class ExampleHeaderManager(HeaderManager):
         header = self.key_to_header[key]
         if file == self.file_current:
             return header.render_href(text=text)
+        if text is None:
+            text = header.header_mini
+        if self.key_to_is_gh[key]:
+            anchor = str_to_anchor_gh(header.header_full)
         else:
-            if text is None:
-                text = header.header_mini
-            if self.key_to_is_gh[key]:
-                anchor = str_to_anchor_gh(header.header_full)
-            else:
-                anchor = str_to_anchor_pymd(header.header_full)
-            return f'[{text}]({file}#{anchor})'
+            anchor = str_to_anchor_pymd(header.header_full)
+        return f'[{text}]({file}#{anchor})'
