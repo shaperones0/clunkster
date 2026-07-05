@@ -37,6 +37,9 @@ def str_to_anchor_pymd(text: str) -> str:
     return re.sub(rf'[{separator}\s]+', separator, text)
 
 
+WEB_PREF = 'https://shaperones0.github.io/clunkster/'
+
+
 class Header(ABC):
     """Abstract header."""
 
@@ -306,4 +309,10 @@ class ExampleHeaderManager(HeaderManager):
             anchor = str_to_anchor_gh(header.header_full)
         else:
             anchor = str_to_anchor_pymd(header.header_full)
+        if self.file_is_gh:
+            # link to the web docs
+            file = WEB_PREF + file
+            pos = file.rfind('.')
+            if pos != -1:
+                file = file[:pos] + '/'
         return f'[{text}]({file}#{anchor})'
