@@ -163,7 +163,6 @@ class ExampleHeaderManager(HeaderManager):
 
         self.key_to_header: dict[str, Header] = {}
         self.key_to_file: dict[str, str] = {}
-        self.file_to_keys: dict[str, list[str]] = {}
         self.file_current = ""
 
     @override
@@ -172,12 +171,7 @@ class ExampleHeaderManager(HeaderManager):
         self.current_idx_major = self.idx_major_start
         self.current_idx_minor = self.idx_minor_start
 
-        # delete all keys with this file
-        keys = self.file_to_keys.get(name, [])
-        for key in keys:
-            self.key_to_file.pop(key)
-            self.key_to_header.pop(key)
-        keys.clear()
+        # delete all stateful storage with this file
         self.file_current = name
 
     def section_next(self, title: str, key: str | None = None) -> HeaderSimple:
@@ -211,7 +205,6 @@ class ExampleHeaderManager(HeaderManager):
 
         self.key_to_header[key] = header
         self.key_to_file[key] = self.file_current
-        self.file_to_keys.setdefault(self.file_current, []).append(key)
 
     def header_parse(self, header_str: str, key: str, header_mini: str | None = None) -> str:
         """Account for given header."""

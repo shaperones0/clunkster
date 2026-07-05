@@ -63,7 +63,7 @@ def txt_overview(
 
 {head.file_begin('overview.md')}
 
-# Clunkster
+{head.header_parse('# Clunkster', 'h_docs')}
 
 GameMaker 8.2 optimization tools and project processing pipeline.
 
@@ -83,6 +83,7 @@ def txt_rationale(
 ) -> str:
     """Generate rationale section."""
 
+    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
 {head.file_begin('rationale.md')}
     
@@ -1254,19 +1255,33 @@ else {{
 """
 
 
+def txt_reference(
+        snips: dict[str, list[Snippet]],
+        head: doc_headers.ExampleHeaderManager,
+        docs: dict[str, str],
+        exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate reference."""
+
+    return f"""
+{head.file_begin('reference.md')}
+
+{head.header_parse('# Reference', 'h_reference')}
+"""
+
+
 def txt_examples(
         snips: dict[str, list[Snippet]],
         head: doc_headers.ExampleHeaderManager,
         docs: dict[str, str],
         exs: doc_code.CodeGenerator,
 ) -> str:
-    """Generate readme."""
+    """Generate examples."""
 
-    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
 {exs.file_begin('examples.md')}
 
-# Examples
+{head.header_parse('# Examples', 'h_examples')}
 
 Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The game structure is [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing that should be easy.
 
@@ -1795,11 +1810,10 @@ def _main() -> None:
     file_rationale = dir_docs / 'rationale.md'
     file_examples = dir_docs / 'examples.md'
 
-    file_readme.write_text(parser_readme.render_str())
-    dir_docs.mkdir(exist_ok=True)
-    file_overview.write_text(parser_overview.render_str())
-    file_rationale.write_text(parser_rationale.render_str())
-    file_examples.write_text(parser_examples.render_str())
+    file_readme.write_text(parser_readme.render_str(), encoding='utf-8')
+    file_overview.write_text(parser_overview.render_str(), encoding='utf-8')
+    file_rationale.write_text(parser_rationale.render_str(), encoding='utf-8')
+    file_examples.write_text(parser_examples.render_str(), encoding='utf-8')
 
     print('Docs generated.')
 

@@ -123,6 +123,7 @@ class FuncParser[**P]:
                         f'unsafe side effects.'
                     ) from e
             else:
+                part.err = None
                 snippets: list[Snippet] = []
                 if result is None:
                     # don't do anything

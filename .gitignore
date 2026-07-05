@@ -1,3 +1,4 @@
+docs_md/*.md
 temp*.py
 temp*.txt
 input/
