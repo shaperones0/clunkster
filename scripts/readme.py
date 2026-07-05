@@ -12,38 +12,25 @@ from scripts import (
     doc_toc,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
-from scripts.doc_snippets import s_py
+from scripts.doc_snippets import s_py, Snippet
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
-@doc_patch.template()
-def readme_txt() -> str:
+def txt_readme(
+        snips: dict[str, list[Snippet]],
+        head: doc_headers.ExampleHeaderManager,
+        docs: dict[str, str],
+        exs: doc_code.CodeGenerator,
+) -> str:
     """Generate readme."""
-    file_main = Path(__file__).parent.parent / 'main.py'
-    txt_main = file_main.read_text(encoding='utf-8')
-    lines_main = txt_main.splitlines()
-    snips = doc_extract.extract(doc_parse.parse(lines_main))
-    head = doc_headers.ExampleHeaderGenerator(idx_major_start=-1)
-    docs = doc_docstring.extract(txt_main)
-    exs = doc_code.CodeGenerator.from_text(
-        txt_main,
-        header_generator=head,
-    )
 
-    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
-{exs.reset()}
+{head.file_begin('readme.md')}
 
 # Clunkster
 
-GameMaker 8.2 optimization tools.
-
-Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
-
-Given the architectural differences across GameMaker projects, Clunkster is organized as a set of "[examples](#examples)" that you can copy and modify. The library itself provides functions that facilitate the core logic and handle non-obvious edge cases.
-
-Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see it these tools fit your project's needs.
+GameMaker 8.2 optimization tools and project processing pipeline.
 
 Non-destructive tools:
 - Linter: `tree.yyd` validator (see {exs.href('ex_lint_tree')})
@@ -60,11 +47,46 @@ Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
 - Project juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; [Dehydration](#dehydration))
 
-# TOC
+Read {head.header_href('h_docs', 'docs')} for more.
+"""
 
-{'\n'.join(doc_toc.generate_toc(str(FILE_README)))}
 
-# Rationale
+def txt_overview(
+        snips: dict[str, list[Snippet]],
+        head: doc_headers.ExampleHeaderManager,
+        docs: dict[str, str],
+        exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate docs overview section."""
+
+    return f"""
+
+{head.file_begin('overview.md')}
+
+# Clunkster
+
+GameMaker 8.2 optimization tools and project processing pipeline.
+
+Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
+
+Given the architectural differences across GameMaker projects, Clunkster is organized as a set of "[examples](#examples)" that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic and.
+
+Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these tools fit your project's needs.
+"""
+
+
+def txt_rationale(
+        snips: dict[str, list[Snippet]],
+        head: doc_headers.ExampleHeaderManager,
+        docs: dict[str, str],
+        exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate rationale section."""
+
+    return f"""
+{head.file_begin('rationale.md')}
+    
+{head.header_parse('# Rationale', 'h_rationale')}
 
 GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having issues at even 2.5 GB of RAM consumption.
 
@@ -82,7 +104,7 @@ Prod builds are similar, but we add dynamic loading. The project is copied, only
 - sprites and backgrounds become 2x2 transparent
 - sounds get replaced with null.wav
 
-## Linters
+{head.header_parse('## Linters', 'h_linters')}
 
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
@@ -91,11 +113,11 @@ From those dependencies, the tool can:
 - find assets that reference other assets in disallowed clusters
 - construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.
 
-## Prerequisites
+{head.header_parse('## Prerequisites', 'h_prerequisites')}
 
 1. Use this tool only if it's necessary.
     - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
-2. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
+2. Use Git - destructive tools will nuke your project. Some do that by design, others can lead to loss of data if misconfigured.
 3. Follow good project keeping practices
    - Keep asset names clean (press broom icon on IDE's top toolbar to run required checks)
    - Keep assets belonging to certain stage in that stage's folder
@@ -117,9 +139,9 @@ From those dependencies, the tool can:
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
-Following sections elaborate on prerequisites, reasons behind them, antipatterns, and how to properly fix them.
+Following sections elaborate on the prerequisites, reasons behind them, antipatterns, and how to properly fix them.
 
-### [HowTo] Prerequisites - Project & Asset organization
+### [HowTo] Project & Asset organization
 
 Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{exs.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
 
@@ -196,9 +218,9 @@ In some cases, it might help to prepend asset names with their stage name for ea
 
 > Tip: When renaming assets, use the IDE's search utility to find all occurrences of the asset name in any code.
 
-### [HowTo] Prerequisites - Eradicating dynamic asset referencing
+### [HowTo] Eradicating dynamic asset referencing
 
-I have seen these quite often. Let's look at antipatterns from the [Prerequisites](#prerequisites) list.
+I have seen these quite often.
 
 ❌ Bad: Doing maths on asset IDs.
 
@@ -449,7 +471,7 @@ Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool
 
 > Note: Clunkster is very sensitive to exact way you format the context guards. Only `if guard() {{ ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
 
-### [HowTo] Prerequisites - Timelines...
+### [HowTo] Timelines...
 
 ... nobody uses timelines, right?
 
@@ -472,9 +494,9 @@ case 100:
 }}
 ```
 
-### [HowTo] Prerequisites - State contamination via Globals and Persistence
+### [HowTo] State contamination via Globals and Persistence
 
-Now that we've handled the easy cases, let's start on some that are less obvious (and far harder to trace, since they won't get flagged in linters).
+Now that we've handled the easy cases, let's start on some that are less obvious (and harder to trace, since they won't get flagged in linters).
 
 Global variables and persistent objects can cross cluster boundaries, making them vectors for dependency leakage.
 
@@ -521,7 +543,7 @@ EXTRA_ROOTS: set[str] = {{
 ```
 As a side note, all dependencies of each Extra Root will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
 
-### [HowTo] Prerequisites - Proper use of the Ignore Pragma
+### [HowTo] Proper use of the Ignore Pragma
 
 We provide a pragma for ignoring files during dependency scans: `//!clunkster: ignore`. You should only use it on pure data registries that define metadata without instantiating objects.
 
@@ -921,7 +943,7 @@ Full example of a synchronous pipeline step can be found here: {exs.href('ex_set
 
 Full example of concurrents is available in the Project Juicer section of [Examples](#examples).
 
-## Integration into the project
+## Integration into the game
 
 In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Project Juicer and its derivatives.
 
@@ -1229,12 +1251,26 @@ else {{
     clunkster_gen_init_audio()
 }}
 ```
+"""
+
+
+def txt_examples(
+        snips: dict[str, list[Snippet]],
+        head: doc_headers.ExampleHeaderManager,
+        docs: dict[str, str],
+        exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate readme."""
+
+    # PyCharm: Alt+Enter -> Inject language -> Markdown
+    return f"""
+{exs.file_begin('examples.md')}
 
 # Examples
 
-Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The game structure is [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing that should be easy.
 
-{head.next_section('Setting up').render_header()}
+{head.section_next('Setting up').render_header()}
 
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
 - Project
@@ -1322,7 +1358,7 @@ Following is the full example of integrating UI logic into a pipeline step, take
         )
     }
 
-{head.next_section('Reading project').render_header()}
+{head.section_next('Reading project').render_header()}
 
 This section is about discovering assets from project files, doing initial
 validations and assigning clusters to the assets.
@@ -1394,7 +1430,7 @@ validations and assigning clusters to the assets.
         )
     }
 
-{head.next_section('References').render_header()}
+{head.section_next('References').render_header()}
 
 This section is about finding asset references in `.gml` files, and running
 validations based on them.
@@ -1482,7 +1518,9 @@ validations based on them.
         )
     }
 
-{head.next_section('Dependency Graph').render_header()}
+Normally, cleaning these up can take up to several days. I recommend giving {head.header_href('h_prerequisites', 'Prerequisites')} a read - there are useful cleanup examples. 
+
+{head.section_next('Dependency Graph').render_header()}
 
 This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.
@@ -1560,7 +1598,7 @@ checks based on more advanced usage tracing.
         )
     }
 
-{head.next_section('Project Juicer').render_header()}
+{head.section_next('Project Juicer').render_header()}
 
 Now that the project is cleared out, it is time for some useful tools.
 
@@ -1690,10 +1728,80 @@ ___
 
 
 def _main() -> None:
-    for _ in range(2):
-        # twice because um
-        FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
-    print('Readme generated.')
+    file_main = Path(__file__).parent.parent / 'main.py'
+    txt_main = file_main.read_text(encoding='utf-8')
+    lines_main = txt_main.splitlines()
+    snips = doc_extract.extract(doc_parse.parse(lines_main))
+    head = doc_headers.ExampleHeaderManager(idx_major_start=-1)
+    docs = doc_docstring.extract(txt_main)
+    exs = doc_code.CodeGenerator.from_text(
+        txt_main,
+        header_manager=head,
+    )
+
+    kwargs = {
+        'snips': snips,
+        'head': head,
+        'docs': docs,
+        'exs': exs,
+    }
+
+    iterations = 0
+    iterations_max = 10
+    parser_readme = doc_patch.FuncParser.from_func(txt_readme)
+    parser_overview = doc_patch.FuncParser.from_func(txt_overview)
+    parser_rationale = doc_patch.FuncParser.from_func(txt_rationale)
+    parser_examples = doc_patch.FuncParser.from_func(txt_examples)
+    parsers = [
+        parser_readme,
+        parser_overview,
+        parser_rationale,
+        parser_examples,
+    ]
+
+    is_ok = lambda: all(_parser.is_resolved() for _parser in parsers)
+
+    while iterations < iterations_max:
+        iterations += 1
+
+        for parser in parsers:
+            parser.execute(**kwargs)
+
+        if is_ok():
+            break
+
+    if not is_ok():
+        error_msg = (
+            f'Template failed to resolve after {iterations_max} '
+            f'passes. Unresolved snippets:'
+        )
+
+        for parser in parsers:
+            for i, part in enumerate(parser.parts):
+                if not isinstance(part, doc_patch.FstringPartCode):
+                    continue
+                if part.err is None:
+                    continue
+                error_msg += (
+                    f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with '
+                    f'{type(part.err).__name__}: {part.err}'
+                )
+
+        raise RuntimeError(error_msg)
+
+    file_readme = Path(__file__).parent.parent / 'README.md'
+    dir_docs = Path(__file__).parent.parent / 'docs_md'
+    file_overview = dir_docs / 'overview.md'
+    file_rationale = dir_docs / 'rationale.md'
+    file_examples = dir_docs / 'examples.md'
+
+    file_readme.write_text(parser_readme.render_str())
+    dir_docs.mkdir(exist_ok=True)
+    file_overview.write_text(parser_overview.render_str())
+    file_rationale.write_text(parser_rationale.render_str())
+    file_examples.write_text(parser_examples.render_str())
+
+    print('Docs generated.')
 
 
 if __name__ == '__main__':

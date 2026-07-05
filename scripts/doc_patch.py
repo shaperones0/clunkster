@@ -5,49 +5,39 @@ import functools as ft
 import inspect
 import textwrap
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Self, cast
 
 from scripts.doc_render import render
 from scripts.doc_snippets import Snippet, s_md, s_py
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class FstringPartCode:
     """Fstring part code."""
 
     code_str: str
     compiled: types.CodeType
+    result: list[Snippet] | None
+    err: Exception | None
 
 
-class SnippetState(Enum):
-    """Snippet state."""
+class FuncParser[**P]:
+    def __init__(
+            self,
+            *,
+            func: Callable[P, str],
+            setup_code: types.CodeType,
+            parts: list[str | FstringPartCode]
+    ):
+        self.func = func
+        self.setup_code = setup_code
+        self.parts = parts
 
-    PENDING = auto()
-    RESOLVED = auto()
-
-
-def template[**P](  # noqa: C901, PLR0915
-    max_iterations: int = 10,
-) -> Callable[[Callable[P, str]], Callable[P, str]]:
-    """Wrap template-like function with smart f string logic.
-
-    Function can have arbitrary code in it, but must end with
-
-    ::
-
-        return f" ... "
-
-    (the f string may be multiline with triple quotes).
-
-    Though it nukes debugging.
-    :param max_iterations: Maximum number of iterations.
-    :return: Decorator for wrapping the function.
-    """
-
-    def decorator(func: Callable[P, str]) -> Callable[P, str]:  # noqa: C901, PLR0915
-
+    @classmethod
+    def from_func(cls, func: Callable[P, str]) -> Self:
         # parse and compile func's AST
         source = textwrap.dedent(inspect.getsource(func))
         tree = ast.parse(source)
@@ -57,7 +47,7 @@ def template[**P](  # noqa: C901, PLR0915
         return_statement = func_body[-1]
 
         if not isinstance(return_statement, ast.Return) or not isinstance(
-            return_statement.value, ast.JoinedStr
+                return_statement.value, ast.JoinedStr
         ):
             raise TypeError(
                 "Template must end with a single `return f'...'` statement."
@@ -84,94 +74,85 @@ def template[**P](  # noqa: C901, PLR0915
                     mode='eval',
                 )
                 fstring_parts.append(
-                    FstringPartCode(code_str=raw_code, compiled=compiled_node)
+                    FstringPartCode(
+                        code_str=raw_code,
+                        compiled=compiled_node,
+                        result=None,
+                        err=None,
+                    )
                 )
+        return cls(
+            func=func,
+            setup_code=setup_code,
+            parts=fstring_parts
+        )
 
-        @ft.wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> str:  # noqa: C901
-            # bind arguments to local params
-            sig = inspect.signature(func)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()
+    def execute(self, *args: P.args, **kwargs: P.kwargs) -> None:
+        # bind arguments to local params
+        fn = cast(types.FunctionType, self.func)    # i swear
+        sig = inspect.signature(fn)
+        bound_args = sig.bind(*args, **kwargs)
+        bound_args.apply_defaults()
 
-            # execution environment
-            local_scope: dict[str, object] = dict(bound_args.arguments)
-            global_scope: dict[str, object] = func.__globals__  # ty: ignore[unresolved-attribute]
+        # execution environment
+        local_scope: dict[str, object] = dict(bound_args.arguments)
+        global_scope: dict[str, object] = fn.__globals__  # ty: ignore[unresolved-attribute]
 
-            snippet_states: dict[int, SnippetState] = {
-                i: SnippetState.PENDING
-                for i, part in enumerate(fstring_parts)
-                if isinstance(part, FstringPartCode)
-            }
-            last_exceptions: dict[int, Exception] = {}
+        exec(self.setup_code, global_scope, local_scope)  # noqa: S102
 
-            exec(setup_code, global_scope, local_scope)  # noqa: S102
+        # relaunching is now responsibility of the caller
 
-            iterations = 0
-            while iterations < max_iterations:
-                iterations += 1
-                needs_another_pass = False
-                resolved_snippets: list[Snippet] = []  # resulting string parts
+        for i, part in enumerate(self.parts):
+            if isinstance(part, str):
+                # outside text is markdown, rendering handled in render
+                continue
 
-                # probably reset the local scope here
+            try:
+                # evaluate the snippet
+                result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
+            except Exception as e:
+                part.err = e
+                if part.result is not None:
+                    # this part used to be resolved
+                    raise RuntimeError(
+                        f'State Violation in snippet '
+                        f'`{{{part.code_str}}}`.\n'
+                        f'It succeeded on a previous pass but failed '
+                        f'on current iteration.\n'
+                        f'Ensure your template functions do not have '
+                        f'unsafe side effects.'
+                    ) from e
+            else:
+                snippets: list[Snippet] = []
+                if result is None:
+                    # don't do anything
+                    pass
+                elif isinstance(result, str):
+                    snippets.append(s_md(result))
+                else:
+                    snippets.extend(result)
+                part.result = snippets
 
-                for i, part in enumerate(fstring_parts):
-                    if isinstance(part, str):
-                        # assume text is markdown
-                        resolved_snippets.append(s_md(part))
-                        continue
+    def is_resolved(self) -> bool:
+        for i, part in enumerate(self.parts):
+            if isinstance(part, str):
+                # text needs no evaluating
+                continue
+            if part.result is None:
+                return False
+        return True
 
-                    try:
-                        # evaluate the snippet
-                        result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
-                    except Exception as e:
-                        if snippet_states[i] == SnippetState.RESOLVED:
-                            raise RuntimeError(
-                                f'State Violation in snippet '
-                                f'`{{{part.code_str}}}`.\n'
-                                f'It succeeded on a previous pass but failed '
-                                f'on iteration {iterations}.\n'
-                                f'Ensure your template functions do not have '
-                                f'unsafe side effects.'
-                            ) from e
+    def render_snippets(self) -> Iterator[Snippet]:
+        for i, part in enumerate(self.parts):
+            if isinstance(part, str):
+                # bark down
+                yield s_md(part)
+                continue
+            if part.result is None:
+                raise ValueError(f"Attempted rendering unresolved snippet '{{{part.code_str}}}'")
+            yield from part.result
 
-                        snippet_states[i] = SnippetState.PENDING
-                        last_exceptions[i] = e
-                        needs_another_pass = True
+    def render_str(self) -> str:
+        return render(self.render_snippets()).strip('\n') + '\n'
 
-                        # temp blank string
-                        resolved_snippets.append(s_py('???'))
-                    else:
-                        snippets: list[Snippet] = []
-                        if result is None:
-                            # don't do anything
-                            pass
-                        elif isinstance(result, str):
-                            snippets.append(s_md(result))
-                        else:
-                            snippets.extend(result)
-                        resolved_snippets.extend(snippets)
-                        snippet_states[i] = SnippetState.RESOLVED
-                        last_exceptions.pop(i, None)
-                if not needs_another_pass:
-                    return render(resolved_snippets) + '\n'
 
-            # If we exit the while loop, we hit max_iterations
-            error_msg = (
-                f'Template failed to resolve after {max_iterations} '
-                f'passes. Unresolved snippets:\n'
-            )
-            for i, exc in last_exceptions.items():
-                part = fstring_parts[i]
-                if not isinstance(part, FstringPartCode):
-                    continue
-                error_msg += (
-                    f'\n- {{{part.code_str}}} failed with '
-                    f'{type(exc).__name__}: {exc}'
-                )
-
-            raise RuntimeError(error_msg)
-
-        return wrapper
-
-    return decorator

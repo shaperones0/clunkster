@@ -130,19 +130,26 @@ class ExampleHeader(Header):
         return f'ex{self.header_num()}'
 
 
-class HeaderGenerator(ABC):
+class HeaderManager(ABC):
     """Abstract header generator."""
 
     @abstractmethod
-    def reset(self) -> None:
-        """Reset the header generator."""
+    def file_begin(self, name: str) -> None:
+        """Signify beginning (or restart) of a file."""
 
     @abstractmethod
-    def next_header(self, title: str) -> Header:
-        """Generate next header."""
+    def header_next(self, title: str, key: str) -> Header:
+        """Generate next header.
+
+        Header should be associated with current file.
+        """
+
+    @abstractmethod
+    def header_href(self, key: str, text: str | None = None) -> str:
+        """Generate href (potentially cross-document)."""
 
 
-class ExampleHeaderGenerator(HeaderGenerator):
+class ExampleHeaderManager(HeaderManager):
     """Example header generator."""
 
     def __init__(
@@ -154,25 +161,83 @@ class ExampleHeaderGenerator(HeaderGenerator):
         self.current_idx_major = idx_major_start
         self.current_idx_minor = idx_minor_start
 
+        self.key_to_header: dict[str, Header] = {}
+        self.key_to_file: dict[str, str] = {}
+        self.file_to_keys: dict[str, list[str]] = {}
+        self.file_current = ""
+
     @override
-    def reset(self) -> None:
-        """Reset the header generator."""
+    def file_begin(self, name: str) -> None:
+        """Signify beginning (or restart) of a file."""
         self.current_idx_major = self.idx_major_start
         self.current_idx_minor = self.idx_minor_start
 
-    def next_section(self, title: str) -> HeaderSimple:
+        # delete all keys with this file
+        keys = self.file_to_keys.get(name, [])
+        for key in keys:
+            self.key_to_file.pop(key)
+            self.key_to_header.pop(key)
+        keys.clear()
+        self.file_current = name
+
+    def section_next(self, title: str, key: str | None = None) -> HeaderSimple:
         """Generate next section header."""
         self.current_idx_major += 1
         self.current_idx_minor = self.idx_minor_start
-        return HeaderSimple(
+        header = HeaderSimple(
             level=2,
             header=f'{self.current_idx_major} - {title}',
         )
 
+        if key is not None:
+            self.header_add(key, header)
+
+        return header
+
     @override
-    def next_header(self, title: str) -> ExampleHeader:
+    def header_next(self, title: str, key: str) -> ExampleHeader:
         self.current_idx_minor += 1
-        return ExampleHeader(
+        header = ExampleHeader(
             header=title,
             idx=(self.current_idx_major, self.current_idx_minor),
         )
+
+        self.header_add(key, header)
+
+        return header
+
+    def header_add(self, key: str, header: Header) -> None:
+        assert self.file_current, "File wasn't initialized."
+
+        self.key_to_header[key] = header
+        self.key_to_file[key] = self.file_current
+        self.file_to_keys.setdefault(self.file_current, []).append(key)
+
+    def header_parse(self, header_str: str, key: str, header_mini: str | None = None) -> str:
+        """Account for given header."""
+
+        hashtag_cnt = 0
+        for char in header_str:
+            if char != '#':
+                break
+            hashtag_cnt += 1
+        assert hashtag_cnt > 0, "Given string wasn't Markdown heading"
+
+        self.header_add(key, HeaderSimple(
+            level=hashtag_cnt,
+            header=header_str[hashtag_cnt:].strip(),
+            header_mini=header_mini,
+        ))
+
+        return header_str
+
+    @override
+    def header_href(self, key: str, text: str | None = None) -> str:
+        file = self.key_to_file[key]
+        header = self.key_to_header[key]
+        if file == self.file_current:
+            return header.render_href(text=text)
+        else:
+            if text is None:
+                text = header.header_mini
+            return f'[{text}]({file}#{str_to_anchor(header.header_full)})'
