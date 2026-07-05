@@ -62,17 +62,17 @@ class CodeGenerator:
         self,
         snippets: dict[str, list[Snippet]],
         imports: doc_imports.ImportsFilter,
-        header_generator: doc_headers.HeaderGenerator,
+        header_manager: doc_headers.HeaderManager,
     ) -> None:
         """Initialize code generator.
 
         :param snippets: Source snippets.
         :param imports: Source imports.
-        :param header_generator: Header generator.
+        :param header_manager: Header generator.
         """
         self.snippets = snippets
         self.imports = imports
-        self.head = header_generator
+        self.head = header_manager
 
         # code names to headers
         self.code_header: dict[CodeName, doc_headers.Header] = {}
@@ -85,25 +85,25 @@ class CodeGenerator:
 
     @classmethod
     def from_text(
-        cls, text: str, header_generator: doc_headers.HeaderGenerator
+        cls, text: str, header_manager: doc_headers.HeaderManager
     ) -> Self:
         """Initialize code generator from text.
 
         :param text: Text to parse.
-        :param header_generator: Header generator.
+        :param header_manager: Header generator.
         """
         lines = text.splitlines()
         return cls(
             snippets=doc_extract.extract(doc_parse.parse(lines)),
             imports=doc_imports.ImportsFilter.from_code(text),
-            header_generator=header_generator,
+            header_manager=header_manager,
         )
 
-    @_none_to_empty_str
-    def reset(self) -> None:
-        """Reset non-volatile state."""
-        self.head.reset()
+    def file_begin(self, name: str) -> str:
+        """Signify beginning (or restart) of a file."""
+        self.head.file_begin(name)
         self.current_code_name = ''
+        return ''
 
     def code_begin(self, code_name: CodeName, header_title: str) -> str:
         """Shortcut for starting next code sample.
@@ -113,14 +113,13 @@ class CodeGenerator:
         :return: Rendered header.
         """
         self.current_code_name = code_name
-        header = self.head.next_header(header_title)
+        header = self.head.header_next(header_title, key=code_name)
         self.code_header[code_name] = header
         return header.render_header()
 
-    @_none_to_empty_str
     def code_reg_stub_src(
         self, stub_name_to_stub: dict[SnippetName, str]
-    ) -> None:
+    ) -> str:
         """Register current code as a source of given stubs.
 
         :param stub_name_to_stub: Stub name to stub.
@@ -129,6 +128,7 @@ class CodeGenerator:
         for stub_name, stub_code in stub_name_to_stub.items():
             self.reg_stub_src(self.current_code_name, stub_name)
             self.reg_stub_code(stub_name, stub_code)
+        return ''
 
     def stub(self, snippet_name: SnippetName) -> str:
         """Render a stub with a link to its source.
@@ -149,8 +149,7 @@ class CodeGenerator:
         :param text: Text to insert into the link.
         :return: Rendered href.
         """
-        header = self.code_header[code_name]
-        return header.render_href(text=text)
+        return self.head.header_href(key=code_name, text=text)
 
     def reg_head(
         self, code_name: CodeName, header: doc_headers.Header

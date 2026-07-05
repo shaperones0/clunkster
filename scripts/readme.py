@@ -9,119 +9,137 @@ from scripts import (
     doc_headers,
     doc_parse,
     doc_patch,
-    doc_toc,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
-from scripts.doc_snippets import s_py
+from scripts.doc_snippets import Snippet, s_py
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
-@doc_patch.template()
-def readme_txt() -> str:
+def txt_readme(
+    snips: dict[str, list[Snippet]],
+    head: doc_headers.ExampleHeaderManager,
+    docs: dict[str, str],
+    exs: doc_code.CodeGenerator,
+) -> str:
     """Generate readme."""
-    file_main = Path(__file__).parent.parent / 'main.py'
-    txt_main = file_main.read_text(encoding='utf-8')
-    lines_main = txt_main.splitlines()
-    snips = doc_extract.extract(doc_parse.parse(lines_main))
-    head = doc_headers.ExampleHeaderGenerator(idx_major_start=-1)
-    docs = doc_docstring.extract(txt_main)
-    exs = doc_code.CodeGenerator.from_text(
-        txt_main,
-        header_generator=head,
-    )
-
-    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
-{exs.reset()}
-
+{head.file_begin('readme.md')}
+{head.file_set_gh()}
 # Clunkster
 
-GameMaker 8.2 optimization tools.
-
-Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
-
-Given the architectural differences across GameMaker projects, Clunkster is organized as a set of "[examples](#examples)" that you can copy and modify. The library itself provides functions that facilitate the core logic and handle non-obvious edge cases.
-
-Please refer to [Rationale](#rationale) and [Prerequisites](#prerequisites) to see it these tools fit your project's needs.
+GameMaker 8.2 optimization tools and project processing pipeline.
 
 Non-destructive tools:
+
 - Linter: `tree.yyd` validator (see {exs.href('ex_lint_tree')})
 - Linter: unused assets detector (see {exs.href('ex_lint_unused')} and {exs.href('ex_lint_unused_graph')})
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})
 - Linter: room indirect reference validator via dependency graph (see {exs.href('ex_lint_crossref_graph')})
+- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; [Dehydration](https://shaperones0.github.io/clunkster/rationale/#dehydration))
 
 Lightly destructive tools:
+
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
 - (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/) (see {exs.href('ex_juicer_processing')} (part of Juicer))
 
 Super destructive tools:
+
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; [Dehydration](#dehydration))
 
-# TOC
+Read {head.header_href('h_docs', 'docs')} for more.
+"""
 
-{'\n'.join(doc_toc.generate_toc(str(FILE_README)))}
 
-# Rationale
+def txt_overview(head: doc_headers.ExampleHeaderManager, **_: object) -> str:
+    """Generate docs overview section."""
+    return f"""
 
-GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having issues at even 2.5 GB of RAM consumption.
+{head.file_begin('index.md')}
+
+{head.header_parse('# Clunkster', 'h_docs')}
+
+GameMaker 8.2 optimization tools and project processing pipeline.
+
+Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
+
+Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic.
+
+Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these tools fit your project.
+"""
+
+
+def txt_rationale(head: doc_headers.ExampleHeaderManager, exs: doc_code.CodeGenerator, **_: object) -> str:
+    """Generate rationale section."""
+    # PyCharm: Alt+Enter -> Inject language -> Markdown
+    return f"""
+{head.file_begin('rationale.md')}
+
+{head.header_parse('# Rationale', 'h_rationale')}
+
+GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having hardware-specific issues at even 2.5 GB of RAM usage.
 
 Also, such large projects take 10-15 seconds to build.
 
-To solve this, you can split the large project into logical clusters. You have "Common" assets (`Player`, `Block`, ...), and stage-specific assets (`bStageATiles`, `StageAPostProc`, ...). So, when game is in a room from stage A, it technically doesn't require assets from Stage B.
+The most effective solution is to split the large project into logical clusters. You have "Common" assets (`Player`, `Block`, ...), and stage-specific assets (`bStageATiles`, `StageAPostProc`, ...). So, when game is in a room from Stage A, it technically doesn't require assets from Stage B. Unneeded assets can be replaced with lightweight stubs right in the game project.
 
-To lighten the load, unneeded assets can be replaced with lightweight stubs right in the project.
+For dev builds, the tool can nuke all assets except for ones from specified clusters. Optionally, the resulting stubs can be made more noticeable:
 
-For dev builds, the tool can nuke all assets except for ones from specified clusters. Optionally, the stubs can be made more noticeable:
 - sprites and backgrounds become pink-black checkerboards
 - sounds get replaced with buzz.wav and/or [fiddlesticks.mp3](https://developer.valvesoftware.com/wiki/Missing_content)
 
 Prod builds are similar, but we add dynamic loading. The project is copied, only Common cluster is kept in the base executable. The stage-specific assets are packaged into external files ("wet" versions). When the player enters a new stage, the game dynamically loads ("hydrates") the required assets from the disk. Optionally the stubs can be made less noticeable (though you probably should still make them loud):
+
 - sprites and backgrounds become 2x2 transparent
 - sounds get replaced with null.wav
 
-## Linters
+This is explained more in-depth in [Dehydration](#dehydration) and subsequent chapters.
+
+{head.header_parse('## Linters', 'h_linters')}
 
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
 From those dependencies, the tool can:
+
 - find orphaned assets that are not referenced by anything
-- find assets that reference other assets in disallowed clusters
+- find assets that reference disallowed clusters
 - construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.
 
-## Prerequisites
+{head.header_parse('## Prerequisites', 'h_prerequisites')}
 
 1. Use this tool only if it's necessary.
-    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache. I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
-2. Use Git - changes made by this tool are destructive and **will nuke your project** (that's literally what Clunkster is designed to do).
-3. Follow good project keeping practices
-   - Keep asset names clean (press broom icon on IDE's top toolbar to run required checks)
-   - Keep assets belonging to certain stage in that stage's folder
-   - Do not reference things from `stageA` in `stageB` objects (unless such an object is only placed in a room that guarantees both stages loaded)
-   - Reference Common objects in Stage-specific, not the other way around
-     - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() {{ ... }}`)
-   - If an asset is shared between multiple stages, then it belongs in Common cluster
-   - DON'T use timelines
-   - DON'T use the dastardly "Treat uninitialized variables as 0 (BAD!!!)" option
-   - Minimize the number of persistent objects (they'll get tagged as referenced in every room)
-4. Follow good coding practices
+
+    - Setting this up requires a fair bit of technical knowledge (about both GameMaker 8.2 and Python) and can be a headache.
+    - I would only recommend using this tool if your game eats more than 1.5 GB of RAM and your project takes more than 10 seconds to build.
+
+2. Use Git - destructive tools will nuke your project. Some do that by design, others can lead to data loss if misconfigured.
+3. Follow good practices:
+
+    - Keep asset names clean (press broom icon on IDE's top toolbar to run initial checks).
+    - Keep assets belonging to certain stage in that stage's folder.
+    - Do not reference things from `stageA` in `stageB` objects (unless such an object is only placed in a room that guarantees both stages loaded).
+    - Reference Common objects in Stage-specific, not the other way around.
+        - If this is unavoidable (for example, when making a stage-specific movement gimmick), use "_guard scripts_" (`if room_is_stageA() {{ ... }}`).
+    - If an asset is shared between multiple stages, then it belongs in Common cluster.
+    - DON'T use timelines.
+    - DON'T use the dastardly "Treat uninitialized variables as 0 (BAD!!!)" option.
+    - Minimize the number of persistent objects (they'll get tagged as referenced in every room).
     - No dynamic asset referencing (tool won't acknowledge those references when building dependency graph):
-      - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`
-      - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`
-      - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace the dependency)
-      - ^ That rule includes assigning assets to constants
+        - DON'T do math on asset IDs: `draw_sprite(sprSpikeUp+2, x, y)`.
+        - DON'T use string execution: `execute_string("instance_create(0, 0, obj_enemy_" + string(current_level) + ")")`.
+        - DON'T pass assets via global variables across cluster boundaries: `global.current_boss = obj_StageB_Boss` (If Stage A reads this global, the analyzer cannot trace such dependency).
+        - ^ That rule includes assigning assets to constants.
+    - Use only `room_goto` for room transitions.
     - Use the linter ignore pragma `//!clunkster: ignore` only in pure data registry scripts (like `sound_balance`), which only reference assets but don't instantiate them
-    - DON'T hide room transitions behind `room` variable assignments.
 
 Other than that, use the modern project format (`.gm82`) and Python 3.14+ ([`uv`](https://docs.astral.sh/uv/) recommended).
 
-Following sections elaborate on prerequisites, reasons behind them, antipatterns, and how to properly fix them.
+Following sections elaborate on the prerequisites, reasons behind them, antipatterns, and how to properly fix them.
 
-### [HowTo] Prerequisites - Project & Asset organization
+### Project & Asset organization
 
-Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest implementation parses `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{exs.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
+Since Clunkster largely relies on splitting assets into clusters, the tool needs a way to automatically generate clusters for each asset. The easiest way is to parse `tree.yyd` files and takes the name of the root directory as a cluster name, merging those based on a provided config (see [{exs.href('ex_aliases')}]). Therefore, some amount of project keeping is required.
 
 ❌ Bad:
 
@@ -145,7 +163,7 @@ Backgrounds:
     |bgDarkness_2000x200_semitransparent_black_with_spotlight_in_center
 ```
 
-While the tool doesn't require you to name things properly, no duplicates can exist in the project. Secondly, since the folder structure now has structural value to our clusterization, you should dedicate some effort to cleaning up the project posthaste.
+While the tool doesn't require you to name things properly, no duplicates can exist in the project. Secondly, since trees now has structural value to our clusterization, you should dedicate some effort to reorganizing things.
 
 ✅ Good:
 
@@ -170,7 +188,7 @@ Backgrounds:
 tCommon
 ```
 
-With this well organized asset tree you can write an `ALIAS` config so they get correctly assigned to their clusters:
+With this well organized asset tree you can write the `ALIAS` config so they get correctly assigned to their clusters:
 
 ```python
 ALIAS: dict[str, list[str]] = {{
@@ -190,15 +208,11 @@ ALIAS: dict[str, list[str]] = {{
 }}
 ```
 
-Even though appropriate naming of the assets isn't required, I recommend cleaning them up now. It would also be a good idea to do optimization passes before starting integrating Clunkster (unless you have an "unrunable game" situation like I had when I started making this tool).
+Even though appropriate naming of the assets isn't required, I recommend cleaning them up now. It would also be a good idea to do manual optimization passes before starting integrating clustering-dependent tools, like Game Juicer (unless you have an "unrunable game" situation like I had when I started making this tool).
 
-In some cases, it might help to prepend asset names with their stage name for easy reference. However, whenever you'll have to move things around (and you _will_), renaming assets would take some effort.
+### Eradicating dynamic asset referencing
 
-> Tip: When renaming assets, use the IDE's search utility to find all occurrences of the asset name in any code.
-
-### [HowTo] Prerequisites - Eradicating dynamic asset referencing
-
-I have seen these quite often. Let's look at antipatterns from the [Prerequisites](#prerequisites) list.
+I have seen these quite often.
 
 ❌ Bad: Doing maths on asset IDs.
 
@@ -207,7 +221,7 @@ I have seen these quite often. Let's look at antipatterns from the [Prerequisite
 draw_sprite(spr_player_base + current_animation, image_index, x, y)
 ```
 
-This logic relies on Game Maker's internal resource order. While the order was made much more predictable in Game Maker 8.2's new save format, it is still fairly hidden and should not be used in general.
+This logic relies on Game Maker's internal resource order. While the order was made much more predictable in Game Maker 8.2's modern save format, it is still a bit hidden and should not be used in general.
 
 ❌ Bad: String execution.
 
@@ -218,9 +232,9 @@ execute_string(str_cat("instance_create(x, y, obj_boss_", current_level,")"))
 
 `execute_string` requires Game Maker to parse it and build an AST at runtime, which is slow. Any dynamic code execution should generally be limited to functions like `variable_*`, and those should never reference assets.
 
-Let's refactor those pesky examples.
+Let's take a look at how to fix such things:
 
-✅ Good: Use explicit references...
+✅ Good: Use explicit references directly
 
 ```gml
 // GOOD: All assets are explicitly declared and mapped
@@ -230,7 +244,7 @@ switch current_level {{
 }}
 ```
 
-✅ Good: ... or arrays
+✅ Good:
 ```gml
 var _amb;
 _amb[0] = "sfx_ambience0"
@@ -242,13 +256,11 @@ _amb[4] = "sfx_ambience4"
 sound_loop(_amb[irandom(4)])
 ```
 
-### [HowTo] Prerequisites - Building dependency flow
+### Building dependency flow
 
-If you've decided to use this tool before the project has reached critical mass - this section is for you.
+A healthy dependency graph flows in one direction: Stage-specific assets may reference Common assets, but Common assets cannot hardcode references to Stage-specific assets. Therefore, any sort of ubiquitous object (like the Player or World) should remain agnostic to the stages they occupy. Let's look at the example.
 
-A healthy dependency graph flows in one direction: Stage-specific assets may reference Common assets, but Common assets cannot hardcode references to Stage-specific assets. Therefore, any sort of ubiquitous object (like the Player or World) should remain agnostic to the stages they occupy. Let's look at an example.
-
-The Ice Stage of the game contains new special spikes that fall from the ceiling. You created a new object: `SpikeIce`. Now you have to make the Player take damage when they touch it. Sounds easy!
+The Ice Stage of the game contains new special spikes that fall from the ceiling. You created a new object: `SpikeIce`. Now you have to make the Player take damage and freeze when they touch it. Sounds easy!
 
 ❌ Bad:
 
@@ -256,6 +268,7 @@ The Ice Stage of the game contains new special spikes that fall from the ceiling
 ///Player.Step
 if place_meeting(x, y, SpikeIce) {{
     player_take_damage()
+    player_freeze()
 }}
 ```
 
@@ -271,19 +284,23 @@ Just invert the logic - make the spikes damage the player, instead of the player
 ///IceSpike.Step
 if place_meeting(x, y, Player) {{
     player_take_damage()
+    player_freeze()
 }}
 ```
 
 This works (and is the best solution in many cases), but I bet this game has some other damage sources. How about we...
 
-**Version 2 - Turn explicit reference into implicit ones**
+**Version 2 - Turn explicit reference into implicit**
 
 ... introduce a new Common object `ParentHazard`, and simply make the original Player logic poll for hazards, instead of specific spikes:
 
 ```gml
 ///Player.Step
-if place_meeting(x, y, ParentHazard) {{
+var _hazard;
+_hazard = place_meeting(x, y, ParentHazard)
+if _hazard {{
     player_take_damage()
+    if _hazard.freeze player_freeze()
 }}
 ```
 
@@ -309,7 +326,7 @@ if global.Powerups[powerup_spell_ice] {{
 }}
 ```
 
-You can already see the Common to Stage-specific reference. We can fix it in a few ways.
+You can already see the Common to Stage-specific reference.
 
 **Version 1 - Moving the logic from Common to Stage-specific**
 
@@ -369,8 +386,9 @@ with Player {{
 ```
 
 A few things to digest from here:
-1) `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth`. After all, when the `CommonNorth` cluster is loaded, everything from it becomes available.
-2) The new function `room_is_ice` - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this context guards behind itself (the `IceStage` in our case):
+
+1. `ControllerSpellsNorth` is now an object from `CommonNorth` as well - therefore it is totally allowed to reference any other asset from `CommonNorth`. After all, when the `CommonNorth` cluster is loaded, everything from it becomes available.
+2. The new function `room_is_ice` - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this script guards behind itself (the `IceStage` in our case):
 ```python
 CONTEXT_RULES: dict[str, set[str]] = {{
     # guard for ice stage -specific things
@@ -391,7 +409,7 @@ CONTEXT_RULES: dict[str, set[str]] = {{
 ```
 Now everything protected by this guard can freely reference any `IceStage` asset.
 
-3) Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
+3. Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
 ```python
 LINT_RULES: dict[str, set[str]] = {{
     # common assets cannot borrow from Stage specific folders
@@ -409,11 +427,14 @@ LINT_RULES: dict[str, set[str]] = {{
     }},
 
     # this will make any Ice Stage room load all 3 of those clusters
+
+    # btw, default value for any cluster is a set of "Common" and
+    #  the cluster itself
 }}
 ```
 Now everything in `CommonNorth` can be freely accessed by `IceStage`.
 
-> Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it useful again. I sure do hope having multiple persistent objects in the game won't become a big issue in some examples later down the line, haha.
+> Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it viable again. As a matter of fact, having multiple persistent controller objects is quite bad - you'll see in a bit.
 
 Here's the sample implementation of those context guards.
 
@@ -447,11 +468,37 @@ default:
 
 Notice that weird `global._clunkster_reg_mode` at the top. This is a secret tool that might come in handy later.
 
-> Note: Clunkster is very sensitive to exact way you format the context guards. Only `if guard() {{ ...` will be detected. You can't use guards with parameters, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside
+When you need a guard for things shared between several zones, you can implement it like this:
 
-### [HowTo] Prerequisites - Timelines...
+```gml
+///room_is_north([room])
+//Checks whether the room is a part of North stages (Ice, Tundra, etc.)
 
-... nobody uses timelines, right?
+if argument_count==0 {{
+    if clunkster_is_reg() return 1
+
+    //return 1 //TEMP
+
+    //call without args
+    if (
+        room_is_ice() or
+        room_is_tundra()
+    ) return 1
+}}
+else {{
+    var _room;_room=argument[0]
+    if (
+        room_is_ice(_room) or
+        room_is_tundra(_room)
+    ) return 1
+}}
+
+return 0
+```
+
+> Note: Clunkster is very sensitive to exact way you call the context guards in code. Guarded region must start with a line `if guard() {{` and end with just closing brackets on their own line `}}`. You can't use guards with parameters in regular code, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside (like `if (guard()) {{`).
+
+### Timelines
 
 Convert them to `switch` statements.
 
@@ -472,11 +519,11 @@ case 100:
 }}
 ```
 
-### [HowTo] Prerequisites - State contamination via Globals and Persistence
+### State contamination via Globals and Persistence
 
-Now that we've handled the easy cases, let's start on some that are less obvious (and far harder to trace, since they won't get flagged in linters).
+Now that we've handled the easy cases, let's look onto some that are less obvious (and harder to trace, since they won't get flagged in linters).
 
-Global variables and persistent objects can cross cluster boundaries, making them vectors for dependency leakage.
+Global variables and persistent objects can cross cluster boundaries, making them vectors for dependency leaks.
 
 ❌ Bad: Passing a specific asset through a global variable or constant.
 
@@ -500,9 +547,9 @@ with WeatherBlizzard {{
     ControllerWeather.current_weather = id
 }}
 ```
-and then `WeatherBlizzard`'s home cluster of `CommonNorth` gets unloaded, you might get the same result as the previous example.
+and then `WeatherBlizzard`'s home cluster `CommonNorth` gets unloaded, you might get the same result as the previous example.
 
-✅ Good: Pass abstract strings or enums and let a stage-specific director object spawn the correct asset locally.
+✅ Good: Pass abstract strings or enums and let a stage-specific non-persistent director object spawn the correct asset locally.
 
 ```gml
 ///StageB_NpcFairySpawner.Step
@@ -512,16 +559,19 @@ if global.next_cutscene_actor == "fairy" {{
 }}
 ```
 
-✅ Good: Don't forget to register all persistent objects in `EXTRA_ROOTS`:
+Don't forget to register all persistent objects in `EXTRA_ROOTS`:
 ```python
 EXTRA_ROOTS: set[str] = {{
     'World'
     # ...
 }}
 ```
-As a side note, all dependencies of each Extra Root will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent objects minimal. Ideally, just one `World` object.
 
-### [HowTo] Prerequisites - Proper use of the Ignore Pragma
+〰️ Kinda ok: Having persistent objects with no potential instantiating references to assets that may become unloaded. Things like room transitions. Cases like this could be fine for you, but Clunkster's linters won't be able to detect oversights.
+
+As a side note, all dependencies of each Extra Root will be merged with dependency graph of **every** room, so unless you wanna deal with humongous dependency graphs, keep your persistent controllers minimal. Ideally, just one `World` object.
+
+### Proper use of the Ignore Pragma
 
 We provide a pragma for ignoring files during dependency scans: `//!clunkster: ignore`. You should only use it on pure data registries that define metadata without instantiating objects.
 
@@ -585,7 +635,7 @@ if not is_undefined(_l_auto) {{
     for (_i=0;_i<_s;_i+=1) {{
         _snd=ds_list_find_value(_l_auto,_i)
 
-        // BAD!!! The reference that was hidden from the linter
+        //BAD!!! The reference that was hidden from the linter
         // is now being passed into the instantiating function.
         // Since Clunkster has no idea that rFinal_Respite needed
         // "musTitle", it might put it into a cluster that
@@ -638,7 +688,9 @@ if room_is_tutorial_or_final() {{
         music_def_room(rTutorialBoss,mus_fadeout)
         music_def_room(rFinal_Respite,mus_autoplay)
 
-        //validate that all the rooms actually belong to the cluster
+        //Important: since we also violate one of our other principles
+        // "Don't pass references across cluster boundaries through globals",
+        // we must validate that all the rooms actually belong to the cluster
         assert(room_is_tutorial_or_final(rTutorial))
         assert(room_is_tutorial_or_final(rTutorialBoss))
         assert(room_is_tutorial_or_final(rFinal_Respite))
@@ -646,7 +698,7 @@ if room_is_tutorial_or_final() {{
 }}
 ```
 
-And, since this registry, ideally, runs only on game start, in order to not loose data that we deliberately hidden behind guard, we can introduce a little ethical hack (that doesn't ruin our cluster-boundary model).
+And, since this registry script runs only on game start, in order to not loose data that we've deliberately hidden behind guard (in Init room they'd all return 0...), we can introduce a little _hack_ that doesn't ruin our cluster model.
 
 Remember the `global._clunkster_reg_mode` from before? Here's our plan:
 
@@ -709,10 +761,13 @@ default:
 }}
 ```
 
+More info on them scripts can be found in the [GML](#integration-into-the-game) chapter.
+
 ## Dehydration
 
 Following terms are used:
-- prepare: the process of stripping the asset from the project.
+
+- prepare: the process of stripping the asset from the project (compile step).
 - store-dry-prod: how the stripped asset is represented inside resulting prod build (invisible stubs).
 - store-dry-dev: how the stripped asset is represented inside resulting dev build (stubs that yell loudly when referenced).
 - store-wet: how the actual data is stored externally.
@@ -722,6 +777,7 @@ Following terms are used:
 ___
 
 **Backgrounds**: impactful, high priority.
+
 - prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmbck` files.
 - store-dry-prod: transparent 2x2.
 - store-dry-dev: pink-black checkerboard with transparent padding
@@ -740,6 +796,7 @@ ____
 **Scripts**: impossible to create dynamically without big rewrites.
 ____
 **Sprites**: impactful, high priority.
+
 - prepare: use [`gmcodec`](https://github.com/shaperones0/gmcodec) to generate `.gmspr` files
 - store-dry-prod: transparent 2x2 with same number of frames as original.
 - store-dry-dev: pink-black checkerboard with transparent padding.
@@ -747,64 +804,79 @@ ____
 - hydrate: use `sprite_replace_sprite` to load externally.
 - dehydrate: use `sprite_replace_sprite` to replace back with dry stub.
 ____
-**Sounds**: very impactful, TODO.
+**Sounds**: impactful, TODO.
 ____
-**External (audio)**: impactful, high priority.
+**External audio**: impactful, high priority.
+
 - prepare:
-  - put sounds from same cluster into their folders,
-  - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
-  - convert ogg into compressed (level 2 or 3)
-  - wav is mostly unchanged
-- store-dry-dev: `buzz.wav` for sounds and `fiddlesticks.mp3` for music.
-- store-dry-prod: `null.wav` files.
-- store-wet: just files sitting in their folders.
+
+    - put sounds from same cluster into their folders,
+    - generate a script that loads every sound as `null.wav` (or `buzz.wav`) via `sound_add_ext` on game start,
+    - convert ogg into compressed (level 2 or 3)
+    - wav is mostly unchanged
+
+- store-dry-dev: gm82snd doesn't require files to be present, so we "store" them as manually initialized audio via `buzz.wav` for sounds and `fiddlesticks.mp3` for music, in a script ran on game start (apply correct file extension).
+- store-dry-prod: same as above, except `null.wav` files for both.
+- store-wet: just files sitting in their external folders.
 - hydrate: run the loader script.
 - dehydrate: replace back with stubs.
 
-## Juicing
+{head.header_parse('## Juicing', 'h_juicing')}
 
-For the Project Juicer our goal is to "build" a game maker project. The goal is, simply put, to copy most of the project, apply dehydration to the assets that require it.
+For the Game Juicer we have to add a sort-of pre-compile step for the game. The goal is, simply put, to copy most of the project and apply dehydration to the assets that require it.
 
 To elaborate:
+
 - we only do dehydration of sprites, backgrounds and external audio (builtin sounds aren't implemented yet (TODO), other asset types aren't impactful enough to bother)
 - dynamic loading of sprites and backgrounds presents us with a few game maker bugs that we need to address:
+
     - objects don't update their mask after mask's sprite got replaced, simple `maks_index=mask_index` in Room Start does the trick
-    - rooms' backgrounds stretch flag is compile-time, meaning that rooms that use it must have a dynamic backgrounds resize code added into the Room Creation Code:
+    - rooms' backgrounds stretch flag is compile-time, but, since, I believe, in most projects it is not used often enough, all those rooms can just be fixed manually by hardcoding correct xscale and yscale for the backgrounds. If they are, in fact, numerous, then you could have a dynamic backgrounds resize code added into the Room Creation Code:
 ```gml
 if background_width[0]>0 && background_height[0]>0 {{
     background_xscale[0]=room_width/background_width[0]
     background_yscale[0]=room_height/background_height[0]
 }}
 ```
-- since for some projects Juicing is the only way to run the project, builds must be fast:
+
+- since for some games Juicing is the only way to run, builds must be fast:
+
     - processing tasks must support caching
     - asset dirs without processing can be symlinked
     - heavy tasks (audio compression, image encoding) should be multiprocessed
     - copy tasks (numerous but IO-bound) can be put into threading
 
-The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Those are done in the library's respective pipeline abstraction (`task.py`, `cache.py`), as well as the {exs.href('ex_juicer_processing', 'Juicer classes example')}.
+The requirements for "fast builds" are implemented in Clunkster through the system of "tasks" and "caching". Base of these is done in the library's respective pipeline abstraction (`task.py`, `cache.py`), actual implementation examples can be found in {exs.href('ex_juicer_processing', 'Juicer classes example')}.
 
 With that said, the project building strategy becomes:
+
 - do an `iterdir` on project root
+
     - if element is a folder
+
         - if it belongs to an asset type that needs processing (smartly handle data folder)
+
             - generate processing/copy tasks
+
         - otherwise
+
             - check if this folder is allowed to exist in the project
             - symlink
+
     - if element is a file
+
         - check if this file is allowed to exist in the project
-        - copy (without a task)
+        - copy
+
 - execute the tasks (notice which things are tasks and which aren't)
+
     - multiprocessing for processing tasks (image encoding, audio compression)
     - threading for copy tasks
-    - the rest can happen synchronously right at the task generation
 
-Speaking of building, one more note on how the built project is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
-original path relative to the project root>`
+Speaking of building, one more note on how the built game is structured. By default, wet assets are stored in `data/chunks/<cluster>/<whatever was their
+original path relative to the project root>`.
 
-
-## Pipeline architecture
+{head.header_parse('## Pipeline architecture', 'h_pipeline_architecture')}
 
 Pipeline has a number of systems and abstractions that run all throughout examples and might appear confusing. The deal behind was about solving few annoying issues:
 
@@ -814,20 +886,25 @@ Pipeline has a number of systems and abstractions that run all throughout exampl
 Following outlines our solutions. Most of them are housed in [pipeline folder](https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline).
 
 - `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching and house the `execute` method that actually does the thing.
-- `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are already present, and input files haven't changed, are skipped.
+- `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are present, and input files haven't changed, are skipped.
 - `executor`: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.
+
     - `executor/base.py`: Shared util logic.
     - `executor/mp.py`: Multiprocessing executor.
     - `executor/thread.py`: Threading executor.
+
 - `events`: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.
+
     - `events/event.py`: The actual event models.
     - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
-    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes through the event to underlying dispatcher. However, concurrent executors implement their own sinks:
+    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes the event to underlying dispatcher. However, concurrent executors implement their own sinks:
+
         - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
         - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
+
     - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
 
-The overall architecture can be expressed by this diagram:
+The flow of things in multiprocessing case can be expressed by this diagram:
 
 ```mermaid
 graph TD
@@ -838,7 +915,7 @@ graph TD
         S1[QueueEventSink<br/>Injects PID/Thread ID]
         S2[QueueEventSink<br/>Injects PID/Thread ID]
 
-        W1 -- "emit(ProgressAdvance)" --> S1
+        W1 -- "emit(TaskFinished)" --> S1
         W2 -- "emit(TaskFinished)" --> S2
     end
 
@@ -858,29 +935,22 @@ graph TD
     end
 
     UI -- "Renders Table & Progress" --> Term[Terminal Output]
-
-    classDef worker fill:#1e1e1e,stroke:#4CAF50,stroke-width:2px,color:#fff;
-    classDef queue fill:#2d2d2d,stroke:#FFC107,stroke-width:2px,color:#fff;
-    classDef main fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
-
-    class W1,W2,S1,S2 worker;
-    class Q queue;
-    class R,D,UI main;
 ```
 
 With simple and justifiable systems out of the way, next things might seem questionable:
 
 - `ui`: UI abstraction system.
+
     - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
     - `ui/simple.py`: Simple UI implementation, using prints.
     - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
 
-UI abstraction architecture can also be expressed in a diagram:
+The flow of things considering UI abstraction, in sync case, can be represented like this:
 
 ```mermaid
 graph TD
     subgraph Pipeline Code
-        Step["Pipeline Step Function<br/>@ui_auto_sink('Step Name')"]
+        Step["Pipeline Step Function<br/>@ui_auto_sink('StepName')"]
         UI_PROG["ui_progress(assets)"]
         UI_OUT["ui_out('Status message')"]
 
@@ -905,198 +975,190 @@ graph TD
     DS -- "Passthrough into Dispatcher" --> ED
     ED -- "Triggers Handlers" --> UI_SYNC
     UI_SYNC -- "Renders" --> Term[Terminal Output]
-
-    classDef dev fill:#1e1e1e,stroke:#9C27B0,stroke-width:2px,color:#fff;
-    classDef conv fill:#2d2d2d,stroke:#FF9800,stroke-width:2px,color:#fff;
-    classDef core fill:#1e1e1e,stroke:#2196F3,stroke-width:2px,color:#fff;
-
-    class Step,UI_PROG,UI_OUT dev;
-    class SA conv;
-    class DS,ED,UI_SYNC core;
 ```
 
-You'll encounter UI implementation with [rich](https://rich.readthedocs.io/en/latest/introduction.html) a bit later.
+You'll encounter UI implementation with simple `print`-based output, as well as [rich](https://rich.readthedocs.io/en/latest/introduction.html) in the examples.
 
 Full example of a synchronous pipeline step can be found here: {exs.href('ex_setup_example')}.
 
-Full example of concurrents is available in the Project Juicer section of [Examples](#examples).
+Full example of concurrents can be found here: {exs.href('ex_juicer_run')}.
 
-## Integration into the project
+## Integration into the game
 
-In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Project Juicer and its derivatives.
+In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Game Juicer and its derivatives. Default flow delegated loading to when the room change is requested (in `room_goto`), and unloading to the Room Start event (when all assets from previous clusters are definitely unloaded). This results in 1-2 second stutters when changing clusters, which I'd imagine won't be an issue, especially if such room changes have transitions like black-out-black-in.
 
 Here's the static scripts that you'll have to add:
 
 - `clunkster_init()`: Initialized Clunkster's variables.
-- `clunkster_room_start()`: Clunkster's Room Start event, cleans up all unused assets.
+- `clunkster_room_start()`: Clunkster's Room Start event, cleans up all unneeded assets.
 - `clunkster_room_goto(target_room)`: A `room_goto` replacement that ensures all assets are loaded for target room.
 - `clunkster_registry_begin()`: Toggles registry mode on.
 - `clunkster_is_reg()`: Returns registry mode status.
 - `clunkster_registry_end()`: Toggles registry mode off.
 
-And the following scripts will be autogenerated in this step. You should still add them - we'll be filling them in this step, instead of creating. In raw project those are usually empty.
+And the following scripts will be autogenerated. You should still add them - their contents are populated in the GML generation step: {exs.href('ex_juicer_gen_gml')}. In raw project those are usually empty.
 
 - `clunkster_gen_type()`: Returns `"dev"` or `"prod"` in a built project. Returns `""` in the raw source project.
 - `clunkster_gen_init_audio()`: Initializes audio stubs.
 - `clunkster_gen_get_room_clusters(target_room)`: Populates the required cluster map.
 - `clunkster_gen_hydrate_cluster(cluster_name)`: Loads assets.
 - `clunkster_gen_dehydrate_cluster(cluster_name)`: Unloads assets (replaces them with dry stubs to reduce RAM).
-- `clunkster_gen_validate_ctx()`: Validation script that runs on Game Start and checks that [context guards](#howto-prerequisites---building-dependency-flow) correctly guard their rooms.
+- `clunkster_gen_validate_ctx()`: Validation script that runs on Game Start and checks that [context guards](#building-dependency-flow) correctly guard their rooms.
 
-Following describes the base implementation of those scripts, as well as some tips on where they should be called.
+Following describes the base implementation of those scripts, as well as notes on what kinds of changes should be made to the project in order for these to work.
 
 1. `clunkster_init()` - Initializes Clunkster logic
 
-``` gml
-///clunkster_init()
-//Initialize Clunkster globals
+    ```gml
+    ///clunkster_init()
+    //Initialize Clunkster globals
 
-global.__clunk_reg_mode=0
-global.__clunk_active_clusters=ds_map_create()
-global.__clunk_req_clusters=ds_map_create()
+    global.__clunk_reg_mode=0
+    global.__clunk_active_clusters=ds_map_create()
+    global.__clunk_req_clusters=ds_map_create()
 
-clunkster_gen_validate_ctx()
-```
+    clunkster_gen_validate_ctx()
+    ```
 
-See example of proper Game Start logic below.
+    See example of proper Game Start logic below.
 
 2. `clunkster_room_start()` - System's Room Start event, responsible for cleaning up unloaded assets.
 
-``` gml
-///clunkster_room_start()
-//Clunkster's Room Start event
-//Cleanup cluster no longer needed for this room
+    ```gml
+    ///clunkster_room_start()
+    //Clunkster's Room Start event
+    //Cleanup cluster no longer needed for this room
 
-var _key,_next;
-_key=ds_map_find_first(global.__clunk_active_clusters)
+    var _key,_next;
+    _key=ds_map_find_first(global.__clunk_active_clusters)
 
-while is_string(_key) {{
-    _next=ds_map_find_next(global.__clunk_active_clusters,_key)
-    if not ds_map_exists(global.__clunk_req_clusters,_key) {{
-        //this cluster is no longer needed
-        clunkster_gen_dehydrate_cluster(_key)
-        ds_map_delete(global.__clunk_active_clusters,_key)
+    while is_string(_key) {{
+        _next=ds_map_find_next(global.__clunk_active_clusters,_key)
+        if not ds_map_exists(global.__clunk_req_clusters,_key) {{
+            //this cluster is no longer needed
+            clunkster_gen_dehydrate_cluster(_key)
+            ds_map_delete(global.__clunk_active_clusters,_key)
+        }}
+        _key=_next
     }}
-    _key=_next
-}}
-```
+    ```
 
-Put it at Room Start, in some `World`-like object.
+    Put it in World's Room Start at the top.
 
 3. `clunkster_room_goto(target_room)` - Interceptor of `room_goto` calls, which is responsible for loading any asset required by target room.
 
-``` gml
-///clunkster_room_goto(room)
-//Intercept room_goto and load necessary clusters
+    ```gml
+    ///clunkster_room_goto(room)
+    //Intercept room_goto and load necessary clusters
 
-ds_map_clear(global.__clunk_req_clusters)
-clunkster_gen_get_room_clusters(argument0)
+    ds_map_clear(global.__clunk_req_clusters)
+    clunkster_gen_get_room_clusters(argument0)
 
-var _key;
-_key=ds_map_find_first(global.__clunk_req_clusters)
-repeat ds_map_size(global.__clunk_req_clusters) {{
-    if !ds_map_exists(global.__clunk_active_clusters,_key) {{
-        //must be loaded
-        clunkster_gen_hydrate_cluster(_key)
-        ds_map_add(global.__clunk_active_clusters,_key,1)
+    var _key;
+    _key=ds_map_find_first(global.__clunk_req_clusters)
+    repeat ds_map_size(global.__clunk_req_clusters) {{
+        if !ds_map_exists(global.__clunk_active_clusters,_key) {{
+            //must be loaded
+            clunkster_gen_hydrate_cluster(_key)
+            ds_map_add(global.__clunk_active_clusters,_key,1)
+        }}
+        _key=ds_map_find_next(global.__clunk_req_clusters,_key)
     }}
-    _key=ds_map_find_next(global.__clunk_req_clusters,_key)
-}}
 
-room_goto(argument0)
-```
+    room_goto(argument0)
+    ```
 
-Notice that you'll have to replace every `room_goto` call with this function, and never use any other methods of room change.
+    You'll have to replace every `room_goto` call with this function, and never use any other methods of room change.
 
-Next are registry-related functions.
+    Next are registry-related functions.
 
 4. `clunkster_registry_begin()` - Switch registry mode ON.
 
-``` gml
-///clunkster_registry_begin()
+    ```gml
+    ///clunkster_registry_begin()
 
-global.__clunk_reg_mode=1
-```
+    global.__clunk_reg_mode=1
+    ```
 
 5. `clunkster_registry_end()` - Switch registry mode OFF.
 
-``` gml
-///clunkster_registry_end()
+    ```gml
+    ///clunkster_registry_end()
 
-global.__clunk_reg_mode=0
-```
+    global.__clunk_reg_mode=0
+    ```
 
 6. `clunkster_is_reg()` - Check whether in registry mode.
 
-``` gml
-///clunkster_is_reg()
-//Check whether in registry mode
+    ```gml
+    ///clunkster_is_reg()
+    //Check whether in registry mode
 
-return global.__clunk_reg_mode
-```
+    return global.__clunk_reg_mode
+    ```
 
-And finally, the autogenerated scripts. In raw project they remain mostly empty.
+    And finally, the autogenerated scripts. In raw project they remain mostly empty.
 
 7. `clunkster_gen_type()`
 
-``` gml
-///clunkster_gen_type()
-//Returns the type of project.
-//Expect "dev" for builds with no dynamic asset loading
-//Expect "prod" for builds with dynamic asset loading
-//Expect "" for raw projects
+    ```gml
+    ///clunkster_gen_type()
+    //Returns the type of project.
+    //Expect "dev" for builds with no dynamic asset loading
+    //Expect "prod" for builds with dynamic asset loading
+    //Expect "" for raw projects
 
-//This script is autogenerated by Clunkster.
+    //This script is autogenerated by Clunkster.
 
-return ""
-```
+    return ""
+    ```
 
 8. `clunkster_gen_init_audio()`
 
-``` gml
-///clunkster_gen_init_audio()
-//Initialize audio sources with stubs
-//sound_add_ext("null.wav",kind,streamed,"snd_actual")
+    ```gml
+    ///clunkster_gen_init_audio()
+    //Initialize audio sources with stubs
+    //sound_add_ext("null.wav",kind,streamed,"snd_actual")
 
-//This script is autogenerated by Clunkster.
-```
+    //This script is autogenerated by Clunkster.
+    ```
 
 9. `clunkster_gen_get_room_clusters(target_room)`
 
-``` gml
-///clunkster_gen_get_room_clusters(target_room)
-//Get clusters that must be loaded for given room
-//Populates global.__clunk_req_clusters
+    ```gml
+    ///clunkster_gen_get_room_clusters(target_room)
+    //Get clusters that must be loaded for given room
+    //Populates global.__clunk_req_clusters
 
-//This script is autogenerated by Clunkster.
-```
+    //This script is autogenerated by Clunkster.
+    ```
 
 10. `clunkster_gen_hydrate_cluster(cluster_name)`
 
-``` gml
-///clunkster_gen_hydrate_cluster(cluster_name)
-//Loads data from specified cluster in one block
+    ```gml
+    ///clunkster_gen_hydrate_cluster(cluster_name)
+    //Loads data from specified cluster in one block
 
-//This script is autogenerated by Clunkster.
-```
+    //This script is autogenerated by Clunkster.
+    ```
 
 11. `clunkster_gen_dehydrate_cluster(cluster_name)`
 
-``` gml
-///clunkster_gen_dehydrate_cluster(cluster_name)
-//Unloads data from specified cluster in one block
+    ```gml
+    ///clunkster_gen_dehydrate_cluster(cluster_name)
+    //Unloads data from specified cluster in one block
 
-//This script is autogenerated by Clunkster.
-```
+    //This script is autogenerated by Clunkster.
+    ```
 
 12. `clunkster_gen_validate_ctx()`
 
-``` gml
-///clunkster_gen_validate_ctx()
-//Validates context guards
+    ```gml
+    ///clunkster_gen_validate_ctx()
+    //Validates context guards
 
-//This script is autogenerated by Clunkster.
-```
+    //This script is autogenerated by Clunkster.
+    ```
 
 What are the registries? Basically, if you wanna have some values associated with a externalized resource, that should be applied whenever its loaded, you can simply put such data in a `dsmap` and add some logic for loading and applying those values.
 
@@ -1104,7 +1166,7 @@ For example, if you have some values associated with audio source (like volume b
 
 `sndreg_init`:
 
-``` gml
+```gml
 ///sndreg_init()
 //Initialize sound registry
 
@@ -1114,7 +1176,7 @@ global._sndlist=ds_list_create()
 
 `sndreg_ext` - Fills in all data of an audio at once:
 
-``` gml
+```gml
 ///sndreg_ext(snd,og_samplerate=44100,vol=1,[loopstart,loopend=-1])
 //Fill in all params at once
 
@@ -1145,7 +1207,7 @@ if argument_count>3 {{
 
 `sndreg_populate` - This is where you define all those values:
 
-``` gml
+```gml
 ///sndreg_populate()
 //Populate sound registry with necessary sound data
 
@@ -1163,7 +1225,7 @@ if room_is_ice_stage() {{
 
 `sndreg_apply` - Apply registry values to a sound:
 
-``` gml
+```gml
 ///sndreg_apply(snd)
 if sound_exists(argument0) {{
     //volume
@@ -1202,7 +1264,7 @@ else {{
 
 `sndreg_apply_all` - Apply registry values to all registered sounds; this one should be used right after registry population, if project type is raw.
 
-``` gml
+```gml
 ///sndreg_apply_all()
 //Apply audio stuff to all sounds
 
@@ -1216,7 +1278,7 @@ for (_i=0;_i<_ac;_i+=1) {{
 
 This allows us to write a clean Game Start logic:
 
-``` gml
+```gml
 clunkster_registry_begin()
 sndreg_populate()
 clunkster_registry_end()
@@ -1229,14 +1291,41 @@ else {{
     clunkster_gen_init_audio()
 }}
 ```
+"""  # noqa: S608
 
-# Examples
 
-Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The structure is assumed to follow [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing it should be easy.
+def txt_reference(
+    snips: dict[str, list[Snippet]],
+    head: doc_headers.ExampleHeaderManager,
+    docs: dict[str, str],
+    exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate reference."""
+    return f"""
+{head.file_begin('reference.md')}
 
-{head.next_section('Setting up').render_header()}
+{head.header_parse('# Reference', 'h_reference')}
+"""
+
+
+def txt_examples(
+    snips: dict[str, list[Snippet]],
+    head: doc_headers.ExampleHeaderManager,
+    docs: dict[str, str],
+    exs: doc_code.CodeGenerator,
+) -> str:
+    """Generate examples."""
+    return f"""
+{exs.file_begin('examples.md')}
+
+{head.header_parse('# Examples', 'h_examples')}
+
+Examples are generated from the [main pipeline file](https://github.com/shaperones0/clunkster/blob/master/main.py), and represent parts of the workflow for the game this tool was initially build for. The game structure is [Verve GM8.2 Engine](https://github.com/iwVerve/Verve-GM82-Engine) for IWBTG fangames, though changing that should be easy.
+
+{head.section_next('Setting up').render_header()}
 
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
+
 - Project
 - Widgets
 
@@ -1288,7 +1377,7 @@ This is the setup section. It covers settings up the project, linters, and other
         )
     }
 
-With that out of the way you may start the {exs.href('ex_start', 'first real examples')}. However, I recommend reading a bit about the [pipeline architecture](#pipeline-architecture), which should give you proper understanding on what to do if things don't work out.
+With that out of the way you may start the {exs.href('ex_start', 'first real examples')}. However, I recommend reading a bit about the {head.header_href('h_pipeline_architecture', 'pipeline architecture')}, which should give you proper understanding on what to do if things don't work out.
 
 {exs.code_begin('ex_setup_rich', 'Setup: Rich UI')}
 {docs['main_ex_setup_rich']}
@@ -1304,7 +1393,7 @@ With that out of the way you may start the {exs.href('ex_start', 'first real exa
 
 {exs.code_begin('ex_setup_example', 'Full example (pipeline excerpt)')}
 
-Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for a more thorough example as well).
+Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for more thorough examples as well).
 
 {
         exs.render(
@@ -1322,7 +1411,7 @@ Following is the full example of integrating UI logic into a pipeline step, take
         )
     }
 
-{head.next_section('Reading project').render_header()}
+{head.section_next('Reading project').render_header()}
 
 This section is about discovering assets from project files, doing initial
 validations and assigning clusters to the assets.
@@ -1394,7 +1483,7 @@ validations and assigning clusters to the assets.
         )
     }
 
-{head.next_section('References').render_header()}
+{head.section_next('References').render_header()}
 
 This section is about finding asset references in `.gml` files, and running
 validations based on them.
@@ -1482,7 +1571,9 @@ validations based on them.
         )
     }
 
-{head.next_section('Dependency Graph').render_header()}
+Normally, cleaning these up can take up to several days. I recommend giving {head.header_href('h_prerequisites', 'Prerequisites')} a read - there are useful cleanup examples, as well as some explanations on how to write `LINT_RULES` and `CONTEXT_RULES`.
+
+{head.section_next('Dependency Graph').render_header()}
 
 This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.
@@ -1560,14 +1651,11 @@ checks based on more advanced usage tracing.
         )
     }
 
-{head.next_section('Project Juicer').render_header()}
+{head.section_next('Game Juicer').render_header()}
 
 Now that the project is cleared out, it is time for some useful tools.
 
-In this section we will be working on Project Juicer. You can read more on exact strategies in [Juicing](#juicing). While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
-
-We will be creating tasks that would interface with build caching system, and executors. Even though this section is logically split into steps, you
-won't get to run them individually until everything is done.
+In this section we will be working on Game Juicer. You can read more on exact strategies in {head.header_href('h_juicing', 'Juicing')}. While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
 
@@ -1686,14 +1774,72 @@ ___
         )
     }
 
-"""  # noqa: S608
+"""
 
 
-def _main() -> None:
-    for _ in range(2):
-        # twice because um
-        FILE_README.write_text(readme_txt().lstrip('\n'), encoding='utf-8')
-    print('Readme generated.')
+def _main() -> None:  # noqa: C901
+    file_main = Path(__file__).parent.parent / 'main.py'
+    txt_main = file_main.read_text(encoding='utf-8')
+    lines_main = txt_main.splitlines()
+    snips = doc_extract.extract(doc_parse.parse(lines_main))
+    head = doc_headers.ExampleHeaderManager(idx_major_start=-1)
+    docs = doc_docstring.extract(txt_main)
+    exs = doc_code.CodeGenerator.from_text(
+        txt_main,
+        header_manager=head,
+    )
+
+    kwargs = {
+        'snips': snips,
+        'head': head,
+        'docs': docs,
+        'exs': exs,
+    }
+
+    dir_docs = Path(__file__).parent.parent / 'docs_md'
+
+    file_to_parser: dict[Path, doc_patch.FuncParser] = {
+        Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
+        dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
+        dir_docs / 'rationale.md': doc_patch.FuncParser.from_func(txt_rationale),
+        dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
+        dir_docs / 'reference.md': doc_patch.FuncParser.from_func(txt_reference),
+    }
+
+    iterations = 0
+    iterations_max = 10
+
+    parsers = list(file_to_parser.values())
+
+    def is_ok() -> bool:
+        return all(_parser.is_resolved() for _parser in parsers)
+
+    while iterations < iterations_max:
+        iterations += 1
+
+        for parser in parsers:
+            parser.execute(**kwargs)
+
+        if is_ok():
+            break
+
+    if not is_ok():
+        error_msg = f'Template failed to resolve after {iterations_max} passes. Unresolved snippets:'
+
+        for parser in parsers:
+            for part in parser.parts:
+                if not isinstance(part, doc_patch.FstringPartCode):
+                    continue
+                if part.err is None:
+                    continue
+                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}'  # ty: ignore[unresolved-attribute]
+
+        raise RuntimeError(error_msg)
+
+    for file, parser in file_to_parser.items():
+        file.write_text(parser.render_str().replace('```gml', '```js'), encoding='utf-8')
+
+    print('Docs generated.')
 
 
 if __name__ == '__main__':

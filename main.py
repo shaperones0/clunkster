@@ -63,7 +63,7 @@ def global_set_project(project_root: Path) -> None:
 def main_ex_setup_main() -> None:
     """Setup project and linter session.
 
-    Mandatory stuff includes setting few important variables:
+    Mandatory stuff includes setting these variables:
 
     - ``PROJECT``: project root path, where game's ``.gm82`` files is stored
     - ``LINT``: linter session (contains violation queue, resolvers, etc.)
@@ -146,9 +146,9 @@ def main_ex_setup_widgets() -> None:
     """Populate abstract widgets used down the line.
 
     Since most of UI is abstracted, examples don't use ``print`` or other
-    methods of output, but rather more abstract ``ui_out`` and other shims
-    from the same module. More complicated UI requires abstract widgets. The
-    ones required by the tool are outlined here, as well as their sample
+    direct methods of output, but rather more abstract ``ui_out`` and other
+    shims from the same module. More complicated UI requires abstract widgets.
+    The ones required by the tool are outlined here, as well as their sample
     implementation with ``print``.
     """
     # <snip MAIN_EX_SETUP_WIDGETS>
@@ -161,7 +161,7 @@ def main_ex_setup_widgets() -> None:
 
 
 # <snip UI_RICH>
-# TODO remove big width param
+# TODO remove big width param (had to use it for PyCharm's console)
 CON = r_console.Console(width=1024)
 
 
@@ -690,7 +690,7 @@ class RoomGraph:
 # <snip CLS_JUICER_CONFIG>
 @dataclasses.dataclass(frozen=True, slots=True)
 class ConfJuicer:
-    """Configuration for Project Juicer."""
+    """Configuration for Game Juicer."""
 
     # True to use prod build configuration, False for dev build configuration
     is_prod: bool
@@ -729,15 +729,6 @@ def main_ex_start() -> None:
     Clunkster already provides utils for scanning builtin assets and
     single-file external assets (such as audio for ``gm82snd``). However,
     registering those external assets is left as a task for the user.
-
-    Also notice the global variables:
-
-    - ``PROJECT`` should point at the folder where project's ``.gm82`` file
-      is located.
-    - ``LINT`` is the error accumulator that is used by tools down the line.
-
-    The convenience function ``global_set_project`` is provided to set up
-    given path as the source project root.
     """
     # <snip MAIN_EX_START>
 
@@ -825,7 +816,7 @@ def main_ex_lint_tree() -> None:
     files, so we have to ensure that they have no duplicate folders.
 
     This example also serves as an introduction to Clunkster's linter system.
-    It implements things like accumulating errors to printed in a list view,
+    It implements things like accumulating errors to be printed in a list view,
     sorting and grouping them by type, verbose output, etc.
 
     In order to make reports as thorough as possible, Clunkster provides
@@ -838,6 +829,7 @@ def main_ex_lint_tree() -> None:
     - ``LinterViolationAsset``: mixin that binds error to a specific asset
 
     For linting ``tree.yyd`` files we want to check that:
+
     1. all asset names are unique: handled by ``LintTreeDuplicateAsset``, this
       violation is abstract and isn't really bound to a specific file,
       since duplicate assets can exist across multiple types.
@@ -849,8 +841,8 @@ def main_ex_lint_tree() -> None:
     Default violation processor would print info messages, turn warn messages
     into warnings and raise errors.
 
-    Since any inconsistency will cause big issues in the pipeline, every
-    violation is marked as error.
+    As for this specific linter; since any inconsistency in asset structure
+    will cause big issues in the pipeline, every violation is marked as error.
     """
 
     # <snip MAIN_EX_LINT_TREE>
@@ -972,9 +964,6 @@ def main_ex_aliases() -> list[Asset]:
 
     Also, this script has a neat table output for clusters per asset type,
     It can be useful to discern where exactly any extra names are located.
-
-    Also, since this stage is used as an actual part of the pipeline, it uses
-    the fancy printing shims.
     """
     # <snip MAIN_EX_ALIASES>
     assets: list[Asset] = []
@@ -1064,7 +1053,8 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     """Reference scanner.
 
     In order to run dependency linters, we need to scan the actual references.
-    We'll use [``pyahocorasick``](github.com/WojciechMula/pyahocorasick)
+    We'll use
+    [``pyahocorasick``](https://github.com/WojciechMula/pyahocorasick)
     library to make it decently fast.
 
     Text occurrences found like this reflect occurrences in static code,
@@ -1198,9 +1188,7 @@ def main_ex_lint_unused(
     We can do this with a simple set difference: Total Assets
     minus Used Assets. However, this will not catch isolated reference loops
     (e.g., A references B, B references A, but neither is used by the game).
-
-    Also, some things that are indirectly referenced by the engine (like
-    with rooms and ``room_goto_next()``) might still get reported.
+    We'll handle these later.
 
     Take the output of this with a grain of salt.
     """
@@ -1288,15 +1276,15 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
     2. We allow special context guard scripts in a form of:
 
-    ::
+        ::
 
-        if room_is_stageA() {
-            ...
-        }
+            if room_is_stageA() {
+                ...
+            }
 
-    Those guards allow references to any foreign cluster inside them. Such
-    guards must be defined in ``CONTEXT_RULES``. Read more on those in the
-    [GML chapter](#integration-into-the-project).
+        Those guards allow references to any foreign cluster inside them. Such
+        guards must be defined in ``CONTEXT_RULES``. Read more on those in the
+        [GML chapter](rationale.md#integration-into-the-game).
 
     3. References to rooms are severed. Since the only way to meaningfully
     "instantiate" a room is to go there, for all intents and purposes
@@ -1307,8 +1295,8 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
     Note: I strongly advise clearing out the project to satisfy this linter
     (even though this might take a lot of effort). Skipping it would make
-    using Project Juicer and other project-transforming tools a nightmare of
-    hidden bugs.
+    using Game Juicer and other project-transforming tools a nightmare realm
+    of hidden bugs.
     """
     # <snip MAIN_EX_LINT_CROSSREF>
     for dep in ui_progress(dependencies):
@@ -1382,8 +1370,8 @@ def main_ex_graph(
       to validate that those objects are in Common cluster, for safety.
 
     2. Ubiquitous ``World`` object, which is present in every room. We mark
-      those objectsi in ``EXTRA_ROOTS``, so they get artificially added into
-    the reachability sets.
+      those objects in ``EXTRA_ROOTS``, so they get artificially added into
+      the reachability sets.
 
     Note: even though we calculate graphs for each room, saving them is
     optional. Beyond reachability set generation, they are only used in
@@ -2030,9 +2018,9 @@ def juice_obj_fix_mask(
 def main_juicer_processing() -> None:
     """First step - the actual processing functions.
 
-    As it's outlined in [Juicing](#juicing), processing will be applied only to
-    sprites, backgrounds and external audio. Plus fixing object's masks and
-    room's stretch backgrounds.
+    As it's outlined in [Juicing](rationale.md#juicing), processing will be
+    applied only to sprites, backgrounds and external audio. Plus fixing
+    object's masks and room's stretch backgrounds.
 
     Object's masks require doing changes to every object, so this thing belongs
     in the processing stage.
@@ -2043,7 +2031,8 @@ def main_juicer_processing() -> None:
     stretching backgrounds is not the play. Plus, those are usually very rare,
     and it makes more sense to just pre-bake correct scale manually.
 
-    Use the regex ``bg_stretch.=1`` to find all the offenders with ``grep``.
+    Use the regex ``bg_stretch.=1`` to find all the offenders with ``grep``,
+    and put into their rooms correct hardcoded scale.
     """
 
 
@@ -2556,7 +2545,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
     For this we won't be "creating" scripts, but more like replacing ones
     that exist in the project. The list of scripts to be added into
-    the project is [right down the road](#integration-into-the-project).
+    the project is
+    [right down the road](rationale.md#integration-into-the-game).
 
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You
@@ -2637,7 +2627,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
     # write the clunkster_gen_type
 
-    # technically, Project Juicer is in prod configuration, as far as the
+    # technically, Game Juicer is in prod configuration, as far as the
     #  game is concerned, even if we use dev stubs instead of prod stubs
     scr_gen_type.write_text('return "prod"', **text_params)
 
@@ -2825,7 +2815,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
 
 @ui_auto_sink('Juicer: compiling the game', cls_ui=CLS_UI)
 def main_juicer_gm_compile() -> None:
-    r"""One last step is automatic compile.
+    r"""This is it Luigi.
 
     Game Maker's CLI for compiling is:
 
@@ -2878,18 +2868,18 @@ def main_juicer_gm_compile() -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT,
         )
-        ui_out('Build completely successfully!')
-        subprocess.Popen(  # noqa: S603
-            [str(output_exe)],
-            cwd=JUICER.dir_out,
-            creationflags=subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-
     except subprocess.CalledProcessError as e:
         raise RuntimeError(
             f'GameMaker 8.2 compilation failed with exit code {e.returncode}'
         ) from e
+
+    ui_out('Build completely successfully!')
+    subprocess.Popen(  # noqa: S603
+        [str(output_exe)],
+        cwd=JUICER.dir_out,
+        creationflags=subprocess.DETACHED_PROCESS
+        | subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
     # </snip MAIN_JUICER_GM_COMPILE>
 
 
