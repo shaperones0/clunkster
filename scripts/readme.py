@@ -48,7 +48,7 @@ Super destructive tools:
 
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
 
-Read {head.header_href('h_docs', 'docs')} for more.
+Read [docs](https://shaperones0.github.io/clunkster) for more.
 """
 
 
