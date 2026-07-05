@@ -25,6 +25,7 @@
       <w>xoffset</w>
       <w>yoffset</w>
       <w>yport</w>
+      <w>yscale</w>
     </words>
   </dictionary>
 </component>

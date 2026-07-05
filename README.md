@@ -3,18 +3,21 @@
 GameMaker 8.2 optimization tools and project processing pipeline.
 
 Non-destructive tools:
-- Linter: `tree.yyd` validator (see [ex1.2](examples.md#example-12---lint-treeyyd-files))
-- Linter: unused assets detector (see [ex2.2](examples.md#example-22---lint-unused-assets) and [ex3.2](examples.md#example-32---lint-unreachable-assets))
+
+- Linter: `tree.yyd` validator (see [ex1.2](examples.md#example-12-lint-treeyyd-files))
+- Linter: unused assets detector (see [ex2.2](examples.md#example-22-lint-unused-assets) and [ex3.2](examples.md#example-32-lint-unreachable-assets))
 - (TODO) Linter: heavy assets detector (RAM & disk size)
-- Linter: cross-cluster reference boundary validator (see [ex2.3](examples.md#example-23---lint-cross-cluster-references))
-- Linter: room indirect reference validator via dependency graph (see [ex3.3](examples.md#example-33---lint-room-cluster-boundaries))
+- Linter: cross-cluster reference boundary validator (see [ex2.3](examples.md#example-23-lint-cross-cluster-references))
+- Linter: room indirect reference validator via dependency graph (see [ex3.3](examples.md#example-33-lint-room-cluster-boundaries))
+- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see [ex4.1](examples.md#example-41-juicer-the-juice); [Dehydration](https://shaperones0.github.io/clunkster/rationale/#dehydration))
 
 Lightly destructive tools:
+
 - (TODO) Backgrounds minifier: strip tilesets of all unused space
-- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/) (see [ex4.1](examples.md#example-41---juicer-the-juice) (part of Juicer))
+- (TODO) Audio optimizer: optimize audio files via [FFmpeg](https://www.ffmpeg.org/) (see [ex4.1](examples.md#example-41-juicer-the-juice) (part of Juicer))
 
 Super destructive tools:
-- (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-- Project juicer (Prod Build): convert assets into external versions and generate code for their loading (see [ex4.1](examples.md#example-41---juicer-the-juice); [Dehydration](#dehydration))
 
-Read [docs](overview.md#clunkster) for more.
+- (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
+
+Read [docs](index.md#clunkster) for more.
