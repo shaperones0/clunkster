@@ -146,7 +146,7 @@ ignore = [
 [tool.deptry.per_rule_ignores]
 DEP004 = [
     'mdformat',
-    'pdoc'
+    'griffe'
 ]
 
 [tool.uv.sources]

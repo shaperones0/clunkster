@@ -3,8 +3,8 @@
 import ast
 import inspect
 import textwrap
-import types
 import traceback as tb
+import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Self, cast
@@ -21,6 +21,7 @@ class FstringPartCode:
     compiled: types.CodeType
     result: list[Snippet] | None
     err: Exception | None
+    err_msg: str | None
 
 
 class FuncParser[**P]:
@@ -82,6 +83,7 @@ class FuncParser[**P]:
                         compiled=compiled_node,
                         result=None,
                         err=None,
+                        err_msg=None,
                     )
                 )
         return cls(func=func, setup_code=setup_code, parts=fstring_parts)
@@ -111,10 +113,8 @@ class FuncParser[**P]:
                 # evaluate the snippet
                 result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
             except Exception as e:
-                e.message = str(e) + '\n'.join(tb.format_exception(
-                    e
-                ))
                 part.err = e
+                part.err_msg = str(e) + '\n'.join(tb.format_exception(e))
                 if part.result is not None:
                     # this part used to be resolved
                     raise RuntimeError(

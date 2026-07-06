@@ -2,16 +2,14 @@
 
 from pathlib import Path
 
-import griffe
-
 from scripts import (
+    doc_api,
     doc_code,
     doc_docstring,
     doc_extract,
     doc_headers,
     doc_parse,
     doc_patch,
-    doc_api,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
 from scripts.doc_snippets import Snippet, s_py
@@ -22,7 +20,7 @@ FILE_README = Path(__file__).parent.parent / 'README.md'
 def txt_readme(
     head: doc_headers.ExampleHeaderManager,
     exs: doc_code.CodeGenerator,
-        **_: object,
+    **_: object,
 ) -> str:
     """Generate readme."""
     return f"""
@@ -56,8 +54,8 @@ Read [docs](https://shaperones0.github.io/clunkster) for more.
 
 
 def txt_overview(
-        head: doc_headers.ExampleHeaderManager,
-        **_: object,
+    head: doc_headers.ExampleHeaderManager,
+    **_: object,
 ) -> str:
     """Generate docs overview section."""
     return f"""
@@ -77,9 +75,9 @@ Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these t
 
 
 def txt_rationale(
-        head: doc_headers.ExampleHeaderManager,
-        exs: doc_code.CodeGenerator,
-        **_: object,
+    head: doc_headers.ExampleHeaderManager,
+    exs: doc_code.CodeGenerator,
+    **_: object,
 ) -> str:
     """Generate rationale section."""
     # PyCharm: Alt+Enter -> Inject language -> Markdown
@@ -1315,10 +1313,9 @@ def txt_reference(
     docs: dict[str, str],
     exs: doc_code.CodeGenerator,
     api: doc_api.ApiManager,
-        **_: object,
+    **_: object,
 ) -> str:
     """Generate reference."""
-
     return f"""
 {head.file_begin('reference.md')}
 
@@ -1333,7 +1330,7 @@ def txt_examples(
     head: doc_headers.ExampleHeaderManager,
     docs: dict[str, str],
     exs: doc_code.CodeGenerator,
-        **_: object,
+    **_: object,
 ) -> str:
     """Generate examples."""
     return f"""
@@ -1857,7 +1854,7 @@ def _main() -> None:  # noqa: C901
                     continue
                 if part.err is None:
                     continue
-                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}{getattr(part.err, 'message', '')}'  # ty: ignore[unresolved-attribute]
+                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}{part.err_msg or ""}'  # ty: ignore[unresolved-attribute]
 
         raise RuntimeError(error_msg)
 
