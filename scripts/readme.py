@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import griffe
+
 from scripts import (
     doc_code,
     doc_docstring,
@@ -9,6 +11,7 @@ from scripts import (
     doc_headers,
     doc_parse,
     doc_patch,
+    doc_api,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
 from scripts.doc_snippets import Snippet, s_py
@@ -17,10 +20,9 @@ FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
 def txt_readme(
-    snips: dict[str, list[Snippet]],
     head: doc_headers.ExampleHeaderManager,
-    docs: dict[str, str],
     exs: doc_code.CodeGenerator,
+        **_: object,
 ) -> str:
     """Generate readme."""
     return f"""
@@ -53,7 +55,10 @@ Read [docs](https://shaperones0.github.io/clunkster) for more.
 """
 
 
-def txt_overview(head: doc_headers.ExampleHeaderManager, **_: object) -> str:
+def txt_overview(
+        head: doc_headers.ExampleHeaderManager,
+        **_: object,
+) -> str:
     """Generate docs overview section."""
     return f"""
 
@@ -71,7 +76,11 @@ Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these t
 """
 
 
-def txt_rationale(head: doc_headers.ExampleHeaderManager, exs: doc_code.CodeGenerator, **_: object) -> str:
+def txt_rationale(
+        head: doc_headers.ExampleHeaderManager,
+        exs: doc_code.CodeGenerator,
+        **_: object,
+) -> str:
     """Generate rationale section."""
     # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
@@ -1295,17 +1304,27 @@ else {{
 """  # noqa: S608
 
 
+LIBRARY_NAME = 'clunkster'
+DIR_DOCS_MD = Path(__file__).parent.parent / 'docs_md'
+FILE_API_MANIFEST = Path(__file__).parent.parent / 'api.json'
+
+
 def txt_reference(
     snips: dict[str, list[Snippet]],
     head: doc_headers.ExampleHeaderManager,
     docs: dict[str, str],
     exs: doc_code.CodeGenerator,
+    api: doc_api.ApiManager,
+        **_: object,
 ) -> str:
     """Generate reference."""
+
     return f"""
 {head.file_begin('reference.md')}
 
 {head.header_parse('# Reference', 'h_reference')}
+
+{api.render_reference()}
 """
 
 
@@ -1314,6 +1333,7 @@ def txt_examples(
     head: doc_headers.ExampleHeaderManager,
     docs: dict[str, str],
     exs: doc_code.CodeGenerator,
+        **_: object,
 ) -> str:
     """Generate examples."""
     return f"""
@@ -1789,12 +1809,14 @@ def _main() -> None:  # noqa: C901
         txt_main,
         header_manager=head,
     )
+    api = doc_api.ApiManager('clunkster')
 
     kwargs = {
         'snips': snips,
         'head': head,
         'docs': docs,
         'exs': exs,
+        'api': api,
     }
 
     dir_docs = Path(__file__).parent.parent / 'docs_md'
@@ -1812,8 +1834,8 @@ def _main() -> None:  # noqa: C901
 
     parsers = list(file_to_parser.values())
 
-    def is_ok() -> bool:
-        return all(_parser.is_resolved() for _parser in parsers)
+    def err_cnt() -> int:
+        return sum(_parser.err_count() for _parser in parsers)
 
     while iterations < iterations_max:
         iterations += 1
@@ -1821,10 +1843,12 @@ def _main() -> None:  # noqa: C901
         for parser in parsers:
             parser.execute(**kwargs)
 
-        if is_ok():
+        err = err_cnt()
+        print(f'#{iterations} - {err} errors')
+        if err == 0:
             break
 
-    if not is_ok():
+    if err_cnt() > 0:
         error_msg = f'Template failed to resolve after {iterations_max} passes. Unresolved snippets:'
 
         for parser in parsers:
@@ -1833,7 +1857,7 @@ def _main() -> None:  # noqa: C901
                     continue
                 if part.err is None:
                     continue
-                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}'  # ty: ignore[unresolved-attribute]
+                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}{getattr(part.err, 'message', '')}'  # ty: ignore[unresolved-attribute]
 
         raise RuntimeError(error_msg)
 

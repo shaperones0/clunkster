@@ -4,6 +4,7 @@ import ast
 import inspect
 import textwrap
 import types
+import traceback as tb
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Self, cast
@@ -110,6 +111,9 @@ class FuncParser[**P]:
                 # evaluate the snippet
                 result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
             except Exception as e:
+                e.message = str(e) + '\n'.join(tb.format_exception(
+                    e
+                ))
                 part.err = e
                 if part.result is not None:
                     # this part used to be resolved
@@ -133,15 +137,16 @@ class FuncParser[**P]:
                     snippets.extend(result)
                 part.result = snippets
 
-    def is_resolved(self) -> bool:
+    def err_count(self) -> int:
         """Whether the underlying render is resolved."""
+        cnt = 0
         for part in self.parts:
             if isinstance(part, str):
                 # text needs no evaluating
                 continue
             if part.result is None:
-                return False
-        return True
+                cnt += 1
+        return cnt
 
     def render_snippets(self) -> Iterator[Snippet]:
         """Render underlying parts into snippets."""
