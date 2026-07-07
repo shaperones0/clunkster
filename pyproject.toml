@@ -15,6 +15,7 @@ dev = [
     "griffelib>=2.1.0",
     "markdown>=3.10.2",
     "mdformat>=1.0.0",
+    "mdformat-admon>=2.1.1",
     "mdformat-gfm>=1.0.0",
     "mdformat-pyproject>=0.1.1",
     "mdformat-ruff>=0.1.3",

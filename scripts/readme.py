@@ -1868,6 +1868,7 @@ def _main() -> None:  # noqa: C901
     def err_cnt() -> int:
         return sum(_parser.err_count() for _parser in parsers)
 
+    print('Docs start')
     while iterations < iterations_max:
         iterations += 1
 
@@ -1892,10 +1893,13 @@ def _main() -> None:  # noqa: C901
 
         raise RuntimeError(error_msg)
 
-    for file, parser in file_to_parser.items():
-        file.write_text(parser.render_str().replace('```gml', '```js'), encoding='utf-8')
-
     print('Docs generated.')
+    for file, parser in file_to_parser.items():
+        txt = parser.render_str()
+        txt = txt.replace('```gml', '```js')  # replace gml with js for hl
+        file.write_text(txt, encoding='utf-8')
+
+    print('Docs written.')
 
 
 if __name__ == '__main__':
