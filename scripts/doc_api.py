@@ -4,6 +4,7 @@ import ast
 import collections.abc as col
 import textwrap
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 import griffe
@@ -11,6 +12,8 @@ import griffe
 from scripts import doc_imports
 
 TOC_MAX_LEN = 28
+PATH_BASE = Path(__file__).parent.parent
+URL_GH_BASE = 'https://github.com/shaperones0/clunkster/blob/master/'
 
 
 def docstring_get_brief_desc(
@@ -26,11 +29,12 @@ def docstring_get_brief_desc(
     return '', ''
 
 
-def trunk_ellipsis(text: str, max_len: int, end: str = '...') -> str:
-    """Truncate a string and add a thing at the end."""
-    if len(text) > max_len:
-        return text[: max_len - len(end)] + end
-    return text
+def griffe_filepath_to_gh_link(path: Path | list[Path]) -> str:
+    """Convert griffe's module filepath to link on GitHub."""
+    if isinstance(path, list):
+        raise TypeError(f'What {path}')
+    rel = path.relative_to(PATH_BASE)
+    return URL_GH_BASE + rel.as_posix()
 
 
 class ApiManager:
@@ -121,6 +125,11 @@ class ApiManager:
 
                 if description:
                     md_content.append(f'{description}\n')
+
+                md_content.append(
+                    f'[View on GitHub]'
+                    f'({griffe_filepath_to_gh_link(mod.filepath)})'
+                )
 
                 for member_name, member in sorted(mod.members.items()):
                     if member.is_alias:
