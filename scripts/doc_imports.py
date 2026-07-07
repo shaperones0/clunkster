@@ -155,3 +155,22 @@ class ImportsFilter:
         :return: Imports code with only used imports, preserving block spacing.
         """
         return _grouped_nodes_unparse(self.filter_used(*snippets))
+
+    def get_import_map(self) -> dict[str, str]:
+        """Extract a mapping of local names to fully qualified names."""
+        mapping: dict[str, str] = {}
+        for _group_id, node in self.import_nodes:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    # import clunkster.lint as my_lint ->
+                    #  local: 'my_lint'
+                    #  fqn: 'clunkster.lint'
+                    local = _imported_name(alias)
+                    mapping[local] = alias.name
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    for alias in node.names:
+                        # from clunkster.asset import Asset as MyAsset
+                        local = alias.asname or alias.name
+                        mapping[local] = f"{node.module}.{alias.name}"
+        return mapping

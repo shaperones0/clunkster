@@ -1802,11 +1802,12 @@ def _main() -> None:  # noqa: C901
     snips = doc_extract.extract(doc_parse.parse(lines_main))
     head = doc_headers.ExampleHeaderManager(idx_major_start=-1)
     docs = doc_docstring.extract(txt_main)
+    api = doc_api.ApiManager('clunkster')
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
         header_manager=head,
+        api=api,
     )
-    api = doc_api.ApiManager('clunkster')
 
     kwargs = {
         'snips': snips,

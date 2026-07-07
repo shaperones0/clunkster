@@ -2,9 +2,11 @@
 
 import collections.abc as col
 import textwrap
+from dataclasses import dataclass
 from typing import cast
 
 import griffe
+import ast
 
 TOC_MAX_LEN = 28
 
@@ -39,12 +41,12 @@ class ApiManager:
         """
         self.library_name = library_name
         self.manifest: dict[str, str] = {}
-        self._rendered_cache: str | None = None
+        self.cache_rendered: str | None = None
 
     def render_reference(self) -> str:  # noqa: C901
         """Scan the library and render reference file."""
-        if self._rendered_cache is not None:
-            return self._rendered_cache
+        if self.cache_rendered is not None:
+            return self.cache_rendered
 
         lib = cast(
             griffe.Module,
@@ -94,7 +96,7 @@ class ApiManager:
                             self._build_markdown_for_object(member, level=3)
                         )
 
-                        target_url = f'reference.md#{member.path}'
+                        target_url = f'/reference/#{member.path}'
                         if (
                             self.manifest.get(member.path, target_url)
                             != target_url
@@ -111,7 +113,7 @@ class ApiManager:
                 process_module(child_mod)
 
         process_module(lib)
-        self._rendered_cache = rendered = '\n'.join(md_content)
+        self.cache_rendered = rendered = '\n'.join(md_content)
         return rendered
 
     def href(
@@ -304,3 +306,95 @@ class ApiManager:
                     )
 
         return '\n'.join(md)
+
+
+@dataclass(frozen=True, slots=True)
+class _Replacement:
+    lineno: int
+    col_offset: int
+    end_col_offset: int | None
+    display: str
+    link: str
+
+    def sort_key(self) -> tuple[int, int]:
+        return self.lineno, self.col_offset
+
+
+def inject_python_code_links(
+        *,
+        code_str: str,
+        api: ApiManager,
+        import_map: dict[str, str]
+) -> str:
+    """Find API usages in source, inject code links."""
+
+    if api.cache_rendered is None:
+        raise KeyError("API Reference not yet generated. Deferring snippet linking.")
+
+    tree = ast.parse(code_str)
+
+    replacements: list[_Replacement] = []
+    lines = code_str.splitlines()
+
+    # recursive resolver for complex attributes like `clunkster.asset.Room`
+    def get_fqn(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return import_map.get(node.id)
+        elif isinstance(node, ast.Attribute):
+            base = get_fqn(node.value)
+            if base:
+                return f"{base}.{node.attr}"
+        return None
+
+    class LinkVisitor(ast.NodeVisitor):
+        def visit_Import(self, node: ast.Import) -> None:
+            pass  # ignore import statements
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            pass
+
+        def visit_Attribute(self, node: ast.Attribute) -> None:
+            fqn = get_fqn(node)
+            if fqn and fqn in api.manifest:
+                # extract exact string from source to preserve styling
+                disp = lines[node.lineno - 1][node.col_offset:node.end_col_offset]
+                replacements.append(_Replacement(
+                    lineno=node.lineno,
+                    col_offset=node.col_offset,
+                    end_col_offset=node.end_col_offset,
+                    display=disp,
+                    link=api.manifest[fqn],
+                ))
+                # stop recursion so we don't link the base module separately
+                return
+            self.generic_visit(node)
+
+        def visit_Name(self, node: ast.Name) -> None:
+            fqn = import_map.get(node.id)
+            if fqn and fqn in api.manifest:
+                replacements.append(_Replacement(
+                    lineno=node.lineno,
+                    col_offset=node.col_offset,
+                    end_col_offset=node.end_col_offset,
+                    display=node.id,
+                    link=api.manifest[fqn],
+                ))
+            self.generic_visit(node)
+
+    LinkVisitor().visit(tree)
+
+    if not replacements:
+        return code_str
+
+    # sort bottom-to-top, right-to-left so slicing doesn't shift offsets
+    replacements.sort(key=_Replacement.sort_key, reverse=True)
+
+    for rep in replacements:
+        idx = rep.lineno - 1
+        line = lines[idx]
+        lines[idx] = (
+            f"{line[:rep.col_offset]}__ZEN[{rep.link}|{rep.display}]ZEN__"
+            f"{line[rep.end_col_offset:]}"
+        )
+
+    return "\n".join(lines)

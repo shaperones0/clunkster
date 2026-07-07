@@ -8,8 +8,8 @@ from markdown.extensions import Extension
 from markdown.postprocessors import Postprocessor
 from markdown.preprocessors import Preprocessor
 
-# Matches our custom syntax: [[target_url|Display Text]]
-LINK_REGEX = re.compile(r'\[\[(.*?)\|(.*?)\]\]')
+# __ZEN[url|text]] or [[url|text|css_class]ZEN__
+LINK_REGEX = re.compile(r'__ZEN\[(.*?)\|(.*?)(?:\|(.*?))?\]ZEN__')
 
 
 class InjectorPreprocessor(Preprocessor):
@@ -37,14 +37,21 @@ class InjectorPreprocessor(Preprocessor):
                 if not match:
                     break
 
-                url, text = match.groups()
+                url = match.group(1)
+                text = match.group(2)
+                css = match.group(3)
                 # identifier placeholder
                 placeholder = f'__ZEN_LINK_{self.counter}__'
 
                 # store html
-                self.tracker[placeholder] = (
-                    f'<a href="{url}" class="interactive-note-link">{text}</a>'
-                )
+                if css:
+                    self.tracker[placeholder] = (
+                        f'<a href="{url}" class="{css}">{text}</a>'
+                    )
+                else:
+                    self.tracker[placeholder] = (
+                        f'<a href="{url}">{text}</a>'
+                    )
 
                 # swap syntax
                 line = (

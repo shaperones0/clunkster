@@ -17,6 +17,10 @@ nav = [
   {'Reference' = 'reference.md'},
 ]
 
+extra_css = [
+    "stylesheets/custom.css"
+]
+
 [project.theme]
 features = [
   'navigation.instant',
