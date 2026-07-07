@@ -1342,12 +1342,12 @@ def txt_reference(
 }}
 
 [data-md-color-scheme="slate"] .api-badge-cls {{
-    background-color: #1a237e;
+    background-color: hsl(238, 27%, 10%);
     color: #c5cae9;
     /* border: 1px solid #3949ab; */
 }}
 [data-md-color-scheme="slate"] .api-badge-def {{
-    background-color: #1b5e20;
+    background-color: hsl(124, 27%, 10%);
     color: #c8e6c9;
     /* border: 1px solid #2e7d32;  */
 }}

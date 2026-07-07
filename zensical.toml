@@ -35,6 +35,16 @@ features = [
 [project.theme.icon]
 repo = "fontawesome/brands/git-alt"
 
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
 [project.validation]
 invalid_links = true
 invalid_link_anchors = true
