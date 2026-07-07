@@ -140,7 +140,10 @@ class CodeGenerator:
         name = self.snippet_owner[snippet_name]
         header = self.code_header[name]
         stub = self.snippet_stub[snippet_name]
-        return f'# see {header.header_mini}\n{stub}'
+
+        expl = header.header_full.split(' - ')[-1]
+        target_url = self.head.header_link(key=name)
+        return f'# see [[{target_url}|{header.header_mini} - {expl}]]\n{stub}'
 
     def href(self, code_name: CodeName, text: str | None = None) -> str:
         """Render a href to given code sample.

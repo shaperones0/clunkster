@@ -36,12 +36,11 @@ docgen: ## Generate docs Markdown files
 
 .PHONY: docbuild
 docbuild: docgen ## Build docs
-	@uv run zensical build --strict
+	@uv run env PYTHONPATH=. zensical build --strict
 
 .PHONY: docserve
 docserve: docgen ## Generate docs Markdown files and serve
-	@uv run zensical serve
-
+	@uv run env PYTHONPATH=. zensical serve
 .PHONY: check
 check: format lint test docbuild ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="

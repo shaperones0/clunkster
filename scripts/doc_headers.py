@@ -69,15 +69,23 @@ class Header(ABC):
         """
         return f'{"#" * self.level} {self.header_full}'
 
-    def render_href(self, text: str | None = None) -> str:
-        """Render a link to this header.
+    def render_link(self, file: str | None = None) -> str:
+        """Render a link to this header."""
+        file_str = '' if file is None else file
+        return f'{file_str}#{self.str_to_anchor(self.header_full)}'
+
+    def render_href(
+        self, text: str | None = None, file: str | None = None
+    ) -> str:
+        """Render a href to this header.
 
         :param text: Text to insert into the link.
+        :param file: Link's source file.
         :return: Rendered header.
         """
         if text is None:
             text = self.header_mini
-        return f'[{text}](#{self.str_to_anchor(self.header_full)})'
+        return f'[{text}]({self.render_link(file=file)})'
 
 
 class HeaderAnchorChoose(Header, ABC):
@@ -205,6 +213,10 @@ class HeaderManager(ABC):
     def header_href(self, key: str, text: str | None = None) -> str:
         """Generate href (potentially cross-document)."""
 
+    @abstractmethod
+    def header_link(self, key: str) -> str:
+        """Generate a link to this header."""
+
 
 class ExampleHeaderManager(HeaderManager):
     """Example header generator."""
@@ -297,22 +309,22 @@ class ExampleHeaderManager(HeaderManager):
 
         return header_str
 
-    @override
-    def header_href(self, key: str, text: str | None = None) -> str:
+    def _format_file(self, key: str) -> str | None:
         file = self.key_to_file[key]
-        header = self.key_to_header[key]
-        if file == self.file_current:
-            return header.render_href(text=text)
-        if text is None:
-            text = header.header_mini
-        if self.key_to_is_gh[key]:
-            anchor = str_to_anchor_gh(header.header_full)
-        else:
-            anchor = str_to_anchor_pymd(header.header_full)
         if self.file_is_gh:
             # link to the web docs
             file = WEB_PREF + file
             pos = file.rfind('.')
             if pos != -1:
                 file = file[:pos] + '/'
-        return f'[{text}]({file}#{anchor})'
+        return None if file == self.file_current else file
+
+    @override
+    def header_href(self, key: str, text: str | None = None) -> str:
+        header = self.key_to_header[key]
+        return header.render_href(text=text, file=self._format_file(key))
+
+    @override
+    def header_link(self, key: str) -> str:
+        header = self.key_to_header[key]
+        return header.render_link(file=self._format_file(key))

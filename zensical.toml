@@ -71,3 +71,6 @@ combine_header_slug = true
 [project.markdown_extensions.pymdownx.tasklist]
 custom_checkbox = true
 [project.markdown_extensions.pymdownx.tilde]
+
+# custom extensions
+[project.markdown_extensions.zen_code_links]
