@@ -55,9 +55,11 @@ Read [docs](https://shaperones0.github.io/clunkster) for more.
 
 def txt_overview(
     head: doc_headers.ExampleHeaderManager,
+    exs: doc_code.CodeGenerator,
     **_: object,
 ) -> str:
     """Generate docs overview section."""
+    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
 
 {head.file_begin('index.md')}
@@ -70,21 +72,9 @@ Most of the tools depend heavily on asset clustering (i.e. assigning each asset 
 
 Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic.
 
-Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these tools fit your project.
-"""
+Rationale section goes more in-depth on which projects need these tools, and how to properly use them.
 
-
-def txt_rationale(
-    head: doc_headers.ExampleHeaderManager,
-    exs: doc_code.CodeGenerator,
-    **_: object,
-) -> str:
-    """Generate rationale section."""
-    # PyCharm: Alt+Enter -> Inject language -> Markdown
-    return f"""
-{head.file_begin('rationale.md')}
-
-{head.header_parse('# Rationale', 'h_rationale')}
+{head.header_parse('## Rationale', 'h_rationale')}
 
 GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having hardware-specific issues at even 2.5 GB of RAM usage.
 
@@ -1822,7 +1812,6 @@ def _main() -> None:  # noqa: C901
     file_to_parser: dict[Path, doc_patch.FuncParser] = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
         dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
-        dir_docs / 'rationale.md': doc_patch.FuncParser.from_func(txt_rationale),
         dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
         dir_docs / 'reference.md': doc_patch.FuncParser.from_func(txt_reference),
     }

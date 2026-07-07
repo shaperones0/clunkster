@@ -1284,7 +1284,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
         Those guards allow references to any foreign cluster inside them. Such
         guards must be defined in ``CONTEXT_RULES``. Read more on those in the
-        [GML chapter](rationale.md#integration-into-the-game).
+        [GML chapter](index.md#integration-into-the-game).
 
     3. References to rooms are severed. Since the only way to meaningfully
     "instantiate" a room is to go there, for all intents and purposes
@@ -2018,7 +2018,7 @@ def juice_obj_fix_mask(
 def main_juicer_processing() -> None:
     """First step - the actual processing functions.
 
-    As it's outlined in [Juicing](rationale.md#juicing), processing will be
+    As it's outlined in [Juicing](index.md#juicing), processing will be
     applied only to sprites, backgrounds and external audio. Plus fixing
     object's masks and room's stretch backgrounds.
 
@@ -2546,7 +2546,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
     For this we won't be "creating" scripts, but more like replacing ones
     that exist in the project. The list of scripts to be added into
     the project is
-    [right down the road](rationale.md#integration-into-the-game).
+    [right down the road](index.md#integration-into-the-game).
 
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You

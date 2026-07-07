@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://shaperones0.github.com/clunkster/examples/">
       
       
-        <link rel="prev" href="../rationale/">
+        <link rel="prev" href="./..">
       
       
         <link rel="next" href="../reference/">
@@ -212,32 +212,6 @@
     
   
   Clunkster
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../rationale/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Rationale
 
     
   </span>
@@ -1053,7 +1027,7 @@ implementation with <code>print</code>.</p>
 </span><span id="__span-1-60"><a id="__codelineno-1-60" name="__codelineno-1-60" href="#__codelineno-1-60"></a>
 </span><span id="__span-1-61"><a id="__codelineno-1-61" name="__codelineno-1-61" href="#__codelineno-1-61"></a><span class="n">global_widget_renderer</span><span class="p">(</span><span class="n">WidgetRendererSimple</span><span class="p">())</span>
 </span></code></pre></div>
-<p>With that out of the way you may start the <a href="#example-11-finding-assets">first real examples</a>. However, I recommend reading a bit about the <a href="../rationale/#pipeline-architecture">pipeline architecture</a>, which should give you proper understanding on what to do if things don't work out.</p>
+<p>With that out of the way you may start the <a href="#example-11-finding-assets">first real examples</a>. However, I recommend reading a bit about the <a href="../#pipeline-architecture">pipeline architecture</a>, which should give you proper understanding on what to do if things don't work out.</p>
 <h3 id="example-03-setup-rich-ui">Example 0.3 - Setup: Rich UI<a class="headerlink" href="#example-03-setup-rich-ui" title="Permanent link">&para;</a></h3>
 <p>The other UI option is <a href="https://github.com/textualize/rich">rich</a>.</p>
 <p>We have to add the widget renderer and <code>Ui</code> implementations.</p>
@@ -2109,7 +2083,7 @@ not between the rest of the collab. Such rules should be defined in
 </span></code></pre></div>
     Those guards allow references to any foreign cluster inside them. Such
     guards must be defined in <code>CONTEXT_RULES</code>. Read more on those in the
-    <a href="../rationale/#integration-into-the-game">GML chapter</a>.</p>
+    <a href="../#integration-into-the-game">GML chapter</a>.</p>
 <ol>
 <li>References to rooms are severed. Since the only way to meaningfully
 "instantiate" a room is to go there, for all intents and purposes
@@ -2243,7 +2217,7 @@ of hidden bugs.</p>
 </span><span id="__span-10-120"><a id="__codelineno-10-120" name="__codelineno-10-120" href="#__codelineno-10-120"></a><span class="k">else</span><span class="p">:</span>
 </span><span id="__span-10-121"><a id="__codelineno-10-121" name="__codelineno-10-121" href="#__codelineno-10-121"></a>    <span class="n"><a href="/reference/#clunkster.pipeline.ui.adapter.ui_out">ui_out</a></span><span class="p">(</span><span class="s1">&#39;Clear!!!&#39;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Normally, cleaning these up can take up to several days. I recommend giving <a href="../rationale/#prerequisites">Prerequisites</a> a read - there are useful cleanup examples, as well as some explanations on how to write <code>LINT_RULES</code> and <code>CONTEXT_RULES</code>.</p>
+<p>Normally, cleaning these up can take up to several days. I recommend giving <a href="../#prerequisites">Prerequisites</a> a read - there are useful cleanup examples, as well as some explanations on how to write <code>LINT_RULES</code> and <code>CONTEXT_RULES</code>.</p>
 <h2 id="3-dependency-graph">3 - Dependency Graph<a class="headerlink" href="#3-dependency-graph" title="Permanent link">&para;</a></h2>
 <p>This section is about building a graph out of dependencies, and running
 checks based on more advanced usage tracing.</p>
@@ -2758,12 +2732,12 @@ the dangerous toys down the line.</p>
 <p>Congrats on defeating the tutorial boss.</p>
 <h2 id="4-game-juicer">4 - Game Juicer<a class="headerlink" href="#4-game-juicer" title="Permanent link">&para;</a></h2>
 <p>Now that the project is cleared out, it is time for some useful tools.</p>
-<p>In this section we will be working on Game Juicer. You can read more on exact strategies in <a href="../rationale/#juicing">Juicing</a>. While this exact tool only requires the list of assets (see example: <a href="#example-13-clusters">clusters</a>), the game must satisfy both clusterization linters (see: <a href="#example-23-lint-cross-cluster-references">ex2.3</a> and <a href="#example-33-lint-room-cluster-boundaries">ex3.3</a>) in order for the resulting build to run well.</p>
+<p>In this section we will be working on Game Juicer. You can read more on exact strategies in <a href="../#juicing">Juicing</a>. While this exact tool only requires the list of assets (see example: <a href="#example-13-clusters">clusters</a>), the game must satisfy both clusterization linters (see: <a href="#example-23-lint-cross-cluster-references">ex2.3</a> and <a href="#example-33-lint-room-cluster-boundaries">ex3.3</a>) in order for the resulting build to run well.</p>
 <p>Note: current method of compressing audio uses <a href="https://www.ffmpeg.org/">ffmpeg</a>, make sure it is installed and is accessible through PATH.</p>
 <h3 id="example-41-juicer-the-juice">Example 4.1 - Juicer: the juice<a class="headerlink" href="#example-41-juicer-the-juice" title="Permanent link">&para;</a></h3>
 <p>This example is a bit bigger than usual, mostly because before we get to execute any meaningful code we must define a fair bit of classes and functions.</p>
 <p>First step - the actual processing functions.</p>
-<p>As it's outlined in <a href="../rationale/#juicing">Juicing</a>, processing will be
+<p>As it's outlined in <a href="../#juicing">Juicing</a>, processing will be
 applied only to sprites, backgrounds and external audio. Plus fixing
 object's masks and room's stretch backgrounds.</p>
 <p>Object's masks require doing changes to every object, so this thing belongs
@@ -3654,7 +3628,7 @@ abstractions.</p>
 <p>For this we won't be "creating" scripts, but more like replacing ones
 that exist in the project. The list of scripts to be added into
 the project is
-<a href="../rationale/#integration-into-the-game">right down the road</a>.</p>
+<a href="../#integration-into-the-game">right down the road</a>.</p>
 <p>This code contains traces of my own project configuration (sound registry,
 etc.), which might not be fully applicable for your project. You
 should review this code extra thoroughly before pasting it...</p>

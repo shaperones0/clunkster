@@ -4,7 +4,7 @@ import collections.abc as col
 import functools as ft
 from typing import Self
 
-from scripts import doc_extract, doc_headers, doc_imports, doc_parse, doc_api
+from scripts import doc_api, doc_extract, doc_headers, doc_imports, doc_parse
 from scripts.doc_snippets import Snippet, s_py
 
 CodeName = str
@@ -89,7 +89,10 @@ class CodeGenerator:
 
     @classmethod
     def from_text(
-        cls, text: str, header_manager: doc_headers.HeaderManager, api: doc_api.ApiManager,
+        cls,
+        text: str,
+        header_manager: doc_headers.HeaderManager,
+        api: doc_api.ApiManager,
     ) -> Self:
         """Initialize code generator from text.
 
@@ -102,7 +105,7 @@ class CodeGenerator:
             snippets=doc_extract.extract(doc_parse.parse(lines)),
             imports=doc_imports.ImportsFilter.from_code(text),
             header_manager=header_manager,
-            api=api
+            api=api,
         )
 
     def file_begin(self, name: str) -> str:
@@ -149,7 +152,10 @@ class CodeGenerator:
 
         expl = header.header_full.split(' - ')[-1]
         target_url = self.head.header_link(key=name)
-        return f'# see __ZEN[{target_url}|{header.header_mini} - {expl}|interactive-note-link]ZEN__\n{stub}'
+        return (
+            f'# see __ZEN[{target_url}|{header.header_mini} - {expl}|'
+            f'interactive-note-link]ZEN__\n{stub}'
+        )
 
     def href(self, code_name: CodeName, text: str | None = None) -> str:
         """Render a href to given code sample.
@@ -218,7 +224,7 @@ class CodeGenerator:
                 linked_content = doc_api.inject_python_code_links(
                     code_str=snip.content,
                     api=self.api,
-                    import_map=self.import_map
+                    import_map=self.import_map,
                 )
                 result.append(s_py(linked_content))
         return result

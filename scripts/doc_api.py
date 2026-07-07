@@ -1,12 +1,12 @@
 """Reference scanner and generator."""
 
+import ast
 import collections.abc as col
 import textwrap
 from dataclasses import dataclass
 from typing import cast
 
 import griffe
-import ast
 
 TOC_MAX_LEN = 28
 
@@ -320,16 +320,14 @@ class _Replacement:
         return self.lineno, self.col_offset
 
 
-def inject_python_code_links(
-        *,
-        code_str: str,
-        api: ApiManager,
-        import_map: dict[str, str]
+def inject_python_code_links(  # noqa: C901
+    *, code_str: str, api: ApiManager, import_map: dict[str, str]
 ) -> str:
     """Find API usages in source, inject code links."""
-
     if api.cache_rendered is None:
-        raise KeyError("API Reference not yet generated. Deferring snippet linking.")
+        raise KeyError(
+            'API Reference not yet generated. Deferring snippet linking.'
+        )
 
     tree = ast.parse(code_str)
 
@@ -340,10 +338,10 @@ def inject_python_code_links(
     def get_fqn(node: ast.AST) -> str | None:
         if isinstance(node, ast.Name):
             return import_map.get(node.id)
-        elif isinstance(node, ast.Attribute):
+        if isinstance(node, ast.Attribute):
             base = get_fqn(node.value)
             if base:
-                return f"{base}.{node.attr}"
+                return f'{base}.{node.attr}'
         return None
 
     class LinkVisitor(ast.NodeVisitor):
@@ -357,14 +355,18 @@ def inject_python_code_links(
             fqn = get_fqn(node)
             if fqn and fqn in api.manifest:
                 # extract exact string from source to preserve styling
-                disp = lines[node.lineno - 1][node.col_offset:node.end_col_offset]
-                replacements.append(_Replacement(
-                    lineno=node.lineno,
-                    col_offset=node.col_offset,
-                    end_col_offset=node.end_col_offset,
-                    display=disp,
-                    link=api.manifest[fqn],
-                ))
+                disp = lines[node.lineno - 1][
+                    node.col_offset : node.end_col_offset
+                ]
+                replacements.append(
+                    _Replacement(
+                        lineno=node.lineno,
+                        col_offset=node.col_offset,
+                        end_col_offset=node.end_col_offset,
+                        display=disp,
+                        link=api.manifest[fqn],
+                    )
+                )
                 # stop recursion so we don't link the base module separately
                 return
             self.generic_visit(node)
@@ -372,13 +374,15 @@ def inject_python_code_links(
         def visit_Name(self, node: ast.Name) -> None:
             fqn = import_map.get(node.id)
             if fqn and fqn in api.manifest:
-                replacements.append(_Replacement(
-                    lineno=node.lineno,
-                    col_offset=node.col_offset,
-                    end_col_offset=node.end_col_offset,
-                    display=node.id,
-                    link=api.manifest[fqn],
-                ))
+                replacements.append(
+                    _Replacement(
+                        lineno=node.lineno,
+                        col_offset=node.col_offset,
+                        end_col_offset=node.end_col_offset,
+                        display=node.id,
+                        link=api.manifest[fqn],
+                    )
+                )
             self.generic_visit(node)
 
     LinkVisitor().visit(tree)
@@ -393,8 +397,8 @@ def inject_python_code_links(
         idx = rep.lineno - 1
         line = lines[idx]
         lines[idx] = (
-            f"{line[:rep.col_offset]}__ZEN[{rep.link}|{rep.display}]ZEN__"
-            f"{line[rep.end_col_offset:]}"
+            f'{line[: rep.col_offset]}__ZEN[{rep.link}|{rep.display}]ZEN__'
+            f'{line[rep.end_col_offset :]}'
         )
 
-    return "\n".join(lines)
+    return '\n'.join(lines)

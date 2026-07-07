@@ -12,7 +12,6 @@ repo_name = 'shaperones0/clunkster'
 
 nav = [
   'index.md',
-  {'Rationale' = 'rationale.md'},
   {'Examples' = 'examples.md'},
   {'Reference' = 'reference.md'},
 ]

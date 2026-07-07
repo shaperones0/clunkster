@@ -49,9 +49,7 @@ class InjectorPreprocessor(Preprocessor):
                         f'<a href="{url}" class="{css}">{text}</a>'
                     )
                 else:
-                    self.tracker[placeholder] = (
-                        f'<a href="{url}">{text}</a>'
-                    )
+                    self.tracker[placeholder] = f'<a href="{url}">{text}</a>'
 
                 # swap syntax
                 line = (
