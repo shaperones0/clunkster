@@ -9,7 +9,7 @@ Non-destructive tools:
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see [ex2.3](https://shaperones0.github.io/clunkster/examples/#example-23-lint-cross-cluster-references))
 - Linter: room indirect reference validator via dependency graph (see [ex3.3](https://shaperones0.github.io/clunkster/examples/#example-33-lint-room-cluster-boundaries))
-- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see [ex4.1](https://shaperones0.github.io/clunkster/examples/#example-41-juicer-the-juice); [Dehydration](https://shaperones0.github.io/clunkster/rationale/#dehydration))
+- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see [ex4.1](https://shaperones0.github.io/clunkster/examples/#example-41-juicer-the-juice); [Dehydration](https://shaperones0.github.io/clunkster/#dehydration))
 
 Lightly destructive tools:
 

@@ -312,9 +312,11 @@ class ExampleHeaderManager(HeaderManager):
     def _format_file(self, key: str) -> str | None:
         file = self.key_to_file[key]
         if self.file_is_gh:
-            # link to the web docs
+            # link to the web docs from gh file
+            if file == 'index.md':
+                file = ''
+            pos = file.rfind('.') + len(WEB_PREF)
             file = WEB_PREF + file
-            pos = file.rfind('.')
             if pos != -1:
                 file = file[:pos] + '/'
         return None if file == self.file_current else file

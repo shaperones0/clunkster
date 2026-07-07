@@ -37,7 +37,7 @@ Non-destructive tools:
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})
 - Linter: room indirect reference validator via dependency graph (see {exs.href('ex_lint_crossref_graph')})
-- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; [Dehydration](https://shaperones0.github.io/clunkster/rationale/#dehydration))
+- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; {exs.href('h_dehydration', 'Dehydration')})
 
 Lightly destructive tools:
 
@@ -761,7 +761,7 @@ default:
 
 More info on them scripts can be found in the [GML](#integration-into-the-game) chapter.
 
-## Dehydration
+{head.header_parse('## Dehydration', 'h_dehydration')}
 
 Following terms are used:
 
