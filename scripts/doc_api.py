@@ -197,7 +197,7 @@ class ApiManager:
             if ann is None:
                 return 'Any'
             if isinstance(ann, str):
-                return f'"{ann}"'
+                return f'{ann}'
             return str(ann)
 
         # parse docstring for brief and desc
