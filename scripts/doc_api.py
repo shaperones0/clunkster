@@ -256,7 +256,7 @@ class ApiManager:
                     md.append(f'{brief}\n')
             # inline
             elif brief:
-                md.append(f'`{signature}` {brief}\n')
+                md.append(f'`{signature}`\n\n{brief}\n')
             else:
                 md.append(f'`{signature}`\n')
 
@@ -338,6 +338,8 @@ class ApiManager:
                 md.append('    ```python')
                 md.append(textwrap.indent(linked_source, '    '))
                 md.append('    ```\n')
+
+        md.append('___')
 
         # recurse
         if obj.members:
