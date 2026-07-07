@@ -1309,6 +1309,50 @@ def txt_reference(
     return f"""
 {head.file_begin('reference.md')}
 
+<style>
+@media screen and (min-width: 76.25em) {{
+    .md-sidebar--secondary {{
+        width: 16rem !important;
+    }}
+    .md-content {{
+        max-width: calc(100% - 16rem);
+    }}
+}}
+.md-sidebar--secondary .md-nav__item .md-nav__link {{
+    white-space: nowrap;
+}}
+
+.api-badge {{
+    font-family: var(--md-code-font-family);
+
+    border-radius: .2rem;
+    font-size: .85em;
+    padding: .25em .4em;
+}}
+
+.api-badge-cls {{
+    background-color: #e8eaf6;
+    color: #3f51b5;
+    /* border: 1px solid #c5cae9;  */
+}}
+.api-badge-def {{
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    /* border: 1px solid #c8e6c9;  */
+}}
+
+[data-md-color-scheme="slate"] .api-badge-cls {{
+    background-color: #1a237e;
+    color: #c5cae9;
+    /* border: 1px solid #3949ab; */
+}}
+[data-md-color-scheme="slate"] .api-badge-def {{
+    background-color: #1b5e20;
+    color: #c8e6c9;
+    /* border: 1px solid #2e7d32;  */
+}}
+</style>
+
 {head.header_parse('# Reference', 'h_reference')}
 
 {api.render_reference()}

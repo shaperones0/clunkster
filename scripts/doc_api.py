@@ -8,6 +8,8 @@ from typing import cast
 
 import griffe
 
+from scripts import doc_imports
+
 TOC_MAX_LEN = 28
 
 
@@ -42,10 +44,13 @@ class ApiManager:
         self.library_name = library_name
         self.manifest: dict[str, str] = {}
         self.cache_rendered: str | None = None
+        self.manifest_ready = False
 
     def render_reference(self) -> str:  # noqa: C901
         """Scan the library and render reference file."""
         if self.cache_rendered is not None:
+            assert self.manifest, 'Manifest not populated???'
+            assert self.manifest_ready, 'Manifest not ready???'
             return self.cache_rendered
 
         lib = cast(
@@ -55,8 +60,46 @@ class ApiManager:
                 docstring_parser='sphinx',
             ),
         )
+
+        # pass 1
+        def _populate_manifest(obj: griffe.Object) -> None:
+            if getattr(obj, 'modules', None):
+                for child in obj.modules.values():
+                    _populate_manifest(child)
+
+            if getattr(obj, 'members', None):
+                for member_name, member in obj.members.items():
+                    if member.is_alias:
+                        continue
+                    assert isinstance(member, griffe.Object)
+                    if (
+                        member_name.startswith('_')
+                        and member_name != '__init__'
+                    ):
+                        continue
+                    if member.kind in (
+                        griffe.Kind.CLASS,
+                        griffe.Kind.FUNCTION,
+                    ):
+                        target_url = f'/reference/#{member.path}'
+                        if (
+                            self.manifest.get(member.path, target_url)
+                            != target_url
+                        ):
+                            raise KeyError(
+                                f'Path {member.path} is already referenced '
+                                f'to {self.manifest[member.path]}, it cannot '
+                                f'point to {target_url}'
+                            )
+                        self.manifest[member.path] = target_url
+                        _populate_manifest(member)
+
+        _populate_manifest(lib)
+        self.manifest_ready = True
+
         md_content: list[str] = []
 
+        # pass 2
         def process_module(mod: griffe.Module) -> None:
             has_content = any(
                 m.kind in (griffe.Kind.CLASS, griffe.Kind.FUNCTION)
@@ -95,18 +138,6 @@ class ApiManager:
                         md_content.append(
                             self._build_markdown_for_object(member, level=3)
                         )
-
-                        target_url = f'/reference/#{member.path}'
-                        if (
-                            self.manifest.get(member.path, target_url)
-                            != target_url
-                        ):
-                            raise KeyError(
-                                f'Path {member.path} is already referenced '
-                                f'to {self.manifest[member.path]}, it cannot '
-                                f'point to {target_url}'
-                            )
-                        self.manifest[member.path] = target_url
 
             # recurse
             for child_mod in mod.modules.values():
@@ -160,8 +191,9 @@ class ApiManager:
             assert isinstance(obj, griffe.Class)
 
             # header
-            header_text = trunk_ellipsis(
-                f'`CLS` `{obj.name}`', TOC_MAX_LEN, '`...'
+            header_text = (
+                f'<span class="api-badge api-badge-cls">CLS</span> '
+                f'`{obj.name}`'
             )
             md.append(f'{prefix} {header_text}\n')
 
@@ -176,8 +208,9 @@ class ApiManager:
             assert isinstance(obj, griffe.Function)
 
             # header
-            header_text = trunk_ellipsis(
-                f'`DEF` `{obj.name}`', TOC_MAX_LEN, '`...'
+            header_text = (
+                f'<span class="api-badge api-badge-def">DEF</span> '
+                f'`{obj.name}`'
             )
             md.append(f'{prefix} {header_text}\n')
 
@@ -185,10 +218,25 @@ class ApiManager:
             parent_pref = (
                 'def ' if parent_name is None else f'def {parent_name}.'
             )
-            cnt_params = sum(
-                1 for p in obj.parameters if p.name not in ('self', 'cls')
-            )
-            if cnt_params > 2:  # noqa: PLR2004
+            # try inline
+            params_parts: list[str] = []
+            for p in obj.parameters:
+                if p.name in ('self', 'cls'):
+                    params_parts.append(p.name)
+                else:
+                    params_parts.append(
+                        f'{p.name}: {ann_to_str(p.annotation)}'
+                    )
+            params = ', '.join(params_parts)
+            if obj.name == '__init__':
+                signature = f'{parent_pref}{obj.name}({params}):'
+            else:
+                signature = (
+                    f'{parent_pref}{obj.name}({params}) -> '
+                    f'{ann_to_str(obj.returns)}:'
+                )
+
+            if len(signature) > 76:  # noqa: PLR2004
                 # block
                 md.append('```python')
                 md.append(f'{parent_pref}{obj.name}(')
@@ -206,29 +254,11 @@ class ApiManager:
                 # brief afterward
                 if brief:
                     md.append(f'{brief}\n')
+            # inline
+            elif brief:
+                md.append(f'`{signature}` {brief}\n')
             else:
-                # inline
-                params_parts: list[str] = []
-                for p in obj.parameters:
-                    if p.name in ('self', 'cls'):
-                        params_parts.append(p.name)
-                    else:
-                        params_parts.append(
-                            f'{p.name}: {ann_to_str(p.annotation)}'
-                        )
-                params = ', '.join(params_parts)
-                if obj.name == '__init__':
-                    signature = f'{parent_pref}{obj.name}({params}):'
-                else:
-                    signature = (
-                        f'{parent_pref}{obj.name}({params}) -> '
-                        f'{ann_to_str(obj.returns)}:'
-                    )
-
-                if brief:
-                    md.append(f'`{signature}` {brief}\n')
-                else:
-                    md.append(f'`{signature}`\n')
+                md.append(f'`{signature}`\n')
 
             # params
             docstring = obj.docstring
@@ -284,9 +314,29 @@ class ApiManager:
             # show source if it's concrete function with body and
             #  ain't abc __init__
             if not is_abstract and not is_empty_body and not is_empty_abc_init:
+                # populate link things
+
+                local_map: dict[str, str] = {}
+                module_obj = obj.module
+
+                for m_name, m_obj in module_obj.members.items():
+                    if not m_obj.is_alias:
+                        local_map[m_name] = m_obj.path
+
+                if module_obj.source:
+                    mod_imports = doc_imports.ImportsFilter.from_code(
+                        module_obj.source
+                    )
+                    local_map.update(mod_imports.get_import_map())
+
+                # Run the newly unlocked injector
+                linked_source = inject_python_code_links(
+                    code_str=obj.source, api=self, import_map=local_map
+                )
+
                 md.append('??? quote "View source"')
                 md.append('    ```python')
-                md.append(textwrap.indent(obj.source, '    '))
+                md.append(textwrap.indent(linked_source, '    '))
                 md.append('    ```\n')
 
         # recurse
@@ -324,10 +374,8 @@ def inject_python_code_links(  # noqa: C901
     *, code_str: str, api: ApiManager, import_map: dict[str, str]
 ) -> str:
     """Find API usages in source, inject code links."""
-    if api.cache_rendered is None:
-        raise KeyError(
-            'API Reference not yet generated. Deferring snippet linking.'
-        )
+    if not api.manifest_ready:
+        raise KeyError('API Manifest not ready yet.')
 
     tree = ast.parse(code_str)
 
