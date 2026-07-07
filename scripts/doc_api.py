@@ -45,6 +45,7 @@ class ApiManager:
         self.manifest: dict[str, str] = {}
         self.cache_rendered: str | None = None
         self.manifest_ready = False
+        self.module_to_imports: dict[str, dict[str, str]] = {}
 
     def render_reference(self) -> str:  # noqa: C901
         """Scan the library and render reference file."""
@@ -169,6 +170,23 @@ class ApiManager:
         # md link
         return f'[{display_text}]({url})'
 
+    def _get_module_map(self, module: griffe.Module) -> dict[str, str]:
+        if module.path in self.module_to_imports:
+            return self.module_to_imports[module.path]
+
+        local_map: dict[str, str] = {}
+
+        for m_name, m_obj in module.members.items():
+            if not m_obj.is_alias:
+                local_map[m_name] = m_obj.path
+
+        if module.source:
+            mod_imports = doc_imports.ImportsFilter.from_code(module.source)
+            local_map.update(mod_imports.get_import_map())
+
+        self.module_to_imports[module.path] = local_map
+        return local_map
+
     def _build_markdown_for_object(  # noqa: C901, PLR0912, PLR0915
         self, obj: griffe.Object, level: int, parent_name: str | None = None
     ) -> str:
@@ -218,47 +236,36 @@ class ApiManager:
             parent_pref = (
                 'def ' if parent_name is None else f'def {parent_name}.'
             )
-            # try inline
-            params_parts: list[str] = []
+
+            # block
+            block_lines: list[str] = [f'def {obj.name}(']
             for p in obj.parameters:
                 if p.name in ('self', 'cls'):
-                    params_parts.append(p.name)
+                    block_lines.append(f'    {p.name},')
                 else:
-                    params_parts.append(
-                        f'{p.name}: {ann_to_str(p.annotation)}'
+                    block_lines.append(
+                        f'    {p.name}: {ann_to_str(p.annotation)},'
                     )
-            params = ', '.join(params_parts)
             if obj.name == '__init__':
-                signature = f'{parent_pref}{obj.name}({params}):'
+                block_lines.append('):')
             else:
-                signature = (
-                    f'{parent_pref}{obj.name}({params}) -> '
-                    f'{ann_to_str(obj.returns)}:'
-                )
+                block_lines.append(f') -> {ann_to_str(obj.returns)}:')
+            block_lines.append('    ...')
 
-            if len(signature) > 76:  # noqa: PLR2004
-                # block
-                md.append('```python')
-                md.append(f'{parent_pref}{obj.name}(')
-                for p in obj.parameters:
-                    if p.name in ('self', 'cls'):
-                        md.append(f'    {p.name},')
-                    else:
-                        md.append(f'    {p.name}: {ann_to_str(p.annotation)},')
-                if obj.name == '__init__':
-                    md.append('):')
-                else:
-                    md.append(f') -> {ann_to_str(obj.returns)}:')
-                md.append('```\n')
+            # render block
+            linked_source = inject_python_code_links(
+                code_str='\n'.join(block_lines),
+                api=self,
+                import_map=self._get_module_map(obj.module),
+            ).replace(f'def {obj.name}', f'{parent_pref}{obj.name}', 1)
 
-                # brief afterward
-                if brief:
-                    md.append(f'{brief}\n')
-            # inline
-            elif brief:
-                md.append(f'`{signature}`\n\n{brief}\n')
-            else:
-                md.append(f'`{signature}`\n')
+            md.append('```python')
+            md.append('\n'.join(linked_source.splitlines()[:-1]))
+            md.append('```\n')
+
+            # brief afterward
+            if brief:
+                md.append(f'{brief}\n')
 
             # params
             docstring = obj.docstring
@@ -315,23 +322,10 @@ class ApiManager:
             #  ain't abc __init__
             if not is_abstract and not is_empty_body and not is_empty_abc_init:
                 # populate link things
-
-                local_map: dict[str, str] = {}
-                module_obj = obj.module
-
-                for m_name, m_obj in module_obj.members.items():
-                    if not m_obj.is_alias:
-                        local_map[m_name] = m_obj.path
-
-                if module_obj.source:
-                    mod_imports = doc_imports.ImportsFilter.from_code(
-                        module_obj.source
-                    )
-                    local_map.update(mod_imports.get_import_map())
-
-                # Run the newly unlocked injector
                 linked_source = inject_python_code_links(
-                    code_str=obj.source, api=self, import_map=local_map
+                    code_str=obj.source,
+                    api=self,
+                    import_map=self._get_module_map(obj.module),
                 )
 
                 md.append('??? quote "View source"')
