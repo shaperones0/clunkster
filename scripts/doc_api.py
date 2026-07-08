@@ -73,13 +73,18 @@ def mod_sort(*mods: griffe.Module) -> list[griffe.Module]:
 
 
 def param_to_code(param: griffe.Parameter | griffe.DocstringParameter) -> str:
-    parts: list[str] = [
+    """Convert griffe parameter to code."""
+    parts: list[str] = []
 
-    ]
-    if param.kind == griffe.ParameterKind.var_positional:
+    is_vararg = False
+    if (
+        isinstance(param, griffe.Parameter)
+        and param.kind == griffe.ParameterKind.var_positional
+    ):
         parts.append('*')
+        is_vararg = True
     parts.append(f'{param.name}: {gr_ann_to_str(param.annotation)}')
-    if param.default:
+    if param.default and not is_vararg:
         parts.append(f' = {gr_ann_to_str(param.default)}')
     return ''.join(parts)
 
@@ -509,7 +514,9 @@ class ApiManager:
 
         # block
         block_lines: list[str] = [f'def {func.name}(']
+        name_to_param: dict[str, griffe.Parameter] = {}
         for p in func.parameters:
+            name_to_param[p.name] = p
             if p.name in ('self', 'cls'):
                 block_lines.append(f'    {p.name},')
             else:
@@ -541,7 +548,11 @@ class ApiManager:
             if section.kind.value == 'parameters':
                 for param in section.value:
                     assert isinstance(param, griffe.DocstringParameter)
-                    yield f'- `{param_to_code(param)}` - {param.description}'
+                    true_param = name_to_param[param.name]
+                    yield (
+                        f'- `{param_to_code(true_param)}` - '
+                        f'{param.description}'
+                    )
                 yield '\n'
             elif section.kind.value == 'returns':
                 ret = section.value[0]
