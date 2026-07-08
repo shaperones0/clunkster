@@ -16,14 +16,11 @@ extra_css = [
 
 [project.theme]
 features = [
-  'navigation.instant',
-  'navigation.instant.prefetch',
+    'navigation.instant',
+    'navigation.instant.prefetch',
 
-  'navigation.tracking',  # anchor tracking
-#  'navigation.tabs',
-#  'navigation.path',
-
-#  'toc.integrate'
+    'navigation.tracking',  # anchor tracking
+    'navigation.indexes'
 ]
 
 [project.theme.icon]

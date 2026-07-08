@@ -1822,6 +1822,19 @@ ___
 """
 
 
+def txt_reference_overview(
+    head: doc_headers.ExampleHeaderManager,
+    api: doc_api.ApiManager,
+    **_: object,
+) -> str:
+    """Generate reference overview page."""
+    return f"""
+{head.header_parse('# Overview', 'h_reference')}
+
+{api.render_overview()}
+"""
+
+
 def render_reference(
     api: doc_api.ApiManager,
     module: griffe.Module,
@@ -1884,6 +1897,7 @@ def _main() -> None:  # noqa: C901
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
         dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
         dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
+        dir_ref / 'index.md': doc_patch.FuncParser.from_func(txt_reference_overview),
     }
 
     iterations = 0

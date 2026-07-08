@@ -51,6 +51,20 @@ def gr_ann_to_str(ann: str | griffe.Expr | None) -> str:
     return str(ann)
 
 
+def mod_url(mod: griffe.Module, root_lib_dir: Path, suffix: str = '') -> str:
+    """Generate a url for a griffe module."""
+    pth = mod.filepath
+    assert isinstance(pth, Path)
+    assert pth.is_relative_to(root_lib_dir)
+    pth = pth.relative_to(root_lib_dir).with_suffix(suffix)
+    return f'/reference/{pth.as_posix()}/'
+
+
+def obj_url(obj: griffe.Object, root_lib_dir: Path) -> str:
+    """Generate a url for a griffe object."""
+    return mod_url(obj.module, root_lib_dir) + f'#{gr_qn(obj)}'
+
+
 ProcessableTypes = (
     type[griffe.Module] | type[griffe.Function] | type[griffe.Class]
 )
@@ -73,10 +87,11 @@ class _Replacement:
 class ApiManager:
     """Surface view of scannable modules."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         root_lib_dir: Path,
+        root_module: griffe.Module,
         mod_qn_to_module: dict[str, griffe.Module],
         mod_qn_to_local_map: dict[str, dict[str, str]],
         mod_qn_to_path: dict[str, Path],
@@ -94,12 +109,14 @@ class ApiManager:
           generated url to member reference.
         """
         self.root_lib_dir = root_lib_dir
+        self.root_module = root_module
         self.mod_qn_to_module = mod_qn_to_module
         self.mod_qn_to_local_map = mod_qn_to_local_map
         self.mod_qn_to_path = mod_qn_to_path
         self.qn_to_url = qn_to_url
 
         self.cache_qn_to_rendered: dict[str, list[str]] = {}
+        self.cache_overview = ''
 
     @classmethod
     def from_root_lib_name(cls, library_name: str) -> Self:  # noqa: C901
@@ -132,10 +149,17 @@ class ApiManager:
                 for mem in obj.members.values()
             )
             if isinstance(obj, griffe.Module):
+                mod_path = obj.filepath
+                assert isinstance(mod_path, Path)
+
                 if has_cool_members:
+                    if mod_path.name == '__init__.py':
+                        raise NotImplementedError(
+                            f'__init__.py modules cannot contain functional '
+                            f'code. Found in {mod_path}'
+                        )
+
                     mod_qn_to_module[gr_qn(obj)] = obj
-                    mod_path = obj.filepath
-                    assert isinstance(mod_path, Path)
                     mod_qn_to_path[gr_qn(obj)] = mod_path
 
                     # populate local map
@@ -175,12 +199,7 @@ class ApiManager:
                 if member_name.startswith('_') and member_name != '__init__':
                     continue
                 qual_name = gr_qn(member)
-                pth = (
-                    mod_qn_to_path[gr_qn(member.module)]
-                    .relative_to(root_lib_dir)
-                    .with_suffix('')
-                )
-                url = f'/reference/{pth.as_posix()}/#{qual_name}'
+                url = obj_url(member, root_lib_dir)
                 if qn_to_url.setdefault(qual_name, url) != url:
                     raise KeyError(
                         f'Qualified name {qual_name} is already referenced '
@@ -192,11 +211,96 @@ class ApiManager:
 
         return cls(
             root_lib_dir=root_lib_dir,
+            root_module=lib,
             mod_qn_to_module=mod_qn_to_module,
             mod_qn_to_local_map=mod_qn_to_local_map,
             mod_qn_to_path=mod_qn_to_path,
             qn_to_url=qn_to_url,
         )
+
+    def render_overview(self) -> str:
+        """Render the reference overview page."""
+        if not self.cache_overview:
+            self.cache_overview = self._render_overview()
+
+        return self.cache_overview
+
+    def _render_overview(self) -> str:  # noqa: C901
+        """Render the section index overview page."""
+        lines: list[str] = []
+
+        def _mod_sub_cnt(mod: griffe.Module) -> int:
+            return sum(not m.is_alias for m in mod.modules.values())
+
+        def _render_mod_node(  # noqa: PLR0912, C901
+            mod: griffe.Module, depth: int
+        ) -> col.Iterator[str]:
+            qn = gr_qn(mod)
+
+            has_page = qn in self.mod_qn_to_module
+            indent = '    ' * depth
+            brief, description = docstring_get_brief_desc(
+                () if mod.docstring is None else mod.docstring.parsed
+            )
+
+            if has_page:
+                url = mod_url(mod, self.root_lib_dir)
+                qn_display = f'[`{qn}`]({url})'
+            else:
+                qn_display = f'`{qn}`'
+
+            icon = (
+                ':lucide-folder:'
+                if _mod_sub_cnt(mod)
+                else ':lucide-file-code:'
+            )
+            bullet = f'{indent}- {icon} {qn_display}'
+            if brief:
+                bullet += f' - {brief}'
+            yield bullet
+
+            if description:
+                yield ''
+                # check if need block
+                ls = description.splitlines()
+                num_lines = len(ls)
+                if num_lines > 1:
+                    # check if first line can be shoved
+                    if len(ls[0]) < 80:  # noqa: PLR2004
+                        yield f'{indent}    ??? quote "{ls[0]} ..."'
+                        ls.pop(0)
+                    else:
+                        yield f'{indent}    ??? quote "Description"'
+                    for line in ls:
+                        if line.strip():
+                            yield f'{indent}        {line}'
+                        else:
+                            yield ''
+                else:
+                    yield f'{indent}    {description}'
+                yield ''
+
+            next_depth = depth + 1
+
+            yield ''
+            children: list[griffe.Module] = []
+            for child in mod.modules.values():
+                if child.is_alias:
+                    continue
+                assert isinstance(child, griffe.Module)
+                children.append(child)
+
+            def _mod_sort_key(module: griffe.Module) -> tuple[bool, str]:
+                return _mod_sub_cnt(module) > 0, module.name
+
+            children.sort(key=_mod_sort_key)
+
+            for child_mod in children:
+                yield from _render_mod_node(child_mod, next_depth)
+            yield ''
+
+        lines.extend(_render_mod_node(self.root_module, 0))
+        return '\n'.join(lines)
 
     def render_module(self, mod: griffe.Module) -> str:
         """Render given module.
