@@ -12,30 +12,36 @@
         <meta name="author" content="shaperones">
       
       
+        <link rel="canonical" href="https://shaperones0.github.com/clunkster/reference/parse/kv/">
       
+      
+        <link rel="prev" href="../gml/">
+      
+      
+        <link rel="next" href="../tree/">
       
       
         
       
       
-      <link rel="icon" href="/clunkster/assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="zensical-0.0.46">
     
     
       
-        <title>Clunkster</title>
+        <title>clunkster.parse.kv - Parse GameMaker 8.2 key=value metadata files. - Clunkster</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="/clunkster/assets/stylesheets/modern/main.19d3147f.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.19d3147f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="/clunkster/assets/stylesheets/modern/palette.dfe2e883.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.dfe2e883.min.css">
       
       
 
@@ -54,9 +60,9 @@
       
     
     
-      <link rel="stylesheet" href="/clunkster/stylesheets/custom.css">
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("/clunkster",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -80,7 +86,8 @@
     <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
     <div data-md-component="skip">
       
-        <a href="#__skip" class="md-skip">
+        
+        <a href="#clunksterparsekv-parse-gamemaker-82-keyvalue-metadata-files" class="md-skip">
           Skip to content
         </a>
       
@@ -96,7 +103,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="/clunkster/" title="Clunkster" class="md-header__button md-logo" aria-label="Clunkster" data-md-component="logo">
+    <a href="../../.." title="Clunkster" class="md-header__button md-logo" aria-label="Clunkster" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
@@ -116,7 +123,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              
+              clunkster.parse.kv - Parse GameMaker 8.2 key=value metadata files.
             
           </span>
         </div>
@@ -205,7 +212,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="/clunkster/" title="Clunkster" class="md-nav__button md-logo" aria-label="Clunkster" data-md-component="logo">
+    <a href="../../.." title="Clunkster" class="md-nav__button md-logo" aria-label="Clunkster" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-book-open" viewBox="0 0 24 24"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
@@ -235,7 +242,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/" class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -261,7 +268,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/examples/" class="md-nav__link">
+      <a href="../../../examples/" class="md-nav__link">
         
   
   
@@ -284,18 +291,20 @@
       
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -315,7 +324,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -332,7 +341,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/asset/" class="md-nav__link">
+      <a href="../../asset/" class="md-nav__link">
         
   
   
@@ -359,7 +368,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/lint/" class="md-nav__link">
+      <a href="../../lint/" class="md-nav__link">
         
   
   
@@ -386,7 +395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/project/" class="md-nav__link">
+      <a href="../../project/" class="md-nav__link">
         
   
   
@@ -458,7 +467,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/analyze/scan_dep/" class="md-nav__link">
+      <a href="../../analyze/scan_dep/" class="md-nav__link">
         
   
   
@@ -490,18 +499,20 @@
                 
   
   
+    
   
   
+  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_5" checked>
         
           
           <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
@@ -521,7 +532,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -538,7 +549,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/parse/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -565,7 +576,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/parse/gml/" class="md-nav__link">
+      <a href="../gml/" class="md-nav__link">
         
   
   
@@ -589,10 +600,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="/clunkster/reference/parse/kv/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  clunkster.parse.kv - Parse GameMaker 8.2 key=value metadata files.
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -607,6 +644,49 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#def-parse_dataclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <span class="api-badge api-badge-def">DEF</span> <code>parse_dataclass</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#def-parse_pairs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <span class="api-badge api-badge-def">DEF</span> <code>parse_pairs</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -619,7 +699,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/parse/tree/" class="md-nav__link">
+      <a href="../tree/" class="md-nav__link">
         
   
   
@@ -699,7 +779,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/cache/" class="md-nav__link">
+      <a href="../../pipeline/cache/" class="md-nav__link">
         
   
   
@@ -726,7 +806,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/task/" class="md-nav__link">
+      <a href="../../pipeline/task/" class="md-nav__link">
         
   
   
@@ -798,7 +878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/events/context/" class="md-nav__link">
+      <a href="../../pipeline/events/context/" class="md-nav__link">
         
   
   
@@ -825,7 +905,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/events/dispatcher/" class="md-nav__link">
+      <a href="../../pipeline/events/dispatcher/" class="md-nav__link">
         
   
   
@@ -852,7 +932,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/events/event/" class="md-nav__link">
+      <a href="../../pipeline/events/event/" class="md-nav__link">
         
   
   
@@ -879,7 +959,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/events/sink/" class="md-nav__link">
+      <a href="../../pipeline/events/sink/" class="md-nav__link">
         
   
   
@@ -959,7 +1039,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/executor/base/" class="md-nav__link">
+      <a href="../../pipeline/executor/base/" class="md-nav__link">
         
   
   
@@ -986,7 +1066,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/executor/mp/" class="md-nav__link">
+      <a href="../../pipeline/executor/mp/" class="md-nav__link">
         
   
   
@@ -1013,7 +1093,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/executor/thread/" class="md-nav__link">
+      <a href="../../pipeline/executor/thread/" class="md-nav__link">
         
   
   
@@ -1093,7 +1173,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/ui/adapter/" class="md-nav__link">
+      <a href="../../pipeline/ui/adapter/" class="md-nav__link">
         
   
   
@@ -1120,7 +1200,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/ui/base/" class="md-nav__link">
+      <a href="../../pipeline/ui/base/" class="md-nav__link">
         
   
   
@@ -1147,7 +1227,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/pipeline/ui/simple/" class="md-nav__link">
+      <a href="../../pipeline/ui/simple/" class="md-nav__link">
         
   
   
@@ -1235,7 +1315,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/text/line/" class="md-nav__link">
+      <a href="../../text/line/" class="md-nav__link">
         
   
   
@@ -1262,7 +1342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/clunkster/reference/text/location/" class="md-nav__link">
+      <a href="../../text/location/" class="md-nav__link">
         
   
   
@@ -1311,6 +1391,13 @@
                     
                     
                     
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
                     
                   
                   <div class="md-sidebar__inner">
@@ -1321,6 +1408,38 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#def-parse_dataclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <span class="api-badge api-badge-def">DEF</span> <code>parse_dataclass</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#def-parse_pairs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <span class="api-badge api-badge-def">DEF</span> <code>parse_pairs</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -1333,8 +1452,122 @@
               
               <article class="md-content__inner md-typeset">
                 
-  <h1>404 - Not found</h1>
+                  
+  
+  
 
+
+<style>
+@media screen and (min-width: 76.25em) {
+    .md-sidebar--secondary {
+        width: 16rem !important;
+    }
+    .md-content {
+        max-width: calc(100% - 16rem);
+    }
+}
+.md-sidebar--secondary .md-nav__item .md-nav__link {
+    white-space: nowrap;
+}
+</style>
+
+<h1 id="clunksterparsekv-parse-gamemaker-82-keyvalue-metadata-files"><code>clunkster.parse.kv</code> - Parse GameMaker 8.2 <code>key=value</code> metadata files.<a class="headerlink" href="#clunksterparsekv-parse-gamemaker-82-keyvalue-metadata-files" title="Permanent link">&para;</a></h1>
+<p><a href="https://github.com/shaperones0/clunkster/blob/master/clunkster/parse/kv.py">View on GitHub</a></p>
+<p><a id="clunkster.parse.kv.parse_dataclass"></a></p>
+<h2 id="def-parse_dataclass"><span class="api-badge api-badge-def">DEF</span> <code>parse_dataclass</code><a class="headerlink" href="#def-parse_dataclass" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_dataclass</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="bp">cls</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">lines</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+</span></code></pre></div>
+<p>Parse <code>key=value</code> pairs from <code>lines</code> into given dataclass.</p>
+<ul>
+<li><code>cls: type[T]</code> - Dataclass class to parse into.</li>
+<li><code>lines: col.Iterable[str]</code> - Input lines.</li>
+</ul>
+<p><strong>Returns:</strong> <code>T</code> - Validated dataclass from given lines.</p>
+<p>Performs validation, only <code>str</code> and <code>int</code> fields are supported.</p>
+<details class="quote">
+<summary>View source</summary>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_dataclass</span><span class="p">[</span><span class="n">T</span><span class="p">](</span><span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">T</span><span class="p">],</span> <span class="n">lines</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse ``key=value`` pairs from ``lines`` into given dataclass.</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="sd">    Performs validation, only ``str`` and ``int`` fields are supported.</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="sd">    :param cls: Dataclass class to parse into.</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="sd">    :param lines: Input lines.</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="sd">    :return: Validated dataclass from given lines.</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n"><a href="/reference/parse/kv/#clunkster.parse.kv.parse_pairs">parse_pairs</a></span><span class="p">(</span><span class="n">lines</span><span class="p">))</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">hints</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">result</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">unknown</span> <span class="o">=</span> <span class="n">raw</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">-</span> <span class="n">hints</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Unknown fields: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="k">for</span> <span class="n">field_name</span><span class="p">,</span> <span class="n">field_type</span> <span class="ow">in</span> <span class="n">hints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>        <span class="k">if</span> <span class="n">field_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">:</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Missing field: </span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>        <span class="n">value</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>        <span class="k">if</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="nb">int</span><span class="p">:</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>            <span class="n">result</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>        <span class="k">elif</span> <span class="n">field_type</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>            <span class="n">result</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>                <span class="sa">f</span><span class="s1">&#39;Unsupported type </span><span class="si">{</span><span class="n">field_type</span><span class="si">!r}</span><span class="s1"> for field </span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s1">&#39;</span>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>            <span class="p">)</span>
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">result</span><span class="p">)</span>
+</span></code></pre></div>
+</details>
+<hr />
+<p><a id="clunkster.parse.kv.parse_pairs"></a></p>
+<h2 id="def-parse_pairs"><span class="api-badge api-badge-def">DEF</span> <code>parse_pairs</code><a class="headerlink" href="#def-parse_pairs" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_pairs</span><span class="p">(</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">lines</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+</span></code></pre></div>
+<p>Parse <code>key=value</code> pairs from <code>lines</code>.</p>
+<ul>
+<li><code>lines: col.Iterable[str]</code> - Input lines.</li>
+</ul>
+<p><strong>Returns:</strong> <code>col.Iterator[tuple[str, str]]</code> - Iterator of (key, value) pairs.</p>
+<details class="quote">
+<summary>View source</summary>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">parse_pairs</span><span class="p">(</span><span class="n">lines</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse ``key=value`` pairs from ``lines``.</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="sd">    :param lines: Input lines.</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="sd">    :return: Iterator of (key, value) pairs.</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>            <span class="c1"># skip blank lines</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>            <span class="k">continue</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;=&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="k">yield</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span>
+</span></code></pre></div>
+</details>
+<hr />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
               </article>
             </div>
           
@@ -1371,10 +1604,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate":null,"base":"/clunkster","features":["navigation.instant","navigation.instant.prefetch","navigation.tracking"],"search":"/clunkster/assets/javascripts/workers/search.b6b7e04f.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["navigation.instant","navigation.instant.prefetch","navigation.tracking"],"search":"../../../assets/javascripts/workers/search.b6b7e04f.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="/clunkster/assets/javascripts/bundle.ee611ef6.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.ee611ef6.min.js"></script>
       
     
   </body>

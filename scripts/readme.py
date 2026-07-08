@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import griffe
+
 from scripts import (
     doc_api,
     doc_code,
@@ -1292,73 +1294,6 @@ else {{
 """  # noqa: S608
 
 
-LIBRARY_NAME = 'clunkster'
-DIR_DOCS_MD = Path(__file__).parent.parent / 'docs_md'
-FILE_API_MANIFEST = Path(__file__).parent.parent / 'api.json'
-
-
-def txt_reference(
-    snips: dict[str, list[Snippet]],
-    head: doc_headers.ExampleHeaderManager,
-    docs: dict[str, str],
-    exs: doc_code.CodeGenerator,
-    api: doc_api.ApiManager,
-    **_: object,
-) -> str:
-    """Generate reference."""
-    return f"""
-{head.file_begin('reference.md')}
-
-<style>
-@media screen and (min-width: 76.25em) {{
-    .md-sidebar--secondary {{
-        width: 16rem !important;
-    }}
-    .md-content {{
-        max-width: calc(100% - 16rem);
-    }}
-}}
-.md-sidebar--secondary .md-nav__item .md-nav__link {{
-    white-space: nowrap;
-}}
-
-.api-badge {{
-    font-family: var(--md-code-font-family);
-
-    border-radius: .2rem;
-    font-size: .85em;
-    padding: .25em .4em;
-}}
-
-.api-badge-cls {{
-    background-color: #e8eaf6;
-    color: #3f51b5;
-    /* border: 1px solid #c5cae9;  */
-}}
-.api-badge-def {{
-    background-color: #e8f5e9;
-    color: #2e7d32;
-    /* border: 1px solid #c8e6c9;  */
-}}
-
-[data-md-color-scheme="slate"] .api-badge-cls {{
-    background-color: hsl(238, 27%, 10%);
-    color: #c5cae9;
-    /* border: 1px solid #3949ab; */
-}}
-[data-md-color-scheme="slate"] .api-badge-def {{
-    background-color: hsl(124, 27%, 10%);
-    color: #c8e6c9;
-    /* border: 1px solid #2e7d32;  */
-}}
-</style>
-
-{head.header_parse('# Reference', 'h_reference')}
-
-{api.render_reference()}
-"""
-
-
 def txt_examples(
     snips: dict[str, list[Snippet]],
     head: doc_headers.ExampleHeaderManager,
@@ -1829,6 +1764,30 @@ ___
 """
 
 
+def render_reference(
+    api: doc_api.ApiManager,
+    module: griffe.Module,
+) -> str:
+    """Generate reference."""
+    return f"""
+<style>
+@media screen and (min-width: 76.25em) {{
+    .md-sidebar--secondary {{
+        width: 16rem !important;
+    }}
+    .md-content {{
+        max-width: calc(100% - 16rem);
+    }}
+}}
+.md-sidebar--secondary .md-nav__item .md-nav__link {{
+    white-space: nowrap;
+}}
+</style>
+
+{api.render_module(module)}
+"""
+
+
 def _main() -> None:  # noqa: C901
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
@@ -1836,7 +1795,7 @@ def _main() -> None:  # noqa: C901
     snips = doc_extract.extract(doc_parse.parse(lines_main))
     head = doc_headers.ExampleHeaderManager(idx_major_start=-1)
     docs = doc_docstring.extract(txt_main)
-    api = doc_api.ApiManager('clunkster')
+    api = doc_api.ApiManager.from_root_lib_name('clunkster')
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
         header_manager=head,
@@ -1852,12 +1811,21 @@ def _main() -> None:  # noqa: C901
     }
 
     dir_docs = Path(__file__).parent.parent / 'docs_md'
+    dir_ref = dir_docs / 'reference'
+    dir_ref.mkdir(parents=True, exist_ok=True)
+
+    print('Rendering reference')
+    for qn, path in api.mod_qn_to_path.items():
+        module = api.mod_qn_to_module[qn]
+        print('-', module)
+        md_path = (dir_ref / path.relative_to(api.root_lib_dir)).with_suffix('.md')
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        md_path.write_text(render_reference(api, module), encoding='utf-8')
 
     file_to_parser: dict[Path, doc_patch.FuncParser] = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
         dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
         dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
-        dir_docs / 'reference.md': doc_patch.FuncParser.from_func(txt_reference),
     }
 
     iterations = 0

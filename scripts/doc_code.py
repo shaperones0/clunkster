@@ -221,9 +221,8 @@ class CodeGenerator:
                 if snip.type.name != 'PYTHON':
                     result.append(snip)
                     continue
-                linked_content = doc_api.inject_python_code_links(
+                linked_content = self.api.inject_code_links(
                     code_str=snip.content,
-                    api=self.api,
                     import_map=self.import_map,
                 )
                 result.append(s_py(linked_content))
