@@ -511,7 +511,50 @@ else {{
 return 0
 ```
 
-> Note: Clunkster is very sensitive to exact way you call the context guards in code. Guarded region must start with a line `if guard() {{` and end with just closing brackets on their own line `}}`. You can't use guards with parameters in regular code, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside (like `if (guard()) {{`).
+> Note: Clunkster is sensitive to exact way you call the context guards in code. Guarded region must start with a line `if guard() {{` and end with just closing brackets on their own line `}}`.
+>
+> ❌ Nope: Can't use other syntax
+>
+```gml
+if room_is_nice()
+{{  // BAD: analyzer won't see guard opening
+    nice_spell()
+}}  // GOOD: proper closing bracket
+
+if room_is_polar() {{  // GOOD: proper opening statemtent
+    if room_is_bad() {{  // GOOD: it handles indents pretty well
+        message_bad()
+    }} else {{  // BAD: analyzer won't see guard closing
+        message_good()
+    }}
+}}
+
+if (room_is_intro()) {{  // BAD: analyzer won't see guard opening
+    ...
+}}
+
+// GOOD: everything is ok in this example
+if room_is_forest() {{
+    music_forest()
+    stuff_forest()
+    john_forest()
+}}
+else {{
+    john_not_forest()
+}}
+```
+>
+> ❌ Nope: Can't use guards with parameters in scanned code
+>
+```gml
+if room_is_hub(room_next(room)) {{ ...
+```
+>
+> ❌ Nope: Can't pair them with any sort of boolean logic
+>
+```gml
+if room_is_ending() and save_get('cleared') {{ ...
+```
 
 ### Timelines
 
