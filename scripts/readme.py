@@ -72,9 +72,13 @@ GameMaker 8.2 optimization tools and project processing pipeline.
 
 Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
 
-Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic.
+{head.header_parse('### Usage', 'h_usage')}
 
-Rationale section goes more in-depth on which projects need these tools, and how to properly use them.
+Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle quirks and facilitate pipeline logic.
+
+Therefore, recommended way of using this project is cloning it, setting up environment (preferably via [`uv`](https://docs.astral.sh/uv/), standard `pip` also supported) and writing the pipeline by following the examples. Alternatively, run the existing `main.py` pipeline.
+
+However, before that, I recommend giving following sections a read - they go more in-depth on which projects need these tools, and how to properly apply them.
 
 {head.header_parse('## Rationale', 'h_rationale')}
 
@@ -95,8 +99,6 @@ Prod builds are similar, but we add dynamic loading. The project is copied, only
 - sounds get replaced with null.wav
 
 This is explained more in-depth in [Dehydration](#dehydration) and subsequent chapters.
-
-{head.header_parse('## Linters', 'h_linters')}
 
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 

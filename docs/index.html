@@ -299,10 +299,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rationale" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Rationale
+        Usage
       </span>
     </span>
   </a>
@@ -310,10 +310,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#linters" class="md-nav__link">
+  <a href="#rationale" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Linters
+        Rationale
       </span>
     </span>
   </a>
@@ -1539,10 +1539,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rationale" class="md-nav__link">
+  <a href="#usage" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Rationale
+        Usage
       </span>
     </span>
   </a>
@@ -1550,10 +1550,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#linters" class="md-nav__link">
+  <a href="#rationale" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Linters
+        Rationale
       </span>
     </span>
   </a>
@@ -1708,8 +1708,10 @@
 <h1 id="clunkster">Clunkster<a class="headerlink" href="#clunkster" title="Permanent link">&para;</a></h1>
 <p>GameMaker 8.2 optimization tools and project processing pipeline.</p>
 <p>Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.</p>
-<p>Given the architectural differences across GameMaker projects, Clunkster is organized as a set of <a href="examples/#examples">examples</a> that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic.</p>
-<p>Rationale section goes more in-depth on which projects need these tools, and how to properly use them.</p>
+<h3 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h3>
+<p>Given the architectural differences across GameMaker projects, Clunkster is organized as a set of <a href="examples/#examples">examples</a> that you can copy, and build your own pipeline out of them. The library itself provides functions that handle quirks and facilitate pipeline logic.</p>
+<p>Therefore, recommended way of using this project is cloning it, setting up environment (preferably via <a href="https://docs.astral.sh/uv/"><code>uv</code></a>, standard <code>pip</code> also supported) and writing the pipeline by following the examples. Alternatively, run the existing <code>main.py</code> pipeline.</p>
+<p>However, before that, I recommend giving following sections a read - they go more in-depth on which projects need these tools, and how to properly apply them.</p>
 <h2 id="rationale">Rationale<a class="headerlink" href="#rationale" title="Permanent link">&para;</a></h2>
 <p>GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having hardware-specific issues at even 2.5 GB of RAM usage.</p>
 <p>Also, such large projects take 10-15 seconds to build.</p>
@@ -1725,7 +1727,6 @@
 <li>sounds get replaced with null.wav</li>
 </ul>
 <p>This is explained more in-depth in <a href="#dehydration">Dehydration</a> and subsequent chapters.</p>
-<h2 id="linters">Linters<a class="headerlink" href="#linters" title="Permanent link">&para;</a></h2>
 <p>To prevent developers from accidentally referencing a <code>StageB</code> sprite inside a <code>StageA</code> object, a dependency linter is included. It builds dependency graph based on static <code>.gml</code> and <code>.txt</code> metafile analysis.</p>
 <p>From those dependencies, the tool can:</p>
 <ul>
