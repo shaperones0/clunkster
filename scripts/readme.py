@@ -1844,7 +1844,7 @@ def render_reference(
 <style>
 @media screen and (min-width: 76.25em) {{
     .md-sidebar--secondary {{
-        width: 16rem !important;
+        width: 15rem !important;
     }}
     .md-content {{
         max-width: calc(100% - 16rem);
@@ -1892,12 +1892,15 @@ def _main() -> None:  # noqa: C901
     dir_ref.mkdir(parents=True, exist_ok=True)
 
     print('Rendering reference')
-    for qn, path in api.mod_qn_to_path.items():
+    for qn in api.mod_qn_to_path:
         module = api.mod_qn_to_module[qn]
         print('-', module)
-        md_path = (dir_ref / path.relative_to(api.root_lib_dir)).with_suffix('.md')
-        md_path.parent.mkdir(parents=True, exist_ok=True)
-        md_path.write_text(render_reference(api, module), encoding='utf-8')
+
+        md_path = dir_ref / api.mod_qn_fname(qn)
+        md_path.write_text(
+            render_reference(api, module).replace('```gml', '```js'),
+            encoding='utf-8',
+        )
 
     file_to_parser: dict[Path, doc_patch.FuncParser] = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),

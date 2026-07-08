@@ -30,7 +30,7 @@ def docstring_get_brief_desc(
 
 
 def gr_filepath_to_gh_link(path: Path | list[Path]) -> str:
-    """Convert griffe's module filepath to link on GitHub."""
+    """Convert griffe's module filepath to link to file on GitHub."""
     if isinstance(path, list):
         raise TypeError(f'What {path}')
     rel = path.relative_to(PATH_BASE)
@@ -51,18 +51,25 @@ def gr_ann_to_str(ann: str | griffe.Expr | None) -> str:
     return str(ann)
 
 
-def mod_url(mod: griffe.Module, root_lib_dir: Path, suffix: str = '') -> str:
-    """Generate a url for a griffe module."""
-    pth = mod.filepath
-    assert isinstance(pth, Path)
-    assert pth.is_relative_to(root_lib_dir)
-    pth = pth.relative_to(root_lib_dir).with_suffix(suffix)
-    return f'/reference/{pth.as_posix()}/'
+def mod_sub_cnt(mod: griffe.Module) -> int:
+    """Module submodule count (no recurse)."""
+    return sum(not m.is_alias for m in mod.modules.values())
 
 
-def obj_url(obj: griffe.Object, root_lib_dir: Path) -> str:
-    """Generate a url for a griffe object."""
-    return mod_url(obj.module, root_lib_dir) + f'#{gr_qn(obj)}'
+def mod_sort(*mods: griffe.Module) -> list[griffe.Module]:
+    """Sort modules."""
+    children: list[griffe.Module] = []
+    for child in mods:
+        if child.is_alias:
+            continue
+        assert isinstance(child, griffe.Module)
+        children.append(child)
+
+    def _mod_sort_key(module: griffe.Module) -> tuple[bool, str]:
+        return mod_sub_cnt(module) > 0, module.name
+
+    children.sort(key=_mod_sort_key)
+    return children
 
 
 ProcessableTypes = (
@@ -95,6 +102,7 @@ class ApiManager:
         mod_qn_to_module: dict[str, griffe.Module],
         mod_qn_to_local_map: dict[str, dict[str, str]],
         mod_qn_to_path: dict[str, Path],
+        mod_qn_to_sort_key: dict[str, int],
         qn_to_url: dict[str, str],
     ) -> None:
         """Initialize scanned modules collection.
@@ -113,6 +121,7 @@ class ApiManager:
         self.mod_qn_to_module = mod_qn_to_module
         self.mod_qn_to_local_map = mod_qn_to_local_map
         self.mod_qn_to_path = mod_qn_to_path
+        self.mod_qn_to_sort_key = mod_qn_to_sort_key
         self.qn_to_url = qn_to_url
 
         self.cache_qn_to_rendered: dict[str, list[str]] = {}
@@ -136,6 +145,7 @@ class ApiManager:
         mod_qn_to_module: dict[str, griffe.Module] = {}
         mod_qn_to_local_map: dict[str, dict[str, str]] = {}
         mod_qn_to_path: dict[str, Path] = {}
+        mod_qn_to_sort_key: dict[str, int] = {}
         qn_to_url: dict[str, str] = {}
         lib_dir = lib.filepath
         assert isinstance(lib_dir, Path)
@@ -143,42 +153,55 @@ class ApiManager:
         if root_lib_dir.name == '__init__.py':
             root_lib_dir = root_lib_dir.parent
 
-        def _populate_manifest(obj: ProcessableObject) -> None:  # noqa: C901
+        def _populate_modules(mod: griffe.Module) -> None:
             has_cool_members = any(
                 isinstance(mem, griffe.Function | griffe.Class)
-                for mem in obj.members.values()
+                for mem in mod.members.values()
             )
-            if isinstance(obj, griffe.Module):
-                mod_path = obj.filepath
-                assert isinstance(mod_path, Path)
 
-                if has_cool_members:
-                    if mod_path.name == '__init__.py':
-                        raise NotImplementedError(
-                            f'__init__.py modules cannot contain functional '
-                            f'code. Found in {mod_path}'
-                        )
+            mod_path = mod.filepath
+            assert isinstance(mod_path, Path)
+            qn = gr_qn(mod)
+            mod_qn_to_module[qn] = mod
 
-                    mod_qn_to_module[gr_qn(obj)] = obj
-                    mod_qn_to_path[gr_qn(obj)] = mod_path
+            if has_cool_members:
+                if mod_path.name == '__init__.py':
+                    raise NotImplementedError(
+                        f'__init__.py modules cannot contain functional '
+                        f'code. Found in {mod_path}'
+                    )
 
-                    # populate local map
-                    local_map: dict[str, str] = {}
-                    for m_name, m_obj in obj.members.items():
-                        if not m_obj.is_alias:
-                            assert isinstance(m_obj, griffe.Object)
-                            local_map[m_name] = gr_qn(m_obj)
+                mod_qn_to_path[qn] = mod_path
+                mod_qn_to_sort_key[qn] = len(mod_qn_to_sort_key)
 
-                    if obj.source:
-                        imports = doc_imports.ImportsFilter.from_code(
-                            obj.source
-                        )
-                        local_map.update(imports.get_import_map())
-                    mod_qn_to_local_map[gr_qn(obj)] = local_map
+                # populate local map
+                local_map: dict[str, str] = {}
+                for m_name, m_obj in mod.members.items():
+                    if not m_obj.is_alias:
+                        assert isinstance(m_obj, griffe.Object)
+                        local_map[m_name] = gr_qn(m_obj)
 
-                # recurse into submodules
-                for child in obj.modules.values():
-                    _populate_manifest(child)
+                if mod.source:
+                    imports = doc_imports.ImportsFilter.from_code(mod.source)
+                    local_map.update(imports.get_import_map())
+                mod_qn_to_local_map[qn] = local_map
+
+            # recurse into submodules
+            for child in mod_sort(*mod.modules.values()):
+                _populate_modules(child)
+
+        _populate_modules(lib)
+        temp = cls(
+            root_lib_dir=root_lib_dir,
+            root_module=lib,
+            mod_qn_to_module=mod_qn_to_module,
+            mod_qn_to_local_map=mod_qn_to_local_map,
+            mod_qn_to_path=mod_qn_to_path,
+            mod_qn_to_sort_key=mod_qn_to_sort_key,
+            qn_to_url={},
+        )
+
+        def _populate_manifest(obj: ProcessableObject) -> None:
 
             # populate members
             for member_name, member in obj.members.items():
@@ -199,7 +222,7 @@ class ApiManager:
                 if member_name.startswith('_') and member_name != '__init__':
                     continue
                 qual_name = gr_qn(member)
-                url = obj_url(member, root_lib_dir)
+                url = temp.obj_url(member)
                 if qn_to_url.setdefault(qual_name, url) != url:
                     raise KeyError(
                         f'Qualified name {qual_name} is already referenced '
@@ -207,7 +230,8 @@ class ApiManager:
                     )
                 _populate_manifest(member)
 
-        _populate_manifest(lib)
+        for module in mod_qn_to_module.values():
+            _populate_manifest(module)
 
         return cls(
             root_lib_dir=root_lib_dir,
@@ -215,8 +239,30 @@ class ApiManager:
             mod_qn_to_module=mod_qn_to_module,
             mod_qn_to_local_map=mod_qn_to_local_map,
             mod_qn_to_path=mod_qn_to_path,
+            mod_qn_to_sort_key=mod_qn_to_sort_key,
             qn_to_url=qn_to_url,
         )
+
+    def mod_qn_fname(self, mod_qn: str, suffix: str = '.md') -> str:
+        """Convert module's qualified name to resulting MD file name."""
+        return f'{self.mod_qn_to_sort_key[mod_qn]:0>2}_' + '.'.join(
+            self.mod_qn_to_path[mod_qn]
+            .with_suffix(suffix)
+            .relative_to(self.root_lib_dir)
+            .parts
+        )
+
+    def mod_fname(self, mod: griffe.Module, suffix: str = '.md') -> str:
+        """Get module's resulting MD file name."""
+        return self.mod_qn_fname(gr_qn(mod), suffix=suffix)
+
+    def mod_url(self, mod: griffe.Module) -> str:
+        """Get module's reference page URL."""
+        return f'/reference/{self.mod_fname(mod, suffix="")}'
+
+    def obj_url(self, obj: griffe.Object) -> str:
+        """Get object's reference page URL."""
+        return self.mod_url(obj.module) + f'#{gr_qn(obj)}'
 
     def render_overview(self) -> str:
         """Render the reference overview page."""
@@ -225,34 +271,29 @@ class ApiManager:
 
         return self.cache_overview
 
-    def _render_overview(self) -> str:  # noqa: C901
+    def _render_overview(self) -> str:
         """Render the section index overview page."""
         lines: list[str] = []
 
-        def _mod_sub_cnt(mod: griffe.Module) -> int:
-            return sum(not m.is_alias for m in mod.modules.values())
-
-        def _render_mod_node(  # noqa: PLR0912, C901
+        def _render_mod_node(
             mod: griffe.Module, depth: int
         ) -> col.Iterator[str]:
             qn = gr_qn(mod)
 
-            has_page = qn in self.mod_qn_to_module
+            has_page = qn in self.mod_qn_to_sort_key
             indent = '    ' * depth
             brief, description = docstring_get_brief_desc(
                 () if mod.docstring is None else mod.docstring.parsed
             )
 
             if has_page:
-                url = mod_url(mod, self.root_lib_dir)
+                url = self.mod_url(mod)
                 qn_display = f'[`{qn}`]({url})'
             else:
                 qn_display = f'`{qn}`'
 
             icon = (
-                ':lucide-folder:'
-                if _mod_sub_cnt(mod)
-                else ':lucide-file-code:'
+                ':lucide-folder:' if mod_sub_cnt(mod) else ':lucide-file-code:'
             )
             bullet = f'{indent}- {icon} {qn_display}'
             if brief:
@@ -283,19 +324,7 @@ class ApiManager:
             next_depth = depth + 1
 
             yield ''
-            children: list[griffe.Module] = []
-            for child in mod.modules.values():
-                if child.is_alias:
-                    continue
-                assert isinstance(child, griffe.Module)
-                children.append(child)
-
-            def _mod_sort_key(module: griffe.Module) -> tuple[bool, str]:
-                return _mod_sub_cnt(module) > 0, module.name
-
-            children.sort(key=_mod_sort_key)
-
-            for child_mod in children:
+            for child_mod in mod_sort(*mod.modules.values()):
                 yield from _render_mod_node(child_mod, next_depth)
             yield ''
 
