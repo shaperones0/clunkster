@@ -1707,6 +1707,24 @@
 
 <h1 id="clunkster">Clunkster<a class="headerlink" href="#clunkster" title="Permanent link">&para;</a></h1>
 <p>GameMaker 8.2 optimization tools and project processing pipeline.</p>
+<p>Non-destructive tools:</p>
+<ul>
+<li>Linter: <code>tree.yyd</code> validator (see <a href="examples/#example-12-lint-treeyyd-files">ex1.2</a>)</li>
+<li>Linter: unused assets detector (see <a href="examples/#example-22-lint-unused-assets">ex2.2</a> and <a href="examples/#example-32-lint-unreachable-assets">ex3.2</a>)</li>
+<li>(TODO) Linter: heavy assets detector (RAM &amp; disk size)</li>
+<li>Linter: cross-cluster reference boundary validator (see <a href="examples/#example-23-lint-cross-cluster-references">ex2.3</a>)</li>
+<li>Linter: room indirect reference validator via dependency graph (see <a href="examples/#example-33-lint-room-cluster-boundaries">ex3.3</a>)</li>
+<li>Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see <a href="examples/#example-41-juicer-the-juice">ex4.1</a>; <a href="#dehydration">Dehydration</a>)</li>
+</ul>
+<p>Lightly destructive tools:</p>
+<ul>
+<li>(TODO) Backgrounds minifier: strip tilesets of all unused space</li>
+<li>(TODO) Audio optimizer: optimize audio files via <a href="https://www.ffmpeg.org/">FFmpeg</a> (see <a href="examples/#example-41-juicer-the-juice">ex4.1</a> (part of Juicer))</li>
+</ul>
+<p>Super destructive tools:</p>
+<ul>
+<li>(TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development</li>
+</ul>
 <p>Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.</p>
 <h3 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h3>
 <p>Given the architectural differences across GameMaker projects, Clunkster is organized as a set of <a href="examples/#examples">examples</a> that you can copy, and build your own pipeline out of them. The library itself provides functions that handle quirks and facilitate pipeline logic.</p>

@@ -19,17 +19,11 @@ from scripts.doc_snippets import Snippet, s_py
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
-def txt_readme(
-    head: doc_headers.ExampleHeaderManager,
+def s_txt_hello(
     exs: doc_code.CodeGenerator,
-    **_: object,
 ) -> str:
-    """Generate readme."""
+    """Generate upper section."""
     return f"""
-{head.file_begin('readme.md')}
-{head.file_set_gh()}
-# Clunkster
-
 GameMaker 8.2 optimization tools and project processing pipeline.
 
 Non-destructive tools:
@@ -49,9 +43,25 @@ Lightly destructive tools:
 Super destructive tools:
 
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
+"""
 
+
+def txt_readme(
+    head: doc_headers.ExampleHeaderManager,
+    exs: doc_code.CodeGenerator,
+    **_: object,
+) -> str:
+    """Generate readme."""
+    wrapper_hello = doc_patch.FuncParser.from_func(s_txt_hello)
+
+    return f"""
+{head.file_begin('readme.md')}
+{head.file_set_gh()}
+
+# Clunkster
+{wrapper_hello.execute(exs=exs)}
+{tuple(wrapper_hello.render_snippets())}
 Read [docs](https://shaperones0.github.io/clunkster) for more.
-
 """
 
 
@@ -61,6 +71,8 @@ def txt_overview(
     **_: object,
 ) -> str:
     """Generate docs overview section."""
+    wrapper_hello = doc_patch.FuncParser.from_func(s_txt_hello)
+
     # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
 
@@ -68,7 +80,8 @@ def txt_overview(
 
 {head.header_parse('# Clunkster', 'h_docs')}
 
-GameMaker 8.2 optimization tools and project processing pipeline.
+{wrapper_hello.execute(exs=exs)}
+{tuple(wrapper_hello.render_snippets())}
 
 Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
 
