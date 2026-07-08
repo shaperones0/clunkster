@@ -1882,6 +1882,12 @@ def _main() -> None:  # noqa: C901
     }
 
     dir_docs = Path(__file__).parent.parent / 'docs_md'
+
+    fs_md = tuple(dir_docs.rglob('*.md'))
+    print('Cleanup', len(fs_md), 'files')
+    for f_md in fs_md:
+        f_md.unlink()
+
     dir_ref = dir_docs / 'reference'
     dir_ref.mkdir(parents=True, exist_ok=True)
 
