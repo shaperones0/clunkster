@@ -1507,12 +1507,12 @@
 <h3 id="def-__init__"><span class="api-badge api-badge-def">DEF</span> <code>__init__</code><a class="headerlink" href="#def-__init__" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">TaskCopy</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">files</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">files</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">):</span>
 </span></code></pre></div>
 <p>Initialize file copy task.</p>
 <ul>
-<li><code>files: tuple[Path, Path]</code> - Pairs of (input file, output file).</li>
+<li><code>files: tuple[Path, Path] = ()</code> - Pairs of (input file, output file).</li>
 </ul>
 <details class="quote">
 <summary>View source</summary>
@@ -1746,7 +1746,7 @@
 <p><a id="clunkster.pipeline.task.file_hash"></a></p>
 <h2 id="def-file_hash"><span class="api-badge api-badge-def">DEF</span> <code>file_hash</code><a class="headerlink" href="#def-file_hash" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">file_hash</span><span class="p">(</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="n">paths</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="n">paths</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 </span></code></pre></div>
 <p>Calculate MD5 hash of all input files.</p>

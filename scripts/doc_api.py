@@ -72,6 +72,18 @@ def mod_sort(*mods: griffe.Module) -> list[griffe.Module]:
     return children
 
 
+def param_to_code(param: griffe.Parameter | griffe.DocstringParameter) -> str:
+    parts: list[str] = [
+
+    ]
+    if param.kind == griffe.ParameterKind.var_positional:
+        parts.append('*')
+    parts.append(f'{param.name}: {gr_ann_to_str(param.annotation)}')
+    if param.default:
+        parts.append(f' = {gr_ann_to_str(param.default)}')
+    return ''.join(parts)
+
+
 ProcessableTypes = (
     type[griffe.Module] | type[griffe.Function] | type[griffe.Class]
 )
@@ -501,9 +513,7 @@ class ApiManager:
             if p.name in ('self', 'cls'):
                 block_lines.append(f'    {p.name},')
             else:
-                block_lines.append(
-                    f'    {p.name}: {gr_ann_to_str(p.annotation)},'
-                )
+                block_lines.append(f'    {param_to_code(p)},')
         if func.name == '__init__':
             block_lines.append('):')
         else:
@@ -531,11 +541,7 @@ class ApiManager:
             if section.kind.value == 'parameters':
                 for param in section.value:
                     assert isinstance(param, griffe.DocstringParameter)
-                    yield (
-                        f'- `{param.name}: '
-                        f'{gr_ann_to_str(param.annotation)}` - '
-                        f'{param.description}'
-                    )
+                    yield f'- `{param_to_code(param)}` - {param.description}'
                 yield '\n'
             elif section.kind.value == 'returns':
                 ret = section.value[0]

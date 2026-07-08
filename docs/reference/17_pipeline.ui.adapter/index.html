@@ -1354,8 +1354,8 @@
 <h3 id="def-out"><span class="api-badge api-badge-def">DEF</span> <code>out</code><a class="headerlink" href="#def-out" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">SinkAdapter</span><span class="o">.</span><span class="n">out</span><span class="p">(</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">messages</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">messages</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="p">(),</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="p">,</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span></code></pre></div>
 <p>Output a message as a <code>Status</code> event.</p>
@@ -1407,17 +1407,17 @@
 <h2 id="def-ui_auto_sink"><span class="api-badge api-badge-def">DEF</span> <code>ui_auto_sink</code><a class="headerlink" href="#def-ui_auto_sink" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">ui_auto_sink</span><span class="p">(</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">step_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">cls_ui</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n"><a href="/reference/18_pipeline.ui.base#clunkster.pipeline.ui.base.Ui">Ui</a></span><span class="p">],</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">cls_sink</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n"><a href="/reference/13_pipeline.events.sink#clunkster.pipeline.events.sink.DispatchEventSink">DispatchEventSink</a></span><span class="p">],</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">cls_ui</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n"><a href="/reference/18_pipeline.ui.base#clunkster.pipeline.ui.base.Ui">Ui</a></span><span class="p">]</span> <span class="o">=</span> <span class="n"><a href="/reference/19_pipeline.ui.simple#clunkster.pipeline.ui.simple.UiSimple">UiSimple</a></span><span class="p">,</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">cls_sink</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n"><a href="/reference/13_pipeline.events.sink#clunkster.pipeline.events.sink.DispatchEventSink">DispatchEventSink</a></span><span class="p">]</span> <span class="o">=</span> <span class="n"><a href="/reference/13_pipeline.events.sink#clunkster.pipeline.events.sink.DispatchEventSink">DispatchEventSink</a></span><span class="p">,</span>
 </span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">col</span><span class="o">.</span><span class="n">Callable</span><span class="p">[[</span><span class="n">col</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">R</span><span class="p">]],</span> <span class="n">col</span><span class="o">.</span><span class="n">Callable</span><span class="p">[</span><span class="n">P</span><span class="p">,</span> <span class="n">R</span><span class="p">]]:</span>
 </span></code></pre></div>
 <p>Automatic adapter setup for given pipeline step function.</p>
 <ul>
-<li><code>cls_ui: type[Ui]</code> - UI class to use.</li>
+<li><code>cls_ui: type[Ui] = UiSimple</code> - UI class to use.</li>
 <li><code>step_name: str</code> - Name of the pipeline step.</li>
-<li><code>width: int | None</code> - UI width.</li>
-<li><code>cls_sink: type[DispatchEventSink]</code> - Sink class to use. Defaults to <code>DispatchEventSink</code>.</li>
+<li><code>width: int | None = None</code> - UI width.</li>
+<li><code>cls_sink: type[DispatchEventSink] = DispatchEventSink</code> - Sink class to use. Defaults to <code>DispatchEventSink</code>.</li>
 </ul>
 <p><strong>Returns:</strong> <code>col.Callable[[col.Callable[P, R]], col.Callable[P, R]]</code> - </p>
 <details class="quote">
@@ -1468,8 +1468,8 @@
 <p><a id="clunkster.pipeline.ui.adapter.ui_out"></a></p>
 <h2 id="def-ui_out"><span class="api-badge api-badge-def">DEF</span> <code>ui_out</code><a class="headerlink" href="#def-ui_out" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">ui_out</span><span class="p">(</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">messages</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">messages</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="p">(),</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">sep</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="p">,</span>
 </span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span></code></pre></div>
 <p>Output a message as a <code>Status</code> event.</p>

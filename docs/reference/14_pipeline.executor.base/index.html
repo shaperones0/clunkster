@@ -1322,14 +1322,14 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_apply_results</span><span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">results</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">,</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">]],</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">assert_no_fail</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">assert_no_fail</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
 </span></code></pre></div>
 <p>Apply results of tasks into the cache.</p>
 <ul>
 <li><code>cache: FileBuildCache</code> - Build cache.</li>
 <li><code>results: col.Iterable[tuple[Task, ExecuteTaskResult]]</code> - Iterable of tasks and their respective results.</li>
-<li><code>assert_no_fail: bool</code> - Assert none of the tasks have failed.</li>
+<li><code>assert_no_fail: bool = False</code> - Assert none of the tasks have failed.</li>
 </ul>
 <p><strong>Returns:</strong> <code>tuple[int, int]</code> - Number of succeeded tasks and number of failed tasks.</p>
 <details class="quote">

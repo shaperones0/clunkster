@@ -1526,7 +1526,7 @@ given dispatcher.</p>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Sequence</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
 </span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
 </span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">dispatcher</span><span class="p">:</span> <span class="n"><a href="/reference/11_pipeline.events.dispatcher#clunkster.pipeline.events.dispatcher.EventDispatcher">pl_dispatcher.EventDispatcher</a></span><span class="p">,</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span></code></pre></div>
 <p>Execute given tasks with multiprocessing executor.</p>
@@ -1534,7 +1534,7 @@ given dispatcher.</p>
 <li><code>tasks: col.Sequence[Task]</code> - Tasks to execute.</li>
 <li><code>cache: FileBuildCache</code> - Build cache.</li>
 <li><code>dispatcher: pl_dispatcher.EventDispatcher</code> - Event dispatcher for the workers.</li>
-<li><code>max_workers: int | None</code> - Maximum number of worker processes.</li>
+<li><code>max_workers: int | None = None</code> - Maximum number of worker processes.</li>
 </ul>
 <details class="quote">
 <summary>View source</summary>
