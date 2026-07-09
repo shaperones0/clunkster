@@ -540,6 +540,8 @@ if room_is_forest() {{
     john_forest()
 }}
 else {{
+    // NOTE: analyzer actually doesn't do anything special in
+    //  the 'else' blocks in context guards, just so you know
     john_not_forest()
 }}
 ```
