@@ -865,10 +865,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fn-task_exec" class="md-nav__link">
+  <a href="#fn-tasks_filter_stale" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">FN</span> <code>task_exec</code>
+        <span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code>
       </span>
     </span>
   </a>
@@ -887,10 +887,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fn-tasks_filter_stale" class="md-nav__link">
+  <a href="#fn-task_exec" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code>
+        <span class="api-badge api-badge-def">FN</span> <code>task_exec</code>
       </span>
     </span>
   </a>
@@ -1171,10 +1171,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fn-task_exec" class="md-nav__link">
+  <a href="#fn-tasks_filter_stale" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">FN</span> <code>task_exec</code>
+        <span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code>
       </span>
     </span>
   </a>
@@ -1193,10 +1193,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#fn-tasks_filter_stale" class="md-nav__link">
+  <a href="#fn-task_exec" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code>
+        <span class="api-badge api-badge-def">FN</span> <code>task_exec</code>
       </span>
     </span>
   </a>
@@ -1263,58 +1263,43 @@
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">):</span>
 </span></code></pre></div>
 <hr />
-<p><a id="clunkster.pipeline.executor.base.task_exec"></a></p>
-<h2 id="fn-task_exec"><span class="api-badge api-badge-def">FN</span> <code>task_exec</code><a class="headerlink" href="#fn-task_exec" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">task_exec</span><span class="p">(</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">task</span><span class="p">:</span> <span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">ctx</span><span class="p">:</span> <span class="n"><a href="/reference/10_pipeline.events.context#clunkster.pipeline.events.context.ExecutionContext">ExecutionContext</a></span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">:</span>
+<p><a id="clunkster.pipeline.executor.base.tasks_filter_stale"></a></p>
+<h2 id="fn-tasks_filter_stale"><span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code><a class="headerlink" href="#fn-tasks_filter_stale" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_filter_stale</span><span class="p">(</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span> <span class="nb">int</span><span class="p">]:</span>
 </span></code></pre></div>
-<p>Execute the task in mp-friendly way and return task result.</p>
+<p>Filter tasks by their cache status.</p>
 <ul>
-<li><code>task: Task</code> - Task to execute.</li>
-<li><code>ctx: ExecutionContext</code> - Execution context.</li>
+<li><code>tasks: col.Iterable[Task]</code> - Tasks to filter.</li>
+<li><code>cache: FileBuildCache</code> - Build cache.</li>
 </ul>
-<p><strong>Returns:</strong> <code>ExecuteTaskResult</code> - Task result.</p>
+<p><strong>Returns:</strong> <code>tuple[list[Task], int]</code> - List of stale tasks (needs to be executed) and number of cached
+tasks.</p>
 <details class="quote">
 <summary>View source</summary>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">task_exec</span><span class="p">(</span><span class="n">task</span><span class="p">:</span> <span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n"><a href="/reference/10_pipeline.events.context#clunkster.pipeline.events.context.ExecutionContext">ExecutionContext</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute the task in mp-friendly way and return task result.</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="sd">    :param task: Task to execute.</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="sd">    :param ctx: Execution context.</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="sd">    :return: Task result.</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="c1"># ensure output directories exist</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="n">task</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">out</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskStarted">event.TaskStarted</a></span><span class="p">(</span><span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">))</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="k">try</span><span class="p">:</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="n">task</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># noqa: BLE001</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>            <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskFinished">event.TaskFinished</a></span><span class="p">(</span>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>                <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>                <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>            <span class="p">)</span>
-</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="p">)</span>
-</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>        <span class="k">return</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">(</span>
-</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>            <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
-</span><span id="__span-3-23"><a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>            <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-3-24"><a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>            <span class="n">error</span><span class="o">=</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">(),</span>
-</span><span id="__span-3-25"><a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="p">)</span>
-</span><span id="__span-3-26"><a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-3-27"><a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
-</span><span id="__span-3-28"><a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>            <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskFinished">event.TaskFinished</a></span><span class="p">(</span>
-</span><span id="__span-3-29"><a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>                <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
-</span><span id="__span-3-30"><a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>                <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-3-31"><a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>            <span class="p">)</span>
-</span><span id="__span-3-32"><a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>        <span class="p">)</span>
-</span><span id="__span-3-33"><a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>        <span class="k">return</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">(</span>
-</span><span id="__span-3-34"><a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>            <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
-</span><span id="__span-3-35"><a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>            <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-3-36"><a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>            <span class="n">error</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
-</span><span id="__span-3-37"><a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>        <span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_filter_stale</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span> <span class="nb">int</span><span class="p">]:</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter tasks by their cache status.</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="sd">    :param tasks: Tasks to filter.</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="sd">    :param cache: Build cache.</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="sd">    :return: List of stale tasks (needs to be executed) and number of cached</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="sd">      tasks.</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">stale</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="n">cached</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="k">if</span> <span class="n">cache</span><span class="o">.</span><span class="n">task_is_fresh</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>            <span class="n">cached</span> <span class="o">+=</span> <span class="mi">1</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>            <span class="n">stale</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="k">return</span> <span class="n">stale</span><span class="p">,</span> <span class="n">cached</span>
 </span></code></pre></div>
 </details>
 <hr />
@@ -1368,43 +1353,58 @@
 </span></code></pre></div>
 </details>
 <hr />
-<p><a id="clunkster.pipeline.executor.base.tasks_filter_stale"></a></p>
-<h2 id="fn-tasks_filter_stale"><span class="api-badge api-badge-def">FN</span> <code>tasks_filter_stale</code><a class="headerlink" href="#fn-tasks_filter_stale" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_filter_stale</span><span class="p">(</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span> <span class="nb">int</span><span class="p">]:</span>
+<p><a id="clunkster.pipeline.executor.base.task_exec"></a></p>
+<h2 id="fn-task_exec"><span class="api-badge api-badge-def">FN</span> <code>task_exec</code><a class="headerlink" href="#fn-task_exec" title="Permanent link">&para;</a></h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">task_exec</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">task</span><span class="p">:</span> <span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">ctx</span><span class="p">:</span> <span class="n"><a href="/reference/10_pipeline.events.context#clunkster.pipeline.events.context.ExecutionContext">ExecutionContext</a></span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">:</span>
 </span></code></pre></div>
-<p>Filter tasks by their cache status.</p>
+<p>Execute the task in mp-friendly way and return task result.</p>
 <ul>
-<li><code>tasks: col.Iterable[Task]</code> - Tasks to filter.</li>
-<li><code>cache: FileBuildCache</code> - Build cache.</li>
+<li><code>task: Task</code> - Task to execute.</li>
+<li><code>ctx: ExecutionContext</code> - Execution context.</li>
 </ul>
-<p><strong>Returns:</strong> <code>tuple[list[Task], int]</code> - List of stale tasks (needs to be executed) and number of cached
-tasks.</p>
+<p><strong>Returns:</strong> <code>ExecuteTaskResult</code> - Task result.</p>
 <details class="quote">
 <summary>View source</summary>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">tasks_filter_stale</span><span class="p">(</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span> <span class="nb">int</span><span class="p">]:</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter tasks by their cache status.</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="sd">    :param tasks: Tasks to filter.</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="sd">    :param cache: Build cache.</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="sd">    :return: List of stale tasks (needs to be executed) and number of cached</span>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="sd">      tasks.</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">stale</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="n">cached</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>        <span class="k">if</span> <span class="n">cache</span><span class="o">.</span><span class="n">task_is_fresh</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>            <span class="n">cached</span> <span class="o">+=</span> <span class="mi">1</span>
-</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>            <span class="n">stale</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task</span><span class="p">)</span>
-</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>
-</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="k">return</span> <span class="n">stale</span><span class="p">,</span> <span class="n">cached</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">task_exec</span><span class="p">(</span><span class="n">task</span><span class="p">:</span> <span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">,</span> <span class="n">ctx</span><span class="p">:</span> <span class="n"><a href="/reference/10_pipeline.events.context#clunkster.pipeline.events.context.ExecutionContext">ExecutionContext</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">:</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Execute the task in mp-friendly way and return task result.</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="sd">    :param task: Task to execute.</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="sd">    :param ctx: Execution context.</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="sd">    :return: Task result.</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="c1"># ensure output directories exist</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="n">task</span><span class="o">.</span><span class="n">outputs</span><span class="p">:</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>        <span class="n">out</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskStarted">event.TaskStarted</a></span><span class="p">(</span><span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">))</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="n">task</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># noqa: BLE001</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>            <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskFinished">event.TaskFinished</a></span><span class="p">(</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>                <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>                <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>            <span class="p">)</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>        <span class="p">)</span>
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>        <span class="k">return</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">(</span>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>            <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>            <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>            <span class="n">error</span><span class="o">=</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">(),</span>
+</span><span id="__span-7-25"><a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>        <span class="p">)</span>
+</span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-7-27"><a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>        <span class="n">ctx</span><span class="o">.</span><span class="n">sink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
+</span><span id="__span-7-28"><a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>            <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.TaskFinished">event.TaskFinished</a></span><span class="p">(</span>
+</span><span id="__span-7-29"><a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a>                <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
+</span><span id="__span-7-30"><a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a>                <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-7-31"><a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a>            <span class="p">)</span>
+</span><span id="__span-7-32"><a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a>        <span class="p">)</span>
+</span><span id="__span-7-33"><a id="__codelineno-7-33" name="__codelineno-7-33" href="#__codelineno-7-33"></a>        <span class="k">return</span> <span class="n"><a href="/reference/14_pipeline.executor.base#clunkster.pipeline.executor.base.ExecuteTaskResult">ExecuteTaskResult</a></span><span class="p">(</span>
+</span><span id="__span-7-34"><a id="__codelineno-7-34" name="__codelineno-7-34" href="#__codelineno-7-34"></a>            <span class="n">task_id</span><span class="o">=</span><span class="n">task</span><span class="o">.</span><span class="n">task_id</span><span class="p">,</span>
+</span><span id="__span-7-35"><a id="__codelineno-7-35" name="__codelineno-7-35" href="#__codelineno-7-35"></a>            <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-7-36"><a id="__codelineno-7-36" name="__codelineno-7-36" href="#__codelineno-7-36"></a>            <span class="n">error</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+</span><span id="__span-7-37"><a id="__codelineno-7-37" name="__codelineno-7-37" href="#__codelineno-7-37"></a>        <span class="p">)</span>
 </span></code></pre></div>
 </details>
 <hr />

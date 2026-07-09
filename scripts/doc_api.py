@@ -479,9 +479,7 @@ class ApiManager:
         yield '___'
 
         # recurse
-        for member_name, member in (
-            cl.members.items() if cl.members else ()
-        ):
+        for member_name, member in cl.members.items() if cl.members else ():
             if member.is_alias:
                 continue
             assert isinstance(member, griffe.Object)

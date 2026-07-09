@@ -1033,10 +1033,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mth-get_abs_index" class="md-nav__link">
+  <a href="#mth-get_line_col" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-mth">MTH</span> <code>get_abs_index</code>
+        <span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code>
       </span>
     </span>
   </a>
@@ -1044,10 +1044,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mth-get_line_col" class="md-nav__link">
+  <a href="#mth-get_abs_index" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code>
+        <span class="api-badge api-badge-mth">MTH</span> <code>get_abs_index</code>
       </span>
     </span>
   </a>
@@ -1177,10 +1177,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mth-get_abs_index" class="md-nav__link">
+  <a href="#mth-get_line_col" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-mth">MTH</span> <code>get_abs_index</code>
+        <span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code>
       </span>
     </span>
   </a>
@@ -1188,10 +1188,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mth-get_line_col" class="md-nav__link">
+  <a href="#mth-get_abs_index" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code>
+        <span class="api-badge api-badge-mth">MTH</span> <code>get_abs_index</code>
       </span>
     </span>
   </a>
@@ -1360,13 +1360,41 @@
 </span></code></pre></div>
 </details>
 <hr />
+<p><a id="clunkster.text.line.LineMap.get_line_col"></a></p>
+<h3 id="mth-get_line_col"><span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code><a class="headerlink" href="#mth-get_line_col" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">LineMap</span><span class="o">.</span><span class="n">get_line_col</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">abs_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+</span></code></pre></div>
+<p>Converts absolute string index into (line, column) tuple.</p>
+<ul>
+<li><code>abs_index: int</code> - The absolute string index.</li>
+</ul>
+<p><strong>Returns:</strong> <code>tuple[int, int]</code> - (line_number, column_number), both 1-based.</p>
+<p>Line and column start from 1.</p>
+<details class="quote">
+<summary>View source</summary>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_line_col</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">abs_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts absolute string index into (line, column) tuple.</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="sd">    Line and column start from 1.</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="sd">    :param abs_index: The absolute string index.</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="sd">    :return: (line_number, column_number), both 1-based.</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">line_idx</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_right</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_starts</span><span class="p">,</span> <span class="n">abs_index</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">line_start_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_starts</span><span class="p">[</span><span class="n">line_idx</span><span class="p">]</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="k">return</span> <span class="n">line_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">abs_index</span> <span class="o">-</span> <span class="n">line_start_index</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+</span></code></pre></div>
+</details>
+<hr />
 <p><a id="clunkster.text.line.LineMap.get_abs_index"></a></p>
 <h3 id="mth-get_abs_index"><span class="api-badge api-badge-mth">MTH</span> <code>get_abs_index</code><a class="headerlink" href="#mth-get_abs_index" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">LineMap</span><span class="o">.</span><span class="n">get_abs_index</span><span class="p">(</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">line</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">col</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">LineMap</span><span class="o">.</span><span class="n">get_abs_index</span><span class="p">(</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">line</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">col</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 </span></code></pre></div>
 <p>Convert line and column into absolute index.</p>
 <ul>
@@ -1377,43 +1405,15 @@
 <p>Line and column start from 1.</p>
 <details class="quote">
 <summary>View source</summary>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_abs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">col</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert line and column into absolute index.</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="sd">    Line and column start from 1.</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="sd">    :param line: Line index.</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="sd">    :param col: Column index.</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="sd">    :return: Absolute string index (starts from 0).</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_pref</span><span class="p">[</span><span class="n">line</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">col</span> <span class="o">-</span> <span class="mi">1</span>
-</span></code></pre></div>
-</details>
-<hr />
-<p><a id="clunkster.text.line.LineMap.get_line_col"></a></p>
-<h3 id="mth-get_line_col"><span class="api-badge api-badge-mth">MTH</span> <code>get_line_col</code><a class="headerlink" href="#mth-get_line_col" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">LineMap</span><span class="o">.</span><span class="n">get_line_col</span><span class="p">(</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">abs_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-</span></code></pre></div>
-<p>Converts absolute string index into (line, column) tuple.</p>
-<ul>
-<li><code>abs_index: int</code> - The absolute string index.</li>
-</ul>
-<p><strong>Returns:</strong> <code>tuple[int, int]</code> - (line_number, column_number), both 1-based.</p>
-<p>Line and column start from 1.</p>
-<details class="quote">
-<summary>View source</summary>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_line_col</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">abs_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts absolute string index into (line, column) tuple.</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_abs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">line</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">col</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert line and column into absolute index.</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="sd">    Line and column start from 1.</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="sd">    :param abs_index: The absolute string index.</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="sd">    :return: (line_number, column_number), both 1-based.</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">line_idx</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_right</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">line_starts</span><span class="p">,</span> <span class="n">abs_index</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="n">line_start_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_starts</span><span class="p">[</span><span class="n">line_idx</span><span class="p">]</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="k">return</span> <span class="n">line_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">abs_index</span> <span class="o">-</span> <span class="n">line_start_index</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="sd">    :param line: Line index.</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="sd">    :param col: Column index.</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="sd">    :return: Absolute string index (starts from 0).</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">line_pref</span><span class="p">[</span><span class="n">line</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">col</span> <span class="o">-</span> <span class="mi">1</span>
 </span></code></pre></div>
 </details>
 <hr />
