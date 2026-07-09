@@ -69,7 +69,7 @@ def extract(root: NodeTag) -> dict[str, list[Snippet]]:
         snip_name_to_node[name] = node
 
     # extract pass
-    for name, node in snip_name_to_node.items():
+    for name, node in snip_name_to_node.items():  # noqa: PLR1702
         outer_snips: list[Snippet] = []
         outer_py_buffer: list[str] = []
 

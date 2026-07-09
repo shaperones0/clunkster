@@ -7,7 +7,7 @@ import itertools as it
 import json
 import os
 import shutil
-import subprocess
+import subprocess  # noqa: S404
 import sys
 import threading
 import time
@@ -1134,8 +1134,10 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
             cluster_errors.setdefault(asset_cluster(asset), []).append(err)
 
         lines = [
-            f'=== {cls.rule}: {len(errors)} issue(s) across '
-            f'{len(cluster_errors)} clusters:'
+            (
+                f'=== {cls.rule}: {len(errors)} issue(s) across '
+                f'{len(cluster_errors)} clusters:'
+            )
         ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
@@ -1588,8 +1590,10 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                 rooms_allowed_clusters[room.name] = err.room_allowed_clusters
 
         lines = [
-            f'=== {cls.rule}: {len(errors)} issue(s) across '
-            f'{len(cluster_errors)} clusters:'
+            (
+                f'=== {cls.rule}: {len(errors)} issue(s) across '
+                f'{len(cluster_errors)} clusters:'
+            )
         ]
         for cluster, errors in sorted(cluster_errors.items()):
             lines.append(f'\n=== {cluster} ===')
@@ -1601,11 +1605,13 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
                 room = err.room
                 room_errors.setdefault(room.name, []).append(err)
             for room, errors in sorted(room_errors.items()):
-                lines.append(f'Violations in Room: {room}')
-                lines.append(
-                    f'-- Allowed Clusters: '
-                    f'{" ".join(rooms_allowed_clusters[room])}'
-                )
+                lines.extend((
+                    f'Violations in Room: {room}',
+                    (
+                        f'-- Allowed Clusters: '
+                        f'{" ".join(rooms_allowed_clusters[room])}'
+                    ),
+                ))
 
                 # group by target
                 target_errors: dict[str, list[Self]] = {}
@@ -2291,8 +2297,8 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         tasks_threaded.append(
             my_task.TaskCopy(
                 *(
-                    (_file, JUICER.dir_out / _file.relative_to(PROJECT))
-                    for _file in files
+                    (fl, JUICER.dir_out / fl.relative_to(PROJECT))
+                    for fl in files
                 )
             )
         )
@@ -2403,9 +2409,10 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
             copy_rebase(bg.get_background_metadata_file(PROJECT))
             # copy dry image
             tasks_threaded.append(
-                my_task.TaskCopy(
-                    (img_dry, bg.get_background_image(JUICER.dir_out))
-                )
+                my_task.TaskCopy((
+                    img_dry,
+                    bg.get_background_image(JUICER.dir_out),
+                ))
             )
             # generate wet image
             tasks_mp.append(
@@ -2907,13 +2914,13 @@ def test_tutorials() -> None:
 def _load_private(config_dir: Path) -> None:
     global LINT_RULES, CONTEXT_RULES, JUICER
 
-    _file_private_config = config_dir / 'config.json'
-    if not _file_private_config.exists():
+    file_private_config = config_dir / 'config.json'
+    if not file_private_config.exists():
         raise FileNotFoundError(
-            f'Config file not found: {_file_private_config}'
+            f'Config file not found: {file_private_config}'
         )
 
-    _config = json.loads(_file_private_config.read_text())
+    config = json.loads(file_private_config.read_text())
 
     # PROJECT
     global_set_project(config_dir.parent / 'source')
@@ -2925,26 +2932,26 @@ def _load_private(config_dir: Path) -> None:
         dir_dry=JUICER.dir_dry,  # og dir
         rel_dir_wet=JUICER.rel_dir_wet,
         file_cache=config_dir.parent / 'clunkster_cache.json',
-        fname_gm82=_config['fname_gm82'],
+        fname_gm82=config['fname_gm82'],
     )
 
     # ALIAS
-    _file_private_alias = config_dir / 'alias.json'
+    file_private_alias = config_dir / 'alias.json'
     global_set_alias(
-        json.loads(_file_private_alias.read_text(encoding='utf-8'))
+        json.loads(file_private_alias.read_text(encoding='utf-8'))
     )
 
     # LINT_RULES
-    _file_private_lint_rules = config_dir / 'lint_rules.json'
-    rules = json.loads(_file_private_lint_rules.read_text(encoding='utf-8'))
+    file_private_lint_rules = config_dir / 'lint_rules.json'
+    rules = json.loads(file_private_lint_rules.read_text(encoding='utf-8'))
     LINT_RULES = {
         cluster: set(allowed_clusters)
         for cluster, allowed_clusters in rules.items()
     }
 
     # CONTEXT RULES
-    _file_private_context_rules = config_dir / 'context_rules.json'
-    rules = json.loads(_file_private_context_rules.read_text(encoding='utf-8'))
+    file_private_context_rules = config_dir / 'context_rules.json'
+    rules = json.loads(file_private_context_rules.read_text(encoding='utf-8'))
     CONTEXT_RULES = {
         cluster: set(allowed_clusters)
         for cluster, allowed_clusters in rules.items()

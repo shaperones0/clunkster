@@ -86,7 +86,7 @@ class LinterViolationMessage(LinterViolation, ABC):
     @property
     @abstractmethod
     def message(self) -> str:
-        """Get linter violation message."""
+        """Linter violation message."""
 
 
 class LinterViolationFile(LinterViolation, ABC):
@@ -95,7 +95,7 @@ class LinterViolationFile(LinterViolation, ABC):
     @property
     @abstractmethod
     def file(self) -> Path:
-        """Get a file for this linter violation."""
+        """File for this linter violation."""
 
     @override
     def sort_key(self) -> tuple[str, ...]:
@@ -115,15 +115,17 @@ class LinterViolationAsset(LinterViolation, ABC):
     @property
     @abstractmethod
     def asset(self) -> Asset:
-        """Get an asset for this linter violation."""
+        """Asset for this linter violation."""
 
     def format_asset(self) -> str:
         """Format asset repr for this violation."""
         asset = self.asset
         if isinstance(asset, AssetHasPath):
-            return '/'.join(
-                (type(asset).type_name(), *asset.tree_path, asset.name)
-            )
+            return '/'.join((
+                type(asset).type_name(),
+                *asset.tree_path,
+                asset.name,
+            ))
         return '/'.join((type(asset).type_name(), asset.name))
 
     @override
@@ -141,12 +143,12 @@ class LinterViolationLocated(LinterViolationFile, ABC):
     @property
     @abstractmethod
     def location(self) -> Location:
-        """Get linter violation location."""
+        """Linter violation location."""
 
     @override
     @property
     def file(self) -> Path:
-        """Get a file for this linter violation."""
+        """File for this linter violation."""
         return self.location.file
 
     @override
@@ -388,6 +390,6 @@ def err_format(
 
     return '\n\n'.join(
         cls.format_many(violations, verbose=verbose)
-        for rule, cls_grouped in grouped.items()
+        for cls_grouped in grouped.values()
         for cls, violations in cls_grouped.items()
     )

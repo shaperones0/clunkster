@@ -204,10 +204,10 @@ class ApiManager:
                 assert isinstance(member, griffe.Object)
 
                 # can only process classes and function members
-                if member.kind not in (
+                if member.kind not in {
                     griffe.Kind.CLASS,
                     griffe.Kind.FUNCTION,
-                ):
+                }:
                     continue
                 assert isinstance(member, griffe.Class | griffe.Function)
 
@@ -232,7 +232,8 @@ class ApiManager:
     def mod_qn_fname(self, mod_qn: str, suffix: str = '.md') -> str:
         """Convert module's qualified name to resulting MD file name."""
         return f'{self.mod_qn_to_sort_key[mod_qn]:0>2}_' + '.'.join(
-            self.mod_qn_path(mod_qn)
+            self
+            .mod_qn_path(mod_qn)
             .with_suffix(suffix)
             .relative_to(self.root_lib_dir)
             .parts
@@ -383,7 +384,7 @@ class ApiManager:
 
         for _ in [None]:
             has_content = any(
-                m.kind in (griffe.Kind.CLASS, griffe.Kind.FUNCTION)
+                m.kind in {griffe.Kind.CLASS, griffe.Kind.FUNCTION}
                 and not m.is_alias
                 for m in mod.members.values()
             )
@@ -438,14 +439,14 @@ class ApiManager:
         is_empty_body = (
             obj.kind == griffe.Kind.FUNCTION
             and len(lines) > 0
-            and lines[-1] in ('pass', '...')
+            and lines[-1] in {'pass', '...'}
         )
 
         is_abstract_class = False
         if isinstance(obj.parent, griffe.Class):
             for base in obj.parent.bases:
                 # evaluate the base expression to a string
-                if str(base) in ('ABC', 'abc.ABC'):
+                if str(base) in {'ABC', 'abc.ABC'}:
                     is_abstract_class = True
                     break
 
@@ -587,7 +588,7 @@ class ApiManager:
         name_to_param: dict[str, griffe.Parameter] = {}
         for p in func.parameters:
             name_to_param[p.name] = p
-            if p.name in ('self', 'cls'):
+            if p.name in {'self', 'cls'}:
                 block_lines.append(f'    {p.name},')
             else:
                 block_lines.append(f'    {param_to_code(p)},')

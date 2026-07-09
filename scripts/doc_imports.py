@@ -136,16 +136,14 @@ class ImportsFilter:
                 kept_nodes.append((group_id, ast.Import(names=kept_aliases)))
             elif isinstance(node, ast.ImportFrom):
                 # reconstruct the node with only the used aliases
-                kept_nodes.append(
-                    (
-                        group_id,
-                        ast.ImportFrom(
-                            module=node.module,
-                            names=kept_aliases,
-                            level=node.level,
-                        ),
-                    )
-                )
+                kept_nodes.append((
+                    group_id,
+                    ast.ImportFrom(
+                        module=node.module,
+                        names=kept_aliases,
+                        level=node.level,
+                    ),
+                ))
         return kept_nodes
 
     def filter_used_unparse(self, *snippets: str) -> str:

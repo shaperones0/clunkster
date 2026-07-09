@@ -92,7 +92,7 @@ class GmlIndex:
             kind = match.lastgroup
             start, end = match.span()
 
-            if kind in ('string', 'line_comment', 'block_comment'):
+            if kind in {'string', 'line_comment', 'block_comment'}:
                 ignored_ranges.append(CodeRangeIgnore(start, end))
 
             elif kind == 'guard':

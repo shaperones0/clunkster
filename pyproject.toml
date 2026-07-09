@@ -38,6 +38,7 @@ fix = true
 [tool.ruff.format]
 quote-style = 'single'
 docstring-code-format = false
+preview = true
 
 exclude = ["scripts/readme.py"]
 
@@ -48,6 +49,7 @@ inline-quotes = 'single'
 known-first-party = ['clunkster']
 
 [tool.ruff.lint]
+preview = true
 select = [
     'A',
     'ANN',
@@ -117,6 +119,7 @@ ignore = [
     # stupid complexity rules for BABIES
     'C901',
     'PLR0912',
+    'PLR0914',
     'PLR0915',
     'PLR2004',  # bruv thinks every number is magic
 

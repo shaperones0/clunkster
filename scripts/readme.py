@@ -1922,7 +1922,7 @@ def _main() -> None:
     parsers = list(file_to_parser.values())
 
     def err_cnt() -> int:
-        return sum(_parser.err_count() for _parser in parsers)
+        return sum(p.err_count() for p in parsers)
 
     print('Docs start')
     while iterations < iterations_max:
