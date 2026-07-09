@@ -393,7 +393,7 @@ class ApiManager:
                 f'[View on GitHub]({gr_filepath_to_gh_link(mod.filepath)})\n'
             )
 
-            for member_name, member in sorted(mod.members.items()):
+            for member_name, member in mod.members.items():
                 if member.is_alias:
                     continue
                 assert isinstance(member, griffe.Object)
@@ -453,9 +453,14 @@ class ApiManager:
             () if cl.docstring is None else cl.docstring.parsed
         )
 
+        badge_type = 'dtc' if 'dataclass' in cl.labels else 'cls'
+        badge_text = 'DTC' if badge_type == 'dtc' else 'CLS'
+
         # header
         yield (
-            f'## <span class="api-badge api-badge-cls">CLS</span> '
+            f'## <span class="api-badge api-badge-{badge_type}">'
+            f'{badge_text}'
+            f'</span> '
             f'`{cl.name}`\n'
         )
 
@@ -475,7 +480,7 @@ class ApiManager:
 
         # recurse
         for member_name, member in (
-            sorted(cl.members.items()) if cl.members else ()
+            cl.members.items() if cl.members else ()
         ):
             if member.is_alias:
                 continue
@@ -489,7 +494,7 @@ class ApiManager:
                 assert isinstance(member, griffe.Function)
                 yield from self._render_function(member, cl.name)
 
-    def _render_function(  # noqa: C901
+    def _render_function(  # noqa: C901, PLR0912, PLR0915
         self, func: griffe.Function, parent_name: str | None
     ) -> col.Iterator[str]:
         yield f'<a id="{func.path}"></a>'
@@ -499,13 +504,51 @@ class ApiManager:
             () if func.docstring is None else func.docstring.parsed
         )
 
+        # badge
+        if parent_name is None:
+            b_type, b_text = 'def', 'FN'
+        elif 'property' in func.labels:
+            b_type, b_text = 'prop', 'PROP'
+        elif 'classmethod' in func.labels:
+            b_type, b_text = 'cmth', 'CMTH'
+        else:
+            b_type, b_text = 'mth', 'MTH'
+
+        badges = f'<span class="api-badge api-badge-{b_type}">{b_text}</span>'
+        if 'abstractmethod' in func.labels:
+            badges += ' <span class="api-badge api-badge-abs">ABC</span>'
+
+        # check for overrides
+        is_override = False
+        override_url: str | None = None
+
+        if func.decorators:
+            # decorator values are ast expressions
+            #  safest check is source string
+            is_override = any(
+                'override' in getattr(d.value, 'source', str(d.value))
+                for d in func.decorators
+            )
+
+        if is_override and isinstance(func.parent, griffe.Class):
+            badges += ' <span class="api-badge api-badge-abs">OVR</span>'
+            # scan mro for the base method
+            for base_cls in func.parent.mro():
+                if not isinstance(base_cls, griffe.Class):
+                    continue
+                if func.name not in base_cls.members:
+                    continue
+
+                base_meth = base_cls.members[func.name]
+                assert isinstance(base_meth, griffe.Function)
+
+                base_qn = gr_qn(base_meth)
+                override_url = self.qn_to_url[base_qn]
+                break
+
         # header
         m_header_pref = '##' if parent_name is None else '###'
-        yield (
-            f'{m_header_pref} '
-            f'<span class="api-badge api-badge-def">DEF</span> '
-            f'`{func.name}`\n'
-        )
+        yield f'{m_header_pref} {badges} `{func.name}`\n'
 
         # signature
         m_parent_pref = (
@@ -533,8 +576,20 @@ class ApiManager:
             import_map=self.mod_qn_to_local_map[gr_qn(func.module)],
         ).replace(f'def {func.name}', f'{m_parent_pref}{func.name}', 1)
 
+        # prepend decorators
+        linked_lines = linked_source.splitlines()[:-1]
+        if 'classmethod' in func.labels:
+            linked_lines.insert(0, '@classmethod')
+        if 'property' in func.labels:
+            linked_lines.insert(0, '@property')
+
+        if override_url:
+            linked_lines.insert(0, f'@__ZEN[{override_url}|override]ZEN__')
+        elif is_override:
+            linked_lines.insert(0, '@override')
+
         yield '```python'
-        yield '\n'.join(linked_source.splitlines()[:-1])
+        yield '\n'.join(linked_lines)
         yield '```\n'
 
         # brief afterward

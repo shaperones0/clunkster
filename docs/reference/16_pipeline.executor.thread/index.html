@@ -903,10 +903,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#def-__init__" class="md-nav__link">
+  <a href="#mth-ovr-__init__" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>__init__</code>
+        <span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>__init__</code>
       </span>
     </span>
   </a>
@@ -914,10 +914,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#def-emit" class="md-nav__link">
+  <a href="#mth-ovr-emit" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>emit</code>
+        <span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>emit</code>
       </span>
     </span>
   </a>
@@ -930,10 +930,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#def-execute_threaded" class="md-nav__link">
+  <a href="#fn-execute_threaded" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>execute_threaded</code>
+        <span class="api-badge api-badge-def">FN</span> <code>execute_threaded</code>
       </span>
     </span>
   </a>
@@ -1144,10 +1144,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#def-__init__" class="md-nav__link">
+  <a href="#mth-ovr-__init__" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>__init__</code>
+        <span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>__init__</code>
       </span>
     </span>
   </a>
@@ -1155,10 +1155,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#def-emit" class="md-nav__link">
+  <a href="#mth-ovr-emit" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>emit</code>
+        <span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>emit</code>
       </span>
     </span>
   </a>
@@ -1171,10 +1171,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#def-execute_threaded" class="md-nav__link">
+  <a href="#fn-execute_threaded" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <span class="api-badge api-badge-def">DEF</span> <code>execute_threaded</code>
+        <span class="api-badge api-badge-def">FN</span> <code>execute_threaded</code>
       </span>
     </span>
   </a>
@@ -1249,11 +1249,12 @@ Acquires thread lock before dispatching an event.</p>
 </details>
 <hr />
 <p><a id="clunkster.pipeline.executor.thread.ThreadedEventSink.__init__"></a></p>
-<h3 id="def-__init__"><span class="api-badge api-badge-def">DEF</span> <code>__init__</code><a class="headerlink" href="#def-__init__" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">ThreadedEventSink</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">dispatcher</span><span class="p">:</span> <span class="n"><a href="/reference/11_pipeline.events.dispatcher#clunkster.pipeline.events.dispatcher.EventDispatcher">EventDispatcher</a></span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="p">):</span>
+<h3 id="mth-ovr-__init__"><span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>__init__</code><a class="headerlink" href="#mth-ovr-__init__" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@<a href="/reference/13_pipeline.events.sink#clunkster.pipeline.events.sink.DispatchEventSink.__init__">override</a></span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ThreadedEventSink</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">dispatcher</span><span class="p">:</span> <span class="n"><a href="/reference/11_pipeline.events.dispatcher#clunkster.pipeline.events.dispatcher.EventDispatcher">EventDispatcher</a></span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="p">):</span>
 </span></code></pre></div>
 <p>Initialize sink with given dispatcher.</p>
 <p>Also gets a lock.</p>
@@ -1271,11 +1272,12 @@ Acquires thread lock before dispatching an event.</p>
 </details>
 <hr />
 <p><a id="clunkster.pipeline.executor.thread.ThreadedEventSink.emit"></a></p>
-<h3 id="def-emit"><span class="api-badge api-badge-def">DEF</span> <code>emit</code><a class="headerlink" href="#def-emit" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">ThreadedEventSink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">event</span><span class="p">:</span> <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.Event">pl_event.Event</a></span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<h3 id="mth-ovr-emit"><span class="api-badge api-badge-mth">MTH</span> <span class="api-badge api-badge-abs">OVR</span> <code>emit</code><a class="headerlink" href="#mth-ovr-emit" title="Permanent link">&para;</a></h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@<a href="/reference/13_pipeline.events.sink#clunkster.pipeline.events.sink.DispatchEventSink.emit">override</a></span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ThreadedEventSink</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">event</span><span class="p">:</span> <span class="n"><a href="/reference/12_pipeline.events.event#clunkster.pipeline.events.event.Event">pl_event.Event</a></span><span class="p">,</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span></code></pre></div>
 <details class="quote">
 <summary>View source</summary>
@@ -1289,7 +1291,7 @@ Acquires thread lock before dispatching an event.</p>
 </details>
 <hr />
 <p><a id="clunkster.pipeline.executor.thread.execute_threaded"></a></p>
-<h2 id="def-execute_threaded"><span class="api-badge api-badge-def">DEF</span> <code>execute_threaded</code><a class="headerlink" href="#def-execute_threaded" title="Permanent link">&para;</a></h2>
+<h2 id="fn-execute_threaded"><span class="api-badge api-badge-def">FN</span> <code>execute_threaded</code><a class="headerlink" href="#fn-execute_threaded" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">execute_threaded</span><span class="p">(</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">tasks</span><span class="p">:</span> <span class="n">col</span><span class="o">.</span><span class="n">Iterable</span><span class="p">[</span><span class="n"><a href="/reference/09_pipeline.task#clunkster.pipeline.task.Task">Task</a></span><span class="p">],</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">cache</span><span class="p">:</span> <span class="n"><a href="/reference/08_pipeline.cache#clunkster.pipeline.cache.FileBuildCache">FileBuildCache</a></span><span class="p">,</span>

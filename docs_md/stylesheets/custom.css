@@ -22,28 +22,61 @@
     padding: .25em .4em;
 }
 
-.api-badge-cls {
-    /* badge for classes */
+.api-badge-cls { /* classes */
 
     background-color: #e8eaf6;
     color: #3f51b5;
 }
-.api-badge-def {
-    /* badge for functions */
-
+.api-badge-def { /* module level functions */
     background-color: #e8f5e9;
     color: #2e7d32;
 }
+.api-badge-dtc { /* dataclass */
+    background-color: #f3e5f5;
+    color: #7b1fa2;
+}
+.api-badge-mth { /* method */
+    background-color: #e0f2f1;
+    color: #00796b;
+}
+.api-badge-cmth { /* classmethod */
+    background-color: #fff3e0;
+    color: #e65100;
+}
+.api-badge-prop { /* property */
+    background-color: #fce4ec;
+    color: #c2185b;
+}
+
+.api-badge-abs { /* (secondary) abstract */
+    background-color: transparent;
+    color: #757575;
+}
 
 [data-md-color-scheme="slate"] .api-badge-cls {
-    /* badge for classes dark mode */
-
     background-color: hsl(238, 27%, 10%);
     color: #c5cae9;
 }
 [data-md-color-scheme="slate"] .api-badge-def {
-    /* badge for function dark mode */
-
     background-color: hsl(124, 27%, 10%);
     color: #c8e6c9;
+}
+[data-md-color-scheme="slate"] .api-badge-dtc {
+    background-color: hsl(285, 30%, 12%);
+    color: #ce93d8;
+}
+[data-md-color-scheme="slate"] .api-badge-mth {
+    background-color: hsl(165, 30%, 10%);
+    color: #80cbc4;
+}
+[data-md-color-scheme="slate"] .api-badge-cmth {
+    background-color: hsl(30, 30%, 12%);
+    color: #ffcc80;
+}
+[data-md-color-scheme="slate"] .api-badge-prop {
+    background-color: hsl(335, 30%, 12%);
+    color: #f48fb1;
+}
+[data-md-color-scheme="slate"] .api-badge-abs {
+    color: #9e9e9e;
 }
