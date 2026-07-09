@@ -62,6 +62,8 @@ def txt_readme(
 {wrapper_hello.execute(exs=exs)}
 {tuple(wrapper_hello.render_snippets())}
 Read [docs](https://shaperones0.github.io/clunkster) for more.
+
+![game reduced RAM usage from 2.8 GB to 609.71 MB cat thumbs up](/screenshots/title.png)
 """
 
 

@@ -22,3 +22,5 @@ Super destructive tools:
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
 
 Read [docs](https://shaperones0.github.io/clunkster) for more.
+
+![game reduced RAM usage from 2.8 GB to 609.71 MB cat thumbs up](/screenshots/title.png)
