@@ -278,7 +278,7 @@ class ApiManager:
 
     def mod_url(self, mod: griffe.Module) -> str:
         """Get module's reference page URL."""
-        return f'/reference/{self.mod_fname(mod, suffix="")}'
+        return f'/reference/{self.mod_fname(mod, suffix="")}/'
 
     def obj_url(self, obj: griffe.Object) -> str:
         """Get object's reference page URL."""
