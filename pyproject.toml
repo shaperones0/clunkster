@@ -148,6 +148,9 @@ ignore = [
     'E501'
 ]
 
+[tool.ty.rules]
+all = "error"
+
 [tool.deptry.per_rule_ignores]
 DEP004 = [
     'griffe',

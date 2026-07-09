@@ -1909,7 +1909,7 @@ def _main() -> None:
             encoding='utf-8',
         )
 
-    file_to_parser: dict[Path, doc_patch.FuncParser] = {
+    file_to_parser = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
         DIR_DOCS / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
         DIR_DOCS / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),

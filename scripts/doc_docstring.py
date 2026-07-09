@@ -3,6 +3,7 @@
 import ast
 import re
 from pathlib import Path
+from typing import override
 
 
 def _format_docstring(docstring: str) -> str:
@@ -109,12 +110,14 @@ class DocstringExtractor(ast.NodeVisitor):
         """Extract functions docstrings from given Python code."""
         self.func_to_docstring: dict[str, str] = {}
 
+    @override
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Visit FunctionDef node."""
         docstring = ast.get_docstring(node)
         if docstring:
             self.func_to_docstring[node.name] = _format_docstring(docstring)
 
+    @override
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Visit AsyncFunctionDef node."""
         docstring = ast.get_docstring(node)

@@ -6,7 +6,7 @@ import os
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, cast
+from typing import Self, cast, override
 
 import griffe
 
@@ -689,12 +689,15 @@ class ApiManager:
             return None
 
         class LinkVisitor(ast.NodeVisitor):
+            @override
             def visit_Import(self, node: ast.Import) -> None:
                 pass  # ignore import statements
 
+            @override
             def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
                 pass
 
+            @override
             def visit_Attribute(self, node: ast.Attribute) -> None:
                 fqn = get_fqn(node)
                 if fqn and fqn in api.qn_to_obj:
@@ -717,6 +720,7 @@ class ApiManager:
                     return
                 self.generic_visit(node)
 
+            @override
             def visit_Name(self, node: ast.Name) -> None:
                 fqn = import_map.get(node.id)
                 if fqn and fqn in api.qn_to_obj:
