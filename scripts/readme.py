@@ -1861,7 +1861,7 @@ def render_reference(
 """
 
 
-def _main() -> None:  # noqa: C901
+def _main() -> None:
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
@@ -1894,7 +1894,7 @@ def _main() -> None:  # noqa: C901
     dir_ref.mkdir(parents=True, exist_ok=True)
 
     print('Rendering reference')
-    for qn in api.mod_qn_to_path:
+    for qn in api.mod_qn_to_sort_key:
         module = api.mod_qn_to_module[qn]
         print('-', module)
 

@@ -23,7 +23,7 @@ class NodeTag:
     children: list[NodeTag | NodeText] = field(default_factory=list)
 
 
-def parse(lines: col.Iterable[str]) -> NodeTag:  # noqa: C901, PLR0915
+def parse(lines: col.Iterable[str]) -> NodeTag:
     """Parse XML from Python comments."""
     root = NodeTag(tag_name='root')
     stack: list[NodeTag] = [root]

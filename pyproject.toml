@@ -115,6 +115,12 @@ ignore = [
     # this isn't backend or anything
     'S324',
 
+    # stupid complexity rules for BABIES
+    'C901',
+    'PLR0912',
+    'PLR0915',
+    'PLR2004',  # bruv thinks every number is magic
+
     # conflicting rules
 
     # prefer no blank line before class docstring

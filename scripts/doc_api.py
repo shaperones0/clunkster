@@ -111,14 +111,12 @@ class _Replacement:
 class ApiManager:
     """Surface view of scannable modules."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         root_lib_dir: Path,
         root_module: griffe.Module,
         mod_qn_to_module: dict[str, griffe.Module],
-        mod_qn_to_local_map: dict[str, dict[str, str]],
-        mod_qn_to_path: dict[str, Path],
         mod_qn_to_sort_key: dict[str, int],
         qn_to_url: dict[str, str],
     ) -> None:
@@ -127,25 +125,21 @@ class ApiManager:
         :param root_lib_dir: Root library directory.
         :param mod_qn_to_module: Module's qualified name to griffe's module
           object.
-        :param mod_qn_to_local_map: Module's qualified name to map of its
-          import alias names to fully qualified names.
-        :param mod_qn_to_path: Module's qualified name to module's filepath.
         :param qn_to_url: Merged qualified name of every module member to
           generated url to member reference.
         """
         self.root_lib_dir = root_lib_dir
         self.root_module = root_module
         self.mod_qn_to_module = mod_qn_to_module
-        self.mod_qn_to_local_map = mod_qn_to_local_map
-        self.mod_qn_to_path = mod_qn_to_path
         self.mod_qn_to_sort_key = mod_qn_to_sort_key
         self.qn_to_url = qn_to_url
 
+        self.cache_mod_qn_to_local_map: dict[str, dict[str, str]] = {}
         self.cache_qn_to_rendered: dict[str, list[str]] = {}
         self.cache_overview = ''
 
     @classmethod
-    def from_root_lib_name(cls, library_name: str) -> Self:  # noqa: C901
+    def from_root_lib_name(cls, library_name: str) -> Self:
         """Generate API manager from given root library name.
 
         :param library_name: Root library name.
@@ -160,8 +154,6 @@ class ApiManager:
         )
 
         mod_qn_to_module: dict[str, griffe.Module] = {}
-        mod_qn_to_local_map: dict[str, dict[str, str]] = {}
-        mod_qn_to_path: dict[str, Path] = {}
         mod_qn_to_sort_key: dict[str, int] = {}
         qn_to_url: dict[str, str] = {}
         lib_dir = lib.filepath
@@ -188,20 +180,7 @@ class ApiManager:
                         f'code. Found in {mod_path}'
                     )
 
-                mod_qn_to_path[qn] = mod_path
                 mod_qn_to_sort_key[qn] = len(mod_qn_to_sort_key)
-
-                # populate local map
-                local_map: dict[str, str] = {}
-                for m_name, m_obj in mod.members.items():
-                    if not m_obj.is_alias:
-                        assert isinstance(m_obj, griffe.Object)
-                        local_map[m_name] = gr_qn(m_obj)
-
-                if mod.source:
-                    imports = doc_imports.ImportsFilter.from_code(mod.source)
-                    local_map.update(imports.get_import_map())
-                mod_qn_to_local_map[qn] = local_map
 
             # recurse into submodules
             for child in mod_sort(*mod.modules.values()):
@@ -212,8 +191,6 @@ class ApiManager:
             root_lib_dir=root_lib_dir,
             root_module=lib,
             mod_qn_to_module=mod_qn_to_module,
-            mod_qn_to_local_map=mod_qn_to_local_map,
-            mod_qn_to_path=mod_qn_to_path,
             mod_qn_to_sort_key=mod_qn_to_sort_key,
             qn_to_url={},
         )
@@ -254,8 +231,6 @@ class ApiManager:
             root_lib_dir=root_lib_dir,
             root_module=lib,
             mod_qn_to_module=mod_qn_to_module,
-            mod_qn_to_local_map=mod_qn_to_local_map,
-            mod_qn_to_path=mod_qn_to_path,
             mod_qn_to_sort_key=mod_qn_to_sort_key,
             qn_to_url=qn_to_url,
         )
@@ -263,11 +238,39 @@ class ApiManager:
     def mod_qn_fname(self, mod_qn: str, suffix: str = '.md') -> str:
         """Convert module's qualified name to resulting MD file name."""
         return f'{self.mod_qn_to_sort_key[mod_qn]:0>2}_' + '.'.join(
-            self.mod_qn_to_path[mod_qn]
+            self.mod_qn_path(mod_qn)
             .with_suffix(suffix)
             .relative_to(self.root_lib_dir)
             .parts
         )
+
+    def mod_qn_path(self, mod_qn: str) -> Path:
+        """Module's qualified name to module's file path."""
+        mod = self.mod_qn_to_module[mod_qn]
+        pth = mod.filepath
+        assert isinstance(pth, Path)
+        return pth
+
+    def mod_qn_locals(self, mod_qn: str) -> dict[str, str]:
+        """Module's qualified name to module's local map."""
+        if (locs := self.cache_mod_qn_to_local_map.get(mod_qn)) is None:
+            self.cache_mod_qn_to_local_map[mod_qn] = locs = (
+                self._mod_qn_locals(mod_qn)
+            )
+        return locs
+
+    def _mod_qn_locals(self, mod_qn: str) -> dict[str, str]:
+        mod = self.mod_qn_to_module[mod_qn]
+        local_map: dict[str, str] = {}
+        for m_name, m_obj in mod.members.items():
+            if not m_obj.is_alias:
+                assert isinstance(m_obj, griffe.Object)
+                local_map[m_name] = gr_qn(m_obj)
+
+        if mod.source:
+            imports = doc_imports.ImportsFilter.from_code(mod.source)
+            local_map.update(imports.get_import_map())
+        return local_map
 
     def mod_fname(self, mod: griffe.Module, suffix: str = '.md') -> str:
         """Get module's resulting MD file name."""
@@ -324,7 +327,7 @@ class ApiManager:
                 num_lines = len(ls)
                 if num_lines > 1:
                     # check if first line can be shoved
-                    if len(ls[0]) < 80:  # noqa: PLR2004
+                    if len(ls[0]) < 80:
                         yield f'{indent}    ??? quote "{ls[0]} ..."'
                         ls.pop(0)
                     else:
@@ -361,7 +364,7 @@ class ApiManager:
 
         return '\n'.join(lines)
 
-    def _render_module(self, mod: griffe.Module) -> list[str]:  # noqa: C901
+    def _render_module(self, mod: griffe.Module) -> list[str]:
         qn = gr_qn(mod)
         if (cached := self.cache_qn_to_rendered.get(qn)) is not None:
             return cached
@@ -437,7 +440,7 @@ class ApiManager:
             # populate link things
             linked_source = self.inject_code_links(
                 code_str=obj.source,
-                import_map=self.mod_qn_to_local_map[gr_qn(obj.module)],
+                import_map=self.mod_qn_locals(gr_qn(obj.module)),
             )
 
             yield '??? quote "View source"'
@@ -492,7 +495,7 @@ class ApiManager:
                 assert isinstance(member, griffe.Function)
                 yield from self._render_function(member, cl.name)
 
-    def _render_function(  # noqa: C901, PLR0912, PLR0915
+    def _render_function(
         self, func: griffe.Function, parent_name: str | None
     ) -> col.Iterator[str]:
         yield f'<a id="{func.path}"></a>'
@@ -571,7 +574,7 @@ class ApiManager:
         # render block
         linked_source = self.inject_code_links(
             code_str='\n'.join(block_lines),
-            import_map=self.mod_qn_to_local_map[gr_qn(func.module)],
+            import_map=self.mod_qn_locals(gr_qn(func.module)),
         ).replace(f'def {func.name}', f'{m_parent_pref}{func.name}', 1)
 
         # prepend decorators
@@ -627,7 +630,7 @@ class ApiManager:
 
         # no recurse
 
-    def inject_code_links(  # noqa: C901
+    def inject_code_links(
         self,
         code_str: str,
         import_map: dict[str, str],
