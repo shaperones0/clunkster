@@ -272,8 +272,13 @@ class ApiManager:
 
     def mod_url(self, mod: griffe.Module, *, cur_md_page: Path) -> str:
         """Get module's reference page URL."""
+        src = (
+            cur_md_page.parent / cur_md_page.stem
+            if cur_md_page.stem != 'index'
+            else cur_md_page.parent
+        )
         pref = rel_path(
-            src=cur_md_page.parent / cur_md_page.stem,
+            src=src,
             dst=PATH_DOCS_REF / self.mod_fname(mod, suffix=''),
         )
         return f'{pref}#'
