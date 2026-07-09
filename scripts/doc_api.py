@@ -381,10 +381,10 @@ class ApiManager:
                 () if mod.docstring is None else mod.docstring.parsed
             )
 
-            str_heading = f'# `{mod.path}`'
+            lines.append(f'# `{mod.path}`\n')
+
             if brief:
-                str_heading += f' - {brief}'
-            lines.append(f'{str_heading}\n')
+                lines.append(f'{brief}\n')
 
             if description:
                 lines.append(f'{description}\n')
