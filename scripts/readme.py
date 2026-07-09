@@ -90,6 +90,8 @@ Most of the tools depend heavily on asset clustering (i.e. assigning each asset 
 
 {head.header_parse('### Usage', 'h_usage')}
 
+The tool runs on Python 3.14+.
+
 Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle quirks and facilitate pipeline logic.
 
 Therefore, recommended way of using this project is cloning it, setting up environment (preferably via [`uv`](https://docs.astral.sh/uv/), standard `pip` also supported) and writing the pipeline by following the examples. Alternatively, run the existing `main.py` pipeline.
