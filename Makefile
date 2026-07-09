@@ -30,13 +30,19 @@ test-cov: ## Run tests and print a terminal coverage report
 	@echo "Running tests with coverage: Pytest"
 	@uv run pytest --cov=clunkster --cov-report=term-missing
 
-.PHONY: readme
-readme:	## Autogen in readme (examples and whatnot)
+.PHONY: docgen
+docgen: ## Generate docs Markdown files
 	@uv run python -m scripts.readme
-	@uv run zensical build --strict
 
+.PHONY: docbuild
+docbuild: docgen ## Build docs
+	@uv run env PYTHONPATH=. zensical build --strict
+
+.PHONY: docserve
+docserve: docgen ## Generate docs Markdown files and serve
+	@uv run env PYTHONPATH=. zensical serve
 .PHONY: check
-check: format lint test readme ## Run all local checks, fixes, and tests
+check: format lint test docbuild ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="
 
 .PHONY: help

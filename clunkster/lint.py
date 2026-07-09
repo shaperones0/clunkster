@@ -286,16 +286,16 @@ class LinterSession:
         self.errors.append(error)
 
     def collect(
-        self, *cls: type[LinterViolation], flush: bool = True
+        self, *cl: type[LinterViolation], flush: bool = True
     ) -> DiagnosticBatch:
         """Collect errors into a diagnostic batch.
 
-        :param cls: Classes to filter against. Pass nothing to collect
+        :param cl: Classes to filter against. Pass nothing to collect
           everything.
         :param flush: Whether to remove collected errors.
         :return: Diagnostic batch.
         """
-        err_severities = self._classify(*cls)
+        err_severities = self._classify(*cl)
         if flush:
             self._flush(it.chain.from_iterable(err_severities.values()))
         return DiagnosticBatch(
@@ -306,30 +306,30 @@ class LinterSession:
 
     def consume(
         self,
-        *cls: type[LinterViolation],
+        *cl: type[LinterViolation],
         verbose: bool = False,
         flush: bool = True,
     ) -> int:
         """Collect and consume errors.
 
-        :param cls: Classes to filter against. Pass nothing to collect
+        :param cl: Classes to filter against. Pass nothing to collect
           everything.
         :param verbose: Whether to produce verbose report.
         :param flush: Whether to remove collected errors.
         :return: Number of errors collected.
         """
-        batch = self.collect(*cls, flush=flush)
+        batch = self.collect(*cl, flush=flush)
         self.consumer.consume(batch, verbose=verbose)
         return batch.len_total()
 
-    def flush(self, *cls: type[LinterViolation]) -> int:
+    def flush(self, *cl: type[LinterViolation]) -> int:
         """Remove errors from queue.
 
-        :param cls: Classes to filter against. Pass nothing to collect
+        :param cl: Classes to filter against. Pass nothing to collect
           everything.
         :return: Number of elements removed.
         """
-        err_severities = self._classify(*cls)
+        err_severities = self._classify(*cl)
         return self._flush(it.chain.from_iterable(err_severities.values()))
 
     def _flush(self, errors: col.Iterable[LinterViolation]) -> int:
@@ -343,17 +343,17 @@ class LinterSession:
         return len(remove)
 
     def _classify(
-        self, *cls: type[LinterViolation]
+        self, *cl: type[LinterViolation]
     ) -> dict[Severity, list[LinterViolation]]:
         """Filter violations by severity.
 
-        :param cls: Classes to filter against. Pass nothing to collect
+        :param cl: Classes to filter against. Pass nothing to collect
           everything.
         :return: Dictionary of severities by classes.
         """
         err_severities: dict[Severity, list[LinterViolation]] = {}
         for err in self.errors:
-            if cls and not isinstance(err, cls):
+            if cl and not isinstance(err, cl):
                 continue
             err_severities.setdefault(type(err).severity, []).append(err)
 

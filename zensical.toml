@@ -10,27 +10,31 @@ site_dir = 'docs'
 repo_url = 'https://github.com/shaperones0/clunkster'
 repo_name = 'shaperones0/clunkster'
 
-nav = [
-  'index.md',
-  {'Rationale' = 'rationale.md'},
-  {'Examples' = 'examples.md'},
-  {'Reference' = 'reference.md'},
+extra_css = [
+    "stylesheets/custom.css"
 ]
 
 [project.theme]
 features = [
-  'navigation.instant',
-  'navigation.instant.prefetch',
+    'navigation.instant',
+    'navigation.instant.prefetch',
 
-  'navigation.tracking',  # anchor tracking
-#  'navigation.tabs',
-#  'navigation.path',
-
-#  'toc.integrate'
+    'navigation.tracking',  # anchor tracking
+    'navigation.indexes'
 ]
 
 [project.theme.icon]
 repo = "fontawesome/brands/git-alt"
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
 
 [project.validation]
 invalid_links = true
@@ -71,3 +75,6 @@ combine_header_slug = true
 [project.markdown_extensions.pymdownx.tasklist]
 custom_checkbox = true
 [project.markdown_extensions.pymdownx.tilde]
+
+# custom extensions
+[project.markdown_extensions.zen_code_links]

@@ -4,12 +4,75 @@
         <loc>https://shaperones0.github.com/clunkster/</loc>
       </url>
       <url>
-        <loc>https://shaperones0.github.com/clunkster/rationale/</loc>
-      </url>
-      <url>
         <loc>https://shaperones0.github.com/clunkster/examples/</loc>
       </url>
       <url>
         <loc>https://shaperones0.github.com/clunkster/reference/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/00_asset/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/01_lint/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/02_project/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/03_analyze.scan_dep/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/04_parse.gml/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/05_parse.index/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/06_parse.kv/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/07_parse.tree/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/08_pipeline.cache/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/09_pipeline.task/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/10_pipeline.events.context/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/11_pipeline.events.dispatcher/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/12_pipeline.events.event/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/13_pipeline.events.sink/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/14_pipeline.executor.base/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/15_pipeline.executor.mp/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/16_pipeline.executor.thread/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/17_pipeline.ui.adapter/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/18_pipeline.ui.base/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/19_pipeline.ui.simple/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/20_text.line/</loc>
+      </url>
+      <url>
+        <loc>https://shaperones0.github.com/clunkster/reference/21_text.location/</loc>
       </url>
 </urlset>

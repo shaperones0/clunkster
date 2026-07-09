@@ -104,7 +104,7 @@ class WidgetRendererSimple(WidgetRenderer):
         *,
         title: str | None = None,
     ) -> None:
-        if not table or len(table) < 2:  # noqa: PLR2004
+        if not table or len(table) < 2:
             return
 
         corner_label = table[0][0]
@@ -393,7 +393,7 @@ class WidgetRendererRich(WidgetRenderer):
         *,
         title: str | None = None,
     ) -> None:
-        if not table or len(table) < 2:  # noqa: PLR2004
+        if not table or len(table) < 2:
             return
 
         headers = table[0]
@@ -1284,7 +1284,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
         Those guards allow references to any foreign cluster inside them. Such
         guards must be defined in ``CONTEXT_RULES``. Read more on those in the
-        [GML chapter](rationale.md#integration-into-the-game).
+        [GML chapter](index.md#integration-into-the-game).
 
     3. References to rooms are severed. Since the only way to meaningfully
     "instantiate" a room is to go there, for all intents and purposes
@@ -1732,7 +1732,7 @@ def main_ex_lint_crossref_graph(
                     )
                 )
 
-        if total_violations > 1000:  # noqa: PLR2004
+        if total_violations > 1000:
             ui_out('\nLinter exceeded 1000 violations, bailing out')
             break
     violations_cnt = LINT.consume(LintCrossrefGraph)
@@ -1933,7 +1933,7 @@ def juice_obj_fix_mask(
         # split event at event declaration and its trailing newline
         parts = input_gml.split(target_event + '\n')
 
-        if len(parts) != 2:  # noqa: PLR2004
+        if len(parts) != 2:
             # handle edge case where the event is at the very end of
             #  the file with no trailing newline
             if input_gml.endswith(target_event):
@@ -2018,7 +2018,7 @@ def juice_obj_fix_mask(
 def main_juicer_processing() -> None:
     """First step - the actual processing functions.
 
-    As it's outlined in [Juicing](rationale.md#juicing), processing will be
+    As it's outlined in [Juicing](index.md#juicing), processing will be
     applied only to sprites, backgrounds and external audio. Plus fixing
     object's masks and room's stretch backgrounds.
 
@@ -2240,7 +2240,7 @@ class BuildTasks:
 
 
 @ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
-def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:  # noqa: PLR0915
+def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     """Step 3 - ~~Fly~~ Run the thing.
 
     This stage is responsible for mapping out source project, generating
@@ -2540,13 +2540,13 @@ def main_juicer_run(tasks: BuildTasks) -> None:
 
 
 @ui_auto_sink('Juicer: generating gml', cls_ui=CLS_UI)
-def main_juicer_gen_gml(assets: list[Asset]) -> None:  # noqa: PLR0915
+def main_juicer_gen_gml(assets: list[Asset]) -> None:
     """It is time to finally integrate Clunkster into the project.
 
     For this we won't be "creating" scripts, but more like replacing ones
     that exist in the project. The list of scripts to be added into
     the project is
-    [right down the road](rationale.md#integration-into-the-game).
+    [right down the road](index.md#integration-into-the-game).
 
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You
@@ -2958,7 +2958,7 @@ def main() -> None:
     # allow testing tutorials on private data as well
     is_test = False
     is_check = False
-    if len(sys.argv) > 2:  # noqa: PLR2004
+    if len(sys.argv) > 2:
         if sys.argv[2] == 'test':
             is_test = True
         elif sys.argv[2] == 'check':

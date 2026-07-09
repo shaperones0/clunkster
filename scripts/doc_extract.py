@@ -46,7 +46,7 @@ def _flush_buffer(py_buffer: list[str], snips: list[Snippet]) -> None:
         py_buffer.clear()
 
 
-def extract(root: NodeTag) -> dict[str, list[Snippet]]:  # noqa: C901, PLR0912, PLR0915
+def extract(root: NodeTag) -> dict[str, list[Snippet]]:
     """Extract snippets from given document.
 
     :param root: Document to extract snippets from.

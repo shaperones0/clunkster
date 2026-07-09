@@ -3,6 +3,7 @@
 import ast
 import inspect
 import textwrap
+import traceback as tb
 import types
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class FstringPartCode:
     compiled: types.CodeType
     result: list[Snippet] | None
     err: Exception | None
+    err_msg: str | None
 
 
 class FuncParser[**P]:
@@ -81,6 +83,7 @@ class FuncParser[**P]:
                         compiled=compiled_node,
                         result=None,
                         err=None,
+                        err_msg=None,
                     )
                 )
         return cls(func=func, setup_code=setup_code, parts=fstring_parts)
@@ -111,6 +114,7 @@ class FuncParser[**P]:
                 result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
             except Exception as e:
                 part.err = e
+                part.err_msg = str(e) + '\n'.join(tb.format_exception(e))
                 if part.result is not None:
                     # this part used to be resolved
                     raise RuntimeError(
@@ -133,15 +137,16 @@ class FuncParser[**P]:
                     snippets.extend(result)
                 part.result = snippets
 
-    def is_resolved(self) -> bool:
+    def err_count(self) -> int:
         """Whether the underlying render is resolved."""
+        cnt = 0
         for part in self.parts:
             if isinstance(part, str):
                 # text needs no evaluating
                 continue
             if part.result is None:
-                return False
-        return True
+                cnt += 1
+        return cnt
 
     def render_snippets(self) -> Iterator[Snippet]:
         """Render underlying parts into snippets."""

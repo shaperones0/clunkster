@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 
-def _format_docstring(docstring: str) -> str:  # noqa: C901, PLR0915
+def _format_docstring(docstring: str) -> str:
     """Format given docstring from RST to MD.
 
     :param docstring: Input RST docstring.

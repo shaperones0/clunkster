@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import griffe
+
 from scripts import (
+    doc_api,
     doc_code,
     doc_docstring,
     doc_extract,
@@ -16,18 +19,11 @@ from scripts.doc_snippets import Snippet, s_py
 FILE_README = Path(__file__).parent.parent / 'README.md'
 
 
-def txt_readme(
-    snips: dict[str, list[Snippet]],
-    head: doc_headers.ExampleHeaderManager,
-    docs: dict[str, str],
+def s_txt_hello(
     exs: doc_code.CodeGenerator,
 ) -> str:
-    """Generate readme."""
+    """Generate upper section."""
     return f"""
-{head.file_begin('readme.md')}
-{head.file_set_gh()}
-# Clunkster
-
 GameMaker 8.2 optimization tools and project processing pipeline.
 
 Non-destructive tools:
@@ -37,7 +33,7 @@ Non-destructive tools:
 - (TODO) Linter: heavy assets detector (RAM & disk size)
 - Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})
 - Linter: room indirect reference validator via dependency graph (see {exs.href('ex_lint_crossref_graph')})
-- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; [Dehydration](https://shaperones0.github.io/clunkster/rationale/#dehydration))
+- Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; {exs.href('h_dehydration', 'Dehydration')})
 
 Lightly destructive tools:
 
@@ -47,37 +43,59 @@ Lightly destructive tools:
 Super destructive tools:
 
 - (TODO) Project crippler (Dev Build): replace assets with lightweight stubs for faster development
-
-Read [docs](https://shaperones0.github.io/clunkster) for more.
-
 """
 
 
-def txt_overview(head: doc_headers.ExampleHeaderManager, **_: object) -> str:
+def txt_readme(
+    head: doc_headers.ExampleHeaderManager,
+    exs: doc_code.CodeGenerator,
+    **_: object,
+) -> str:
+    """Generate readme."""
+    wrapper_hello = doc_patch.FuncParser.from_func(s_txt_hello)
+
+    return f"""
+{head.file_begin('readme.md')}
+{head.file_set_gh()}
+
+# Clunkster
+{wrapper_hello.execute(exs=exs)}
+{tuple(wrapper_hello.render_snippets())}
+Read [docs](https://shaperones0.github.io/clunkster) for more.
+
+![game reduced RAM usage from 2.8 GB to 609.71 MB cat thumbs up](/screenshots/title.png)
+"""
+
+
+def txt_overview(
+    head: doc_headers.ExampleHeaderManager,
+    exs: doc_code.CodeGenerator,
+    **_: object,
+) -> str:
     """Generate docs overview section."""
+    wrapper_hello = doc_patch.FuncParser.from_func(s_txt_hello)
+
+    # PyCharm: Alt+Enter -> Inject language -> Markdown
     return f"""
 
 {head.file_begin('index.md')}
 
 {head.header_parse('# Clunkster', 'h_docs')}
 
-GameMaker 8.2 optimization tools and project processing pipeline.
+{wrapper_hello.execute(exs=exs)}
+{tuple(wrapper_hello.render_snippets())}
 
 Most of the tools depend heavily on asset clustering (i.e. assigning each asset to an isolated group like "StageA", "StageB", "Common" etc.), but some use it only to group console output.
 
-Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle various non-obvious quirks and facilitate the core pipeline logic.
+{head.header_parse('### Usage', 'h_usage')}
 
-Please refer to {head.header_href('h_rationale', 'Rationale')} to see it these tools fit your project.
-"""
+Given the architectural differences across GameMaker projects, Clunkster is organized as a set of {head.header_href('h_examples', 'examples')} that you can copy, and build your own pipeline out of them. The library itself provides functions that handle quirks and facilitate pipeline logic.
 
+Therefore, recommended way of using this project is cloning it, setting up environment (preferably via [`uv`](https://docs.astral.sh/uv/), standard `pip` also supported) and writing the pipeline by following the examples. Alternatively, run the existing `main.py` pipeline.
 
-def txt_rationale(head: doc_headers.ExampleHeaderManager, exs: doc_code.CodeGenerator, **_: object) -> str:
-    """Generate rationale section."""
-    # PyCharm: Alt+Enter -> Inject language -> Markdown
-    return f"""
-{head.file_begin('rationale.md')}
+However, before that, I recommend giving following sections a read - they go more in-depth on which projects need these tools, and how to properly apply them.
 
-{head.header_parse('# Rationale', 'h_rationale')}
+{head.header_parse('## Rationale', 'h_rationale')}
 
 GameMaker 8.2 runner is 32-bit, meaning there's a hard cap on RAM of around 4 GB. Furthermore, certain parts of the engine start having hardware-specific issues at even 2.5 GB of RAM usage.
 
@@ -96,8 +114,6 @@ Prod builds are similar, but we add dynamic loading. The project is copied, only
 - sounds get replaced with null.wav
 
 This is explained more in-depth in [Dehydration](#dehydration) and subsequent chapters.
-
-{head.header_parse('## Linters', 'h_linters')}
 
 To prevent developers from accidentally referencing a `StageB` sprite inside a `StageA` object, a dependency linter is included. It builds dependency graph based on static `.gml` and `.txt` metafile analysis.
 
@@ -497,7 +513,52 @@ else {{
 return 0
 ```
 
-> Note: Clunkster is very sensitive to exact way you call the context guards in code. Guarded region must start with a line `if guard() {{` and end with just closing brackets on their own line `}}`. You can't use guards with parameters in regular code, you can't pair them with any sort of boolean logic, and you are not allowed to use parenthesis outside (like `if (guard()) {{`).
+> Note: Clunkster is sensitive to exact way you call the context guards in code. Guarded region must start with a line `if guard() {{` and end with just closing brackets on their own line `}}`.
+>
+> ❌ Nope: Can't use other syntax
+>
+```gml
+if room_is_nice()
+{{  // BAD: analyzer won't see guard opening
+    nice_spell()
+}}  // GOOD: proper closing bracket
+
+if room_is_polar() {{  // GOOD: proper opening statemtent
+    if room_is_bad() {{  // GOOD: it handles indents pretty well
+        message_bad()
+    }} else {{  // BAD: analyzer won't see guard closing
+        message_good()
+    }}
+}}
+
+if (room_is_intro()) {{  // BAD: analyzer won't see guard opening
+    ...
+}}
+
+// GOOD: everything is ok in this example
+if room_is_forest() {{
+    music_forest()
+    stuff_forest()
+    john_forest()
+}}
+else {{
+    // NOTE: analyzer actually doesn't do anything special in
+    //  the 'else' blocks in context guards, just so you know
+    john_not_forest()
+}}
+```
+>
+> ❌ Nope: Can't use guards with parameters in scanned code
+>
+```gml
+if room_is_hub(room_next(room)) {{ ...
+```
+>
+> ❌ Nope: Can't pair them with any sort of boolean logic
+>
+```gml
+if room_is_ending() and save_get('cleared') {{ ...
+```
 
 ### Timelines
 
@@ -764,7 +825,7 @@ default:
 
 More info on them scripts can be found in the [GML](#integration-into-the-game) chapter.
 
-## Dehydration
+{head.header_parse('## Dehydration', 'h_dehydration')}
 
 Following terms are used:
 
@@ -1295,25 +1356,12 @@ else {{
 """  # noqa: S608
 
 
-def txt_reference(
-    snips: dict[str, list[Snippet]],
-    head: doc_headers.ExampleHeaderManager,
-    docs: dict[str, str],
-    exs: doc_code.CodeGenerator,
-) -> str:
-    """Generate reference."""
-    return f"""
-{head.file_begin('reference.md')}
-
-{head.header_parse('# Reference', 'h_reference')}
-"""
-
-
 def txt_examples(
     snips: dict[str, list[Snippet]],
     head: doc_headers.ExampleHeaderManager,
     docs: dict[str, str],
     exs: doc_code.CodeGenerator,
+    **_: object,
 ) -> str:
     """Generate examples."""
     return f"""
@@ -1778,16 +1826,55 @@ ___
 """
 
 
-def _main() -> None:  # noqa: C901
+def txt_reference_overview(
+    head: doc_headers.ExampleHeaderManager,
+    api: doc_api.ApiManager,
+    **_: object,
+) -> str:
+    """Generate reference overview page."""
+    return f"""
+{head.header_parse('# Overview', 'h_reference')}
+
+{api.render_overview()}
+"""
+
+
+def render_reference(
+    api: doc_api.ApiManager,
+    module: griffe.Module,
+) -> str:
+    """Generate reference."""
+    return f"""
+<style>
+@media screen and (min-width: 76.25em) {{
+    .md-sidebar--secondary {{
+        width: 15rem !important;
+    }}
+    .md-content {{
+        max-width: calc(100% - 16rem);
+    }}
+}}
+.md-sidebar--secondary .md-nav__item .md-nav__link {{
+    white-space: nowrap;
+}}
+</style>
+
+{api.render_module(module)}
+"""
+
+
+def _main() -> None:
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()
     snips = doc_extract.extract(doc_parse.parse(lines_main))
     head = doc_headers.ExampleHeaderManager(idx_major_start=-1)
     docs = doc_docstring.extract(txt_main)
+    api = doc_api.ApiManager.from_root_lib_name('clunkster')
     exs = doc_code.CodeGenerator.from_text(
         txt_main,
         header_manager=head,
+        api=api,
     )
 
     kwargs = {
@@ -1795,16 +1882,35 @@ def _main() -> None:  # noqa: C901
         'head': head,
         'docs': docs,
         'exs': exs,
+        'api': api,
     }
 
     dir_docs = Path(__file__).parent.parent / 'docs_md'
 
+    fs_md = tuple(dir_docs.rglob('*.md'))
+    print('Cleanup', len(fs_md), 'files')
+    for f_md in fs_md:
+        f_md.unlink()
+
+    dir_ref = dir_docs / 'reference'
+    dir_ref.mkdir(parents=True, exist_ok=True)
+
+    print('Rendering reference')
+    for qn in api.mod_qn_to_sort_key:
+        module = api.mod_qn_to_module[qn]
+        print('-', module)
+
+        md_path = dir_ref / api.mod_qn_fname(qn)
+        md_path.write_text(
+            render_reference(api, module).replace('```gml', '```js'),
+            encoding='utf-8',
+        )
+
     file_to_parser: dict[Path, doc_patch.FuncParser] = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
         dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
-        dir_docs / 'rationale.md': doc_patch.FuncParser.from_func(txt_rationale),
         dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
-        dir_docs / 'reference.md': doc_patch.FuncParser.from_func(txt_reference),
+        dir_ref / 'index.md': doc_patch.FuncParser.from_func(txt_reference_overview),
     }
 
     iterations = 0
@@ -1812,19 +1918,22 @@ def _main() -> None:  # noqa: C901
 
     parsers = list(file_to_parser.values())
 
-    def is_ok() -> bool:
-        return all(_parser.is_resolved() for _parser in parsers)
+    def err_cnt() -> int:
+        return sum(_parser.err_count() for _parser in parsers)
 
+    print('Docs start')
     while iterations < iterations_max:
         iterations += 1
 
         for parser in parsers:
             parser.execute(**kwargs)
 
-        if is_ok():
+        err = err_cnt()
+        print(f'#{iterations} - {err} errors')
+        if err == 0:
             break
 
-    if not is_ok():
+    if err_cnt() > 0:
         error_msg = f'Template failed to resolve after {iterations_max} passes. Unresolved snippets:'
 
         for parser in parsers:
@@ -1833,14 +1942,17 @@ def _main() -> None:  # noqa: C901
                     continue
                 if part.err is None:
                     continue
-                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}'  # ty: ignore[unresolved-attribute]
+                error_msg += f'\n- {parser.func.__name__}: {{{part.code_str}}} failed with {type(part.err).__name__}: {part.err}{part.err_msg or ""}'  # ty: ignore[unresolved-attribute]
 
         raise RuntimeError(error_msg)
 
-    for file, parser in file_to_parser.items():
-        file.write_text(parser.render_str().replace('```gml', '```js'), encoding='utf-8')
-
     print('Docs generated.')
+    for file, parser in file_to_parser.items():
+        txt = parser.render_str()
+        txt = txt.replace('```gml', '```js')  # replace gml with js for hl
+        file.write_text(txt, encoding='utf-8')
+
+    print('Docs written.')
 
 
 if __name__ == '__main__':

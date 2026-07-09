@@ -4,7 +4,7 @@ import collections.abc as col
 import functools as ft
 from typing import Self
 
-from scripts import doc_extract, doc_headers, doc_imports, doc_parse
+from scripts import doc_api, doc_extract, doc_headers, doc_imports, doc_parse
 from scripts.doc_snippets import Snippet, s_py
 
 CodeName = str
@@ -63,6 +63,7 @@ class CodeGenerator:
         snippets: dict[str, list[Snippet]],
         imports: doc_imports.ImportsFilter,
         header_manager: doc_headers.HeaderManager,
+        api: doc_api.ApiManager,
     ) -> None:
         """Initialize code generator.
 
@@ -73,6 +74,9 @@ class CodeGenerator:
         self.snippets = snippets
         self.imports = imports
         self.head = header_manager
+        self.api = api
+
+        self.import_map = self.imports.get_import_map()
 
         # code names to headers
         self.code_header: dict[CodeName, doc_headers.Header] = {}
@@ -85,18 +89,23 @@ class CodeGenerator:
 
     @classmethod
     def from_text(
-        cls, text: str, header_manager: doc_headers.HeaderManager
+        cls,
+        text: str,
+        header_manager: doc_headers.HeaderManager,
+        api: doc_api.ApiManager,
     ) -> Self:
         """Initialize code generator from text.
 
         :param text: Text to parse.
         :param header_manager: Header generator.
+        :param api: Api manager.
         """
         lines = text.splitlines()
         return cls(
             snippets=doc_extract.extract(doc_parse.parse(lines)),
             imports=doc_imports.ImportsFilter.from_code(text),
             header_manager=header_manager,
+            api=api,
         )
 
     def file_begin(self, name: str) -> str:
@@ -140,7 +149,13 @@ class CodeGenerator:
         name = self.snippet_owner[snippet_name]
         header = self.code_header[name]
         stub = self.snippet_stub[snippet_name]
-        return f'# see {header.header_mini}\n{stub}'
+
+        expl = header.header_full.split(' - ')[-1]
+        target_url = self.head.header_link(key=name)
+        return (
+            f'# see __ZEN[{target_url}|{header.header_mini} - {expl}|'
+            f'interactive-note-link]ZEN__\n{stub}'
+        )
 
     def href(self, code_name: CodeName, text: str | None = None) -> str:
         """Render a href to given code sample.
@@ -202,7 +217,15 @@ class CodeGenerator:
         if render_imports:
             result.append(s_py(self.imports.filter_used_unparse(*snips_code)))
         if render_code:
-            result.extend(snips)
+            for snip in snips:
+                if snip.type.name != 'PYTHON':
+                    result.append(snip)
+                    continue
+                linked_content = self.api.inject_code_links(
+                    code_str=snip.content,
+                    import_map=self.import_map,
+                )
+                result.append(s_py(linked_content))
         return result
 
 
