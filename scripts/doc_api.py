@@ -2,6 +2,7 @@
 
 import ast
 import collections.abc as col
+import os
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +15,8 @@ from scripts import doc_imports
 TOC_MAX_LEN = 28
 PATH_BASE = Path(__file__).parent.parent
 URL_GH_BASE = 'https://github.com/shaperones0/clunkster/blob/master/'
-URL_PREF: str = ''
+PATH_DOCS_MD = PATH_BASE / 'docs_md'
+PATH_DOCS_REF = PATH_DOCS_MD / 'reference'
 
 
 def docstring_get_brief_desc(
@@ -90,6 +92,11 @@ def param_to_code(param: griffe.Parameter | griffe.DocstringParameter) -> str:
     return ''.join(parts)
 
 
+def rel_path(src: Path, dst: Path) -> Path:
+    """Get relative path from source's folder to destination."""
+    return Path(os.path.relpath(dst, start=src))
+
+
 ProcessableTypes = (
     type[griffe.Module] | type[griffe.Function] | type[griffe.Class]
 )
@@ -119,21 +126,19 @@ class ApiManager:
         root_module: griffe.Module,
         mod_qn_to_module: dict[str, griffe.Module],
         mod_qn_to_sort_key: dict[str, int],
-        qn_to_url: dict[str, str],
+        qn_to_obj: dict[str, griffe.Object],
     ) -> None:
         """Initialize scanned modules collection.
 
         :param root_lib_dir: Root library directory.
         :param mod_qn_to_module: Module's qualified name to griffe's module
           object.
-        :param qn_to_url: Merged qualified name of every module member to
-          generated url to member reference.
         """
         self.root_lib_dir = root_lib_dir
         self.root_module = root_module
         self.mod_qn_to_module = mod_qn_to_module
         self.mod_qn_to_sort_key = mod_qn_to_sort_key
-        self.qn_to_url = qn_to_url
+        self.qn_to_obj = qn_to_obj
 
         self.cache_mod_qn_to_local_map: dict[str, dict[str, str]] = {}
         self.cache_qn_to_rendered: dict[str, list[str]] = {}
@@ -156,7 +161,6 @@ class ApiManager:
 
         mod_qn_to_module: dict[str, griffe.Module] = {}
         mod_qn_to_sort_key: dict[str, int] = {}
-        qn_to_url: dict[str, str] = {}
         lib_dir = lib.filepath
         assert isinstance(lib_dir, Path)
         root_lib_dir = lib_dir
@@ -188,13 +192,7 @@ class ApiManager:
                 _populate_modules(child)
 
         _populate_modules(lib)
-        temp = cls(
-            root_lib_dir=root_lib_dir,
-            root_module=lib,
-            mod_qn_to_module=mod_qn_to_module,
-            mod_qn_to_sort_key=mod_qn_to_sort_key,
-            qn_to_url={},
-        )
+        qn_to_obj: dict[str, griffe.Object] = {}
 
         def _populate_manifest(obj: ProcessableObject) -> None:
 
@@ -217,12 +215,7 @@ class ApiManager:
                 if member_name.startswith('_') and member_name != '__init__':
                     continue
                 qual_name = gr_qn(member)
-                url = temp.obj_url(member)
-                if qn_to_url.setdefault(qual_name, url) != url:
-                    raise KeyError(
-                        f'Qualified name {qual_name} is already referenced '
-                        f'to {qn_to_url[qual_name]}, it cannot point to {url}'
-                    )
+                qn_to_obj[qual_name] = member
                 _populate_manifest(member)
 
         for module in mod_qn_to_module.values():
@@ -233,7 +226,7 @@ class ApiManager:
             root_module=lib,
             mod_qn_to_module=mod_qn_to_module,
             mod_qn_to_sort_key=mod_qn_to_sort_key,
-            qn_to_url=qn_to_url,
+            qn_to_obj=qn_to_obj,
         )
 
     def mod_qn_fname(self, mod_qn: str, suffix: str = '.md') -> str:
@@ -277,22 +270,30 @@ class ApiManager:
         """Get module's resulting MD file name."""
         return self.mod_qn_fname(gr_qn(mod), suffix=suffix)
 
-    def mod_url(self, mod: griffe.Module) -> str:
+    def mod_url(self, mod: griffe.Module, *, cur_md_page: Path) -> str:
         """Get module's reference page URL."""
-        return URL_PREF + f'/reference/{self.mod_fname(mod, suffix="")}/'
+        pref = rel_path(
+            src=cur_md_page.parent / cur_md_page.stem,
+            dst=PATH_DOCS_REF / self.mod_fname(mod, suffix=''),
+        )
+        return f'{pref}#'
 
-    def obj_url(self, obj: griffe.Object) -> str:
+    def obj_url(self, obj: griffe.Object, *, cur_md_page: Path) -> str:
         """Get object's reference page URL."""
-        return self.mod_url(obj.module) + f'#{gr_qn(obj)}'
+        return (
+            self.mod_url(obj.module, cur_md_page=cur_md_page) + f'{gr_qn(obj)}'
+        )
 
-    def render_overview(self) -> str:
+    def render_overview(self, cur_md_page: Path) -> str:
         """Render the reference overview page."""
         if not self.cache_overview:
-            self.cache_overview = self._render_overview()
+            self.cache_overview = self._render_overview(
+                cur_md_page=cur_md_page
+            )
 
         return self.cache_overview
 
-    def _render_overview(self) -> str:
+    def _render_overview(self, cur_md_page: Path) -> str:
         """Render the section index overview page."""
         lines: list[str] = []
 
@@ -308,7 +309,7 @@ class ApiManager:
             )
 
             if has_page:
-                url = self.mod_url(mod)
+                url = self.mod_url(mod, cur_md_page=cur_md_page)
                 qn_display = f'[`{qn}`]({url})'
             else:
                 qn_display = f'`{qn}`'
@@ -352,7 +353,7 @@ class ApiManager:
         lines.extend(_render_mod_node(self.root_module, 0))
         return '\n'.join(lines)
 
-    def render_module(self, mod: griffe.Module) -> str:
+    def render_module(self, mod: griffe.Module, cur_md_page: Path) -> str:
         """Render given module.
 
         Caches rendered result using module's qualified name as a key.
@@ -361,11 +362,15 @@ class ApiManager:
         """
         qn = gr_qn(mod)
         if (lines := self.cache_qn_to_rendered.get(qn)) is None:
-            self.cache_qn_to_rendered[qn] = lines = self._render_module(mod)
+            self.cache_qn_to_rendered[qn] = lines = self._render_module(
+                mod, cur_md_page=cur_md_page
+            )
 
         return '\n'.join(lines)
 
-    def _render_module(self, mod: griffe.Module) -> list[str]:
+    def _render_module(
+        self, mod: griffe.Module, cur_md_page: Path
+    ) -> list[str]:
         qn = gr_qn(mod)
         if (cached := self.cache_qn_to_rendered.get(qn)) is not None:
             return cached
@@ -406,14 +411,22 @@ class ApiManager:
 
                 if member.kind == griffe.Kind.CLASS:
                     assert isinstance(member, griffe.Class)
-                    lines.extend(self._render_class(member))
+                    lines.extend(
+                        self._render_class(member, cur_md_page=cur_md_page)
+                    )
                 elif member.kind == griffe.Kind.FUNCTION:
                     assert isinstance(member, griffe.Function)
-                    lines.extend(self._render_function(member, None))
+                    lines.extend(
+                        self._render_function(
+                            member, None, cur_md_page=cur_md_page
+                        )
+                    )
 
         return lines
 
-    def _render_view_source(self, obj: griffe.Object) -> col.Iterator[str]:
+    def _render_view_source(
+        self, obj: griffe.Object, cur_md_page: Path
+    ) -> col.Iterator[str]:
         is_abstract = 'abstractmethod' in obj.labels
 
         lines = [line.strip() for line in obj.source.splitlines()]
@@ -442,6 +455,7 @@ class ApiManager:
             linked_source = self.inject_code_links(
                 code_str=obj.source,
                 import_map=self.mod_qn_locals(gr_qn(obj.module)),
+                cur_md_page=cur_md_page,
             )
 
             yield '??? quote "View source"'
@@ -449,7 +463,9 @@ class ApiManager:
             yield textwrap.indent(linked_source, '    ')
             yield '    ```\n'
 
-    def _render_class(self, cl: griffe.Class) -> col.Iterator[str]:
+    def _render_class(
+        self, cl: griffe.Class, cur_md_page: Path
+    ) -> col.Iterator[str]:
         yield f'<a id="{cl.path}"></a>'
 
         # parse docstring for brief and desc
@@ -478,7 +494,7 @@ class ApiManager:
 
         # view source
         if cl.source:
-            yield from self._render_view_source(cl)
+            yield from self._render_view_source(cl, cur_md_page=cur_md_page)
 
         yield '___'
 
@@ -494,10 +510,15 @@ class ApiManager:
                 raise NotImplementedError
             elif member.kind == griffe.Kind.FUNCTION:
                 assert isinstance(member, griffe.Function)
-                yield from self._render_function(member, cl.name)
+                yield from self._render_function(
+                    member, cl.name, cur_md_page=cur_md_page
+                )
 
     def _render_function(
-        self, func: griffe.Function, parent_name: str | None
+        self,
+        func: griffe.Function,
+        parent_name: str | None,
+        cur_md_page: Path,
     ) -> col.Iterator[str]:
         yield f'<a id="{func.path}"></a>'
 
@@ -544,8 +565,7 @@ class ApiManager:
                 base_meth = base_cls.members[func.name]
                 assert isinstance(base_meth, griffe.Function)
 
-                base_qn = gr_qn(base_meth)
-                override_url = self.qn_to_url[base_qn]
+                override_url = self.obj_url(base_meth, cur_md_page=cur_md_page)
                 break
 
         # header
@@ -576,6 +596,7 @@ class ApiManager:
         linked_source = self.inject_code_links(
             code_str='\n'.join(block_lines),
             import_map=self.mod_qn_locals(gr_qn(func.module)),
+            cur_md_page=cur_md_page,
         ).replace(f'def {func.name}', f'{m_parent_pref}{func.name}', 1)
 
         # prepend decorators
@@ -625,7 +646,7 @@ class ApiManager:
 
         # view source
         if func.source:
-            yield from self._render_view_source(func)
+            yield from self._render_view_source(func, cur_md_page=cur_md_page)
 
         yield '___'
 
@@ -635,11 +656,14 @@ class ApiManager:
         self,
         code_str: str,
         import_map: dict[str, str],
+        *,
+        cur_md_page: Path,
     ) -> str:
         """Autogenerate links inside the source code.
 
         :param code_str: Code to inject links into.
         :param import_map: Map local aliased names to qualified names.
+        :param cur_md_page: Current rendered page (needed for link resolve).
         :return: Code with injected links.
         """
         api = self
@@ -667,7 +691,7 @@ class ApiManager:
 
             def visit_Attribute(self, node: ast.Attribute) -> None:
                 fqn = get_fqn(node)
-                if fqn and fqn in api.qn_to_url:
+                if fqn and fqn in api.qn_to_obj:
                     # extract exact string from source to preserve styling
                     disp = lines[node.lineno - 1][
                         node.col_offset : node.end_col_offset
@@ -678,7 +702,9 @@ class ApiManager:
                             col_offset=node.col_offset,
                             end_col_offset=node.end_col_offset,
                             display=disp,
-                            link=api.qn_to_url[fqn],
+                            link=api.obj_url(
+                                api.qn_to_obj[fqn], cur_md_page=cur_md_page
+                            ),
                         )
                     )
                     # stop recursion so we don't link base module separately
@@ -687,14 +713,16 @@ class ApiManager:
 
             def visit_Name(self, node: ast.Name) -> None:
                 fqn = import_map.get(node.id)
-                if fqn and fqn in api.qn_to_url:
+                if fqn and fqn in api.qn_to_obj:
                     replacements.append(
                         _Replacement(
                             lineno=node.lineno,
                             col_offset=node.col_offset,
                             end_col_offset=node.end_col_offset,
                             display=node.id,
-                            link=api.qn_to_url[fqn],
+                            link=api.obj_url(
+                                api.qn_to_obj[fqn], cur_md_page=cur_md_page
+                            ),
                         )
                     )
                 self.generic_visit(node)

@@ -2,6 +2,7 @@
 
 import collections.abc as col
 import functools as ft
+from pathlib import Path
 from typing import Self
 
 from scripts import doc_api, doc_extract, doc_headers, doc_imports, doc_parse
@@ -60,6 +61,7 @@ class CodeGenerator:
 
     def __init__(
         self,
+        dir_md_root: Path,
         snippets: dict[str, list[Snippet]],
         imports: doc_imports.ImportsFilter,
         header_manager: doc_headers.HeaderManager,
@@ -71,6 +73,7 @@ class CodeGenerator:
         :param imports: Source imports.
         :param header_manager: Header generator.
         """
+        self.dir_md_root = dir_md_root
         self.snippets = snippets
         self.imports = imports
         self.head = header_manager
@@ -86,22 +89,26 @@ class CodeGenerator:
         self.snippet_owner: dict[SnippetName, CodeName] = {}
 
         self.current_code_name: CodeName = ''
+        self.current_file_name = ''
 
     @classmethod
     def from_text(
         cls,
+        dir_md_root: Path,
         text: str,
         header_manager: doc_headers.HeaderManager,
         api: doc_api.ApiManager,
     ) -> Self:
         """Initialize code generator from text.
 
+        :param dir_md_root: Root directory of rendered markdown.
         :param text: Text to parse.
         :param header_manager: Header generator.
         :param api: Api manager.
         """
         lines = text.splitlines()
         return cls(
+            dir_md_root=dir_md_root,
             snippets=doc_extract.extract(doc_parse.parse(lines)),
             imports=doc_imports.ImportsFilter.from_code(text),
             header_manager=header_manager,
@@ -112,6 +119,7 @@ class CodeGenerator:
         """Signify beginning (or restart) of a file."""
         self.head.file_begin(name)
         self.current_code_name = ''
+        self.current_file_name = name
         return ''
 
     def code_begin(self, code_name: CodeName, header_title: str) -> str:
@@ -224,6 +232,7 @@ class CodeGenerator:
                 linked_content = self.api.inject_code_links(
                     code_str=snip.content,
                     import_map=self.import_map,
+                    cur_md_page=self.dir_md_root / self.current_file_name,
                 )
                 result.append(s_py(linked_content))
         return result

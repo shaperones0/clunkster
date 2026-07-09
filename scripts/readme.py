@@ -17,6 +17,7 @@ from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
 from scripts.doc_snippets import Snippet, s_py
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
+DIR_DOCS = Path(__file__).parent.parent / 'docs_md'
 
 
 def s_txt_hello(
@@ -1829,19 +1830,21 @@ ___
 def txt_reference_overview(
     head: doc_headers.ExampleHeaderManager,
     api: doc_api.ApiManager,
+    cur_md_page: Path,
     **_: object,
 ) -> str:
     """Generate reference overview page."""
     return f"""
 {head.header_parse('# Overview', 'h_reference')}
 
-{api.render_overview()}
+{api.render_overview(cur_md_page=cur_md_page)}
 """
 
 
 def render_reference(
     api: doc_api.ApiManager,
     module: griffe.Module,
+    cur_md_page: Path,
 ) -> str:
     """Generate reference."""
     return f"""
@@ -1859,12 +1862,11 @@ def render_reference(
 }}
 </style>
 
-{api.render_module(module)}
+{api.render_module(module, cur_md_page=cur_md_page)}
 """
 
 
 def _main() -> None:
-    doc_api.URL_PREF = '/clunkster'
 
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
@@ -1874,7 +1876,8 @@ def _main() -> None:
     docs = doc_docstring.extract(txt_main)
     api = doc_api.ApiManager.from_root_lib_name('clunkster')
     exs = doc_code.CodeGenerator.from_text(
-        txt_main,
+        dir_md_root=DIR_DOCS,
+        text=txt_main,
         header_manager=head,
         api=api,
     )
@@ -1887,14 +1890,12 @@ def _main() -> None:
         'api': api,
     }
 
-    dir_docs = Path(__file__).parent.parent / 'docs_md'
-
-    fs_md = tuple(dir_docs.rglob('*.md'))
+    fs_md = tuple(DIR_DOCS.rglob('*.md'))
     print('Cleanup', len(fs_md), 'files')
     for f_md in fs_md:
         f_md.unlink()
 
-    dir_ref = dir_docs / 'reference'
+    dir_ref = DIR_DOCS / 'reference'
     dir_ref.mkdir(parents=True, exist_ok=True)
 
     print('Rendering reference')
@@ -1904,14 +1905,14 @@ def _main() -> None:
 
         md_path = dir_ref / api.mod_qn_fname(qn)
         md_path.write_text(
-            render_reference(api, module).replace('```gml', '```js'),
+            render_reference(api, module, cur_md_page=md_path).replace('```gml', '```js'),
             encoding='utf-8',
         )
 
     file_to_parser: dict[Path, doc_patch.FuncParser] = {
         Path(__file__).parent.parent / 'README.md': doc_patch.FuncParser.from_func(txt_readme),
-        dir_docs / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
-        dir_docs / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
+        DIR_DOCS / 'index.md': doc_patch.FuncParser.from_func(txt_overview),
+        DIR_DOCS / 'examples.md': doc_patch.FuncParser.from_func(txt_examples),
         dir_ref / 'index.md': doc_patch.FuncParser.from_func(txt_reference_overview),
     }
 
@@ -1927,8 +1928,8 @@ def _main() -> None:
     while iterations < iterations_max:
         iterations += 1
 
-        for parser in parsers:
-            parser.execute(**kwargs)
+        for file, parser in file_to_parser.items():
+            parser.execute(**kwargs, cur_md_page=file)
 
         err = err_cnt()
         print(f'#{iterations} - {err} errors')
