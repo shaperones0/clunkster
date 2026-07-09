@@ -1864,6 +1864,8 @@ def render_reference(
 
 
 def _main() -> None:
+    doc_api.URL_PREF = '/clunkster'
+
     file_main = Path(__file__).parent.parent / 'main.py'
     txt_main = file_main.read_text(encoding='utf-8')
     lines_main = txt_main.splitlines()

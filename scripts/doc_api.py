@@ -14,6 +14,7 @@ from scripts import doc_imports
 TOC_MAX_LEN = 28
 PATH_BASE = Path(__file__).parent.parent
 URL_GH_BASE = 'https://github.com/shaperones0/clunkster/blob/master/'
+URL_PREF: str = ''
 
 
 def docstring_get_brief_desc(
@@ -278,7 +279,7 @@ class ApiManager:
 
     def mod_url(self, mod: griffe.Module) -> str:
         """Get module's reference page URL."""
-        return f'/reference/{self.mod_fname(mod, suffix="")}/'
+        return URL_PREF + f'/reference/{self.mod_fname(mod, suffix="")}/'
 
     def obj_url(self, obj: griffe.Object) -> str:
         """Get object's reference page URL."""
