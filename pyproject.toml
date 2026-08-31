@@ -15,6 +15,7 @@ dev = [
     "griffelib>=2.1.0",
     "markdown>=3.10.2",
     "pillow>=12.3.0",
+    "pre-commit>=4.6.2",
     "pyahocorasick>=2.3.1",
     "pygments>=2.20.0",
     "pytest>=9.1.1",

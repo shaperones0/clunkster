@@ -174,7 +174,7 @@ def rich_render_row_progress(
     text_padded = text.ljust(width)[:width]
     fill_len = int(width * pct)
 
-    rich_text = r_text.Text('--- ')
+    rich_text = r_text.Text('')
     if fill_len > 0:
         rich_text.append(
             text_padded[:fill_len], style=f'bold black on {color}'
