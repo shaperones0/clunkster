@@ -107,8 +107,6 @@ class TaskCopy(TaskGeneric):
 
         :param files: Pairs of (input file, output file).
         """
-        files_input: tuple[Path, ...]
-        files_output: tuple[Path, ...]
         files_input, files_output = zip(*files, strict=True)
 
         not_files = tuple(file for file in files_input if not file.is_file())

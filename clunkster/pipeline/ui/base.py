@@ -56,22 +56,22 @@ class Ui(ABC):
         """Context manager exit."""
         self.stop()
 
-    def on_task_started(self, e: event.TaskStarted) -> None:  # noqa: B027
+    def on_task_started(self, e: event.TaskStarted) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """TaskStarted event handler."""
 
-    def on_task_finished(self, e: event.TaskFinished) -> None:  # noqa: B027
+    def on_task_finished(self, e: event.TaskFinished) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """TaskFinished event handler."""
 
-    def on_progress_start(self, e: event.ProgressStart) -> None:  # noqa: B027
+    def on_progress_start(self, e: event.ProgressStart) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """ProgressStart event handler."""
 
-    def on_progress_advance(self, e: event.ProgressAdvance) -> None:  # noqa: B027
+    def on_progress_advance(self, e: event.ProgressAdvance) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """ProgressAdvance event handler."""
 
-    def on_progress_completed(self, e: event.ProgressCompleted) -> None:  # noqa: B027
+    def on_progress_completed(self, e: event.ProgressCompleted) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """ProgressCompleted event handler."""
 
-    def on_status(self, e: event.Status) -> None:  # noqa: B027
+    def on_status(self, e: event.Status) -> None:  # ruff: ignore[empty-method-without-abstract-decorator]
         """Status event handler."""
 
 

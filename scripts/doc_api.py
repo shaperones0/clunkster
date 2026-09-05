@@ -25,7 +25,7 @@ def docstring_get_brief_desc(
     """Get brief and description from a docstring."""
     for section in parsed:
         if section.kind.value == 'text':
-            lines = section.value.splitlines()
+            lines = cast(list[str], section.value.splitlines())
             if lines:
                 return lines[0].strip(), '\n'.join(lines[1:]).strip()
             break

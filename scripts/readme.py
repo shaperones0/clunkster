@@ -1356,7 +1356,7 @@ else {{
     clunkster_gen_init_audio()
 }}
 ```
-"""  # noqa: S608
+"""  # ruff: ignore[hardcoded-sql-expression]
 
 
 def txt_examples(

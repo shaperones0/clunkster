@@ -7,7 +7,7 @@ import itertools as it
 import json
 import os
 import shutil
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 import threading
 import time
@@ -1846,8 +1846,8 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
     """
     if isinstance(audio, AssetExtSfx):
         # FMOD kind 0 (RAM): compress to MS ADPCM 22050Hz
-        subprocess.run(  # noqa: S603
-            [  # noqa: S607
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [  # ruff: ignore[start-process-with-partial-path]
                 'ffmpeg',
                 '-i',
                 str(audio.file),
@@ -1864,8 +1864,8 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
         )
     else:
         # FMOD kind 1/3 (Stream): compress to low-bitrate Ogg Vorbis
-        subprocess.run(  # noqa: S603
-            [  # noqa: S607
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [  # ruff: ignore[start-process-with-partial-path]
                 'ffmpeg',
                 '-i',
                 str(audio.file),
@@ -2515,7 +2515,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         tasks_mp=tuple(tasks_mp),
     )
     # </snip MAIN_JUICER_GEN_TASKS>
-    return build_tasks  # noqa: RET504
+    return build_tasks  # ruff: ignore[unnecessary-assign]
 
 
 @ui_auto_sink('Juicer: run tasks', cls_ui=CLS_UI)
@@ -2870,7 +2870,7 @@ def main_juicer_gm_compile() -> None:
     ui_out(f'Compiling {output_exe.name}...')
 
     try:
-        subprocess.run(  # noqa: S603
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             [str(gm_exe), str(project_file), '--build', str(output_exe)],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -2882,7 +2882,7 @@ def main_juicer_gm_compile() -> None:
         ) from e
 
     ui_out('Build completely successfully!')
-    subprocess.Popen(  # noqa: S603
+    subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
         [str(output_exe)],
         cwd=JUICER.dir_out,
         creationflags=subprocess.DETACHED_PROCESS

@@ -88,7 +88,7 @@ select = [
     'SIM',
     'SLF',
     'SLOT',
-    'T100',
+    'debugger',
     'TRY',
     'UP',
     'W',
@@ -97,56 +97,56 @@ select = [
 
 ignore = [
     # trailing comma, conflicts with `ruff format`
-    'COM812',
+    'missing-trailing-comma',
 
     # implicit string concat conflicts with `ruff format`
-    'ISC001',
+    'single-line-implicit-string-concatenation',
 
     # prefer explicit string concat over implicit concat
-    'ISC003',
+    'explicit-string-concatenation',
 
     # long exception messages from `tryceratops`
-    'TRY003',
+    'raise-vanilla-args',
 
     # this rule always does false positives
-    'D401',
+    'non-imperative-mood',
 
     # allow asserts in simple projects
-    'S101',
+    'assert',
 
     # this isn't backend or anything
-    'S324',
+    'hashlib-insecure-hash-function',
 
     # stupid complexity rules for BABIES
-    'C901',
-    'PLR0912',
-    'PLR0914',
-    'PLR0915',
-    'PLR2004',  # bruv thinks every number is magic
+    'complex-structure',
+    'too-many-branches',
+    'too-many-locals',
+    'too-many-statements',
+    'magic-value-comparison',  # bruv thinks every number is magic
 
     # conflicting rules
 
     # prefer no blank line before class docstring
-    'D203',
+    'incorrect-blank-line-before-class',
     # prefer multiline summary being placed on """ line
-    'D213',
+    'multi-line-summary-second-line',
 
     # thoumstve dared against luigi
-    'D404'
+    'docstring-starts-with-this'
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
 'main.py' = [
-    'ERA001',
+    'commented-out-code',
 
     # example complexity is dictated by soul
-    'C901',
-    'PLR0912',
+    'complex-structure',
+    'too-many-branches',
 ]
 
 'scripts/readme.py' = [
     # no line length error in doc file
-    'E501'
+    'line-too-long'
 ]
 
 [tool.ty.rules]

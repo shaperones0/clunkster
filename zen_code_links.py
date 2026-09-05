@@ -97,6 +97,6 @@ class CodeLinkExtension(Extension):
         )
 
 
-def makeExtension(**kwargs: object) -> Extension:  # noqa: N802
+def makeExtension(**kwargs: object) -> Extension:  # ruff: ignore[invalid-function-name]
     """Extension finder entrypoint."""
     return CodeLinkExtension(**kwargs)

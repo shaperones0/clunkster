@@ -87,7 +87,7 @@ def task_exec(task: Task, ctx: ExecutionContext) -> ExecuteTaskResult:
     ctx.sink.emit(event.TaskStarted(task_id=task.task_id))
     try:
         task.execute()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff: ignore[blind-except]
         ctx.sink.emit(
             event.TaskFinished(
                 task_id=task.task_id,

@@ -98,9 +98,11 @@ class FuncParser[**P]:
 
         # execution environment
         local_scope: dict[str, object] = dict(bound_args.arguments)
-        global_scope: dict[str, object] = fn.__globals__
+        global_scope: dict[str, object] = cast(
+            dict[str, object], fn.__globals__
+        )
 
-        exec(self.setup_code, global_scope, local_scope)  # noqa: S102
+        exec(self.setup_code, global_scope, local_scope)  # ruff: ignore[exec-builtin]
 
         # relaunching is now responsibility of the caller
 
@@ -111,7 +113,7 @@ class FuncParser[**P]:
 
             try:
                 # evaluate the snippet
-                result = eval(part.compiled, global_scope, local_scope)  # noqa: S307
+                result = eval(part.compiled, global_scope, local_scope)  # ruff: ignore[suspicious-eval-usage]
             except Exception as e:
                 part.err = e
                 part.err_msg = str(e) + '\n'.join(tb.format_exception(e))
