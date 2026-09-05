@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Self, override
 
 from clunkster import project as my_proj
+from clunkster.parse import csv as my_parse_csv
 from clunkster.parse import index as my_parse_index
 from clunkster.parse import kv as my_parse_kv
 from clunkster.parse import tree as my_parse_tree
@@ -302,6 +303,23 @@ class RoomMetadata:
     tab: int
     editor_x: int
     editor_y: int
+
+
+@dataclass(frozen=True, slots=True)
+class RoomTile:
+    """GameMaker room tile."""
+
+    bg: str
+    x: int
+    y: int
+    left: int
+    top: int
+    width: int
+    height: int
+    unused: int
+    xscale: float
+    yscale: float
+    blend: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,6 +628,21 @@ def _room_metadata(metadata_file: pl.Path) -> RoomMetadata:
     return my_parse_kv.parse_dataclass(RoomMetadata, lines)
 
 
+@ft.lru_cache
+def _room_layers(room_folder: pl.Path) -> tuple[int, ...]:
+    return tuple(
+        int(file.stem)
+        for file in room_folder.glob('*.txt')
+        if all(c.isdigit() for c in file.stem)
+    )
+
+
+@ft.lru_cache
+def _room_layer(layer_file: pl.Path) -> tuple[RoomTile, ...]:
+    lines = my_proj.lines(layer_file)
+    return tuple(my_parse_csv.parse(RoomTile, lines))
+
+
 @dataclass(frozen=True, slots=True)
 class Room(AssetBuiltin):
     """GameMaker builtin room asset."""
@@ -644,6 +677,23 @@ class Room(AssetBuiltin):
     def get_room_gml_file(self, project_root: pl.Path) -> pl.Path:
         """Get room's creation code (``code.gml``) file."""
         return self.get_room_folder(project_root) / 'code.gml'
+
+    def get_room_layers(self, project_root: pl.Path) -> tuple[int, ...]:
+        """Get room's layers."""
+        return _room_layers(self.get_room_folder(project_root))
+
+    def get_room_layer_file(
+        self, project_root: pl.Path, layer: int
+    ) -> pl.Path:
+        """Get room's layer file by depth."""
+        return self.get_room_folder(project_root) / f'{layer}.txt'
+
+    def get_room_layer(
+        self, project_root: pl.Path, layer: int
+    ) -> tuple[RoomTile, ...]:
+        """Get contents of room's layer by depth."""
+        file = self.get_room_layer_file(project_root, layer)
+        return _room_layer(file)
 
 
 @dataclass(frozen=True, slots=True)

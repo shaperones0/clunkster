@@ -18,7 +18,7 @@
         <link rel="prev" href="../02_project/">
 
 
-        <link rel="next" href="../04_parse.gml/">
+        <link rel="next" href="../04_parse.csv/">
 
 
 
@@ -350,6 +350,8 @@
 
 
 
+
+
     <li class="md-nav__item md-nav__item--active md-nav__item--nested">
 
 
@@ -594,7 +596,34 @@
 
 
     <li class="md-nav__item">
-      <a href="../04_parse.gml/" class="md-nav__link">
+      <a href="../04_parse.csv/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.parse.csv
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="../05_parse.gml/" class="md-nav__link">
 
 
 
@@ -621,7 +650,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../05_parse.index/" class="md-nav__link">
+      <a href="../06_parse.index/" class="md-nav__link">
 
 
 
@@ -648,7 +677,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../06_parse.kv/" class="md-nav__link">
+      <a href="../07_parse.kv/" class="md-nav__link">
 
 
 
@@ -675,7 +704,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../07_parse.tree/" class="md-nav__link">
+      <a href="../08_parse.tree/" class="md-nav__link">
 
 
 
@@ -702,7 +731,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../08_pipeline.cache/" class="md-nav__link">
+      <a href="../09_pipeline.cache/" class="md-nav__link">
 
 
 
@@ -729,7 +758,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../09_pipeline.task/" class="md-nav__link">
+      <a href="../10_pipeline.task/" class="md-nav__link">
 
 
 
@@ -756,7 +785,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../10_pipeline.events.context/" class="md-nav__link">
+      <a href="../11_pipeline.events.context/" class="md-nav__link">
 
 
 
@@ -783,7 +812,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../11_pipeline.events.dispatcher/" class="md-nav__link">
+      <a href="../12_pipeline.events.dispatcher/" class="md-nav__link">
 
 
 
@@ -810,7 +839,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../12_pipeline.events.event/" class="md-nav__link">
+      <a href="../13_pipeline.events.event/" class="md-nav__link">
 
 
 
@@ -837,7 +866,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../13_pipeline.events.sink/" class="md-nav__link">
+      <a href="../14_pipeline.events.sink/" class="md-nav__link">
 
 
 
@@ -864,7 +893,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../14_pipeline.executor.base/" class="md-nav__link">
+      <a href="../15_pipeline.executor.base/" class="md-nav__link">
 
 
 
@@ -891,7 +920,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../15_pipeline.executor.mp/" class="md-nav__link">
+      <a href="../16_pipeline.executor.mp/" class="md-nav__link">
 
 
 
@@ -918,7 +947,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../16_pipeline.executor.thread/" class="md-nav__link">
+      <a href="../17_pipeline.executor.thread/" class="md-nav__link">
 
 
 
@@ -945,7 +974,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../17_pipeline.ui.adapter/" class="md-nav__link">
+      <a href="../18_pipeline.ui.adapter/" class="md-nav__link">
 
 
 
@@ -972,7 +1001,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../18_pipeline.ui.base/" class="md-nav__link">
+      <a href="../19_pipeline.ui.base/" class="md-nav__link">
 
 
 
@@ -999,7 +1028,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../19_pipeline.ui.simple/" class="md-nav__link">
+      <a href="../20_pipeline.ui.simple/" class="md-nav__link">
 
 
 
@@ -1026,7 +1055,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../20_text.line/" class="md-nav__link">
+      <a href="../21_text.line/" class="md-nav__link">
 
 
 
@@ -1053,7 +1082,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../21_text.location/" class="md-nav__link">
+      <a href="../22_text.location/" class="md-nav__link">
 
 
 
@@ -1252,7 +1281,7 @@ across the given text.</li>
 </span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="c1"># don&#39;t process this file</span>
 </span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="k">return</span>
 </span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">gml_index</span> <span class="o">=</span> <span class="n"><a href="..\04_parse.gml#clunkster.parse.gml.GmlIndex.from_text">my_parse_gml.GmlIndex.from_text</a></span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">gml_index</span> <span class="o">=</span> <span class="n"><a href="..\05_parse.gml#clunkster.parse.gml.GmlIndex.from_text">my_parse_gml.GmlIndex.from_text</a></span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
 </span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>
 </span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="k">for</span> <span class="n">end_idx</span><span class="p">,</span> <span class="n">target_asset</span> <span class="ow">in</span> <span class="n">search_iter</span><span class="p">:</span>
 </span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>        <span class="n">start_idx</span> <span class="o">=</span> <span class="n">end_idx</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">target_asset</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>

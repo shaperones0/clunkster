@@ -14,6 +14,7 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from pathlib import Path
+from pprint import pprint
 from typing import Self, override
 
 import rustworkx as rx
@@ -2890,6 +2891,58 @@ def main_juicer_gm_compile() -> None:
     # </snip MAIN_JUICER_GM_COMPILE>
 
 
+@dataclasses.dataclass(frozen=True, slots=True, order=True)
+class BMTile:
+    """Tile applicable for backgrounds merge."""
+
+    bg_name: str
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+def main_bm_get(assets: list[Asset], dependencies: list[Dependency]) -> None:
+    """Get mergeable backgrounds."""
+    bgs_used_code: set[str] = set()
+    for dep in dependencies:
+        if not isinstance(dep.target_asset, my_asset.Background):
+            continue
+        if isinstance(dep.source_asset, my_asset.Room):
+            df = dep.location.file
+            if df.suffix == '.txt' and all(c.isdigit() for c in df.stem):
+                # allowed to be tiles
+                continue
+            if df.name == 'room.txt':
+                # TODO this case is doable
+                pass
+        bgs_used_code.add(dep.target_asset.name)
+    bgs_unused: set[str] = {
+        bg.name for bg in assets if isinstance(bg, my_asset.Background)
+    } - bgs_used_code
+    print('\n'.join(sorted(bgs_unused)))
+
+    # get them usages
+    bm_tiles: set[BMTile] = set()
+    for room in assets:
+        if not isinstance(room, my_asset.Room):
+            continue
+        for layer in room.get_room_layers(PROJECT):
+            for tile in room.get_room_layer(PROJECT, layer):
+                if tile.bg not in bgs_unused:
+                    continue
+                bm_tiles.add(
+                    BMTile(
+                        bg_name=tile.bg,
+                        left=tile.left,
+                        top=tile.top,
+                        width=tile.width,
+                        height=tile.height,
+                    )
+                )
+    pprint(sorted(bm_tiles))
+
+
 def _run_tutorials() -> None:
     main_ex_start()
     main_ex_aliases()
@@ -2974,6 +3027,13 @@ def main() -> None:
     if is_test:
         _run_tutorials()
         return
+
+    # main_ex_setup_rich()
+    # main_ex_lint_tree()
+    # assets = main_ex_aliases()
+    # deps = main_ex_scan_sync(assets)
+    # bgs = main_bm_get(assets, deps)
+    # return
 
     main_ex_setup_rich()
     main_ex_lint_tree()
