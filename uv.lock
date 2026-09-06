@@ -44,6 +44,13 @@ dev = [
     { name = "ty" },
     { name = "zensical" },
 ]
+runtime = [
+    { name = "gmcodec" },
+    { name = "pillow" },
+    { name = "pyahocorasick" },
+    { name = "rich" },
+    { name = "rustworkx" },
+]
 
 [package.metadata]
 
@@ -65,6 +72,13 @@ dev = [
     { name = "rustworkx", specifier = ">=0.18.0" },
     { name = "ty", specifier = ">=0.0.57" },
     { name = "zensical", specifier = ">=0.0.47" },
+]
+runtime = [
+    { name = "gmcodec", git = "https://github.com/shaperones0/gmcodec.git" },
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "pyahocorasick", specifier = ">=2.3.1" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "rustworkx", specifier = ">=0.18.0" },
 ]
 
 [[package]]

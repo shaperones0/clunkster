@@ -7,23 +7,27 @@ requires-python = '>=3.14'
 dependencies = []
 
 [dependency-groups]
+runtime = [
+    'gmcodec',
+    'pillow>=12.3.0',
+    'pyahocorasick>=2.3.1',
+    'rich>=15.0.0',
+    'rustworkx>=0.18.0',
+]
+
 dev = [
+    { include-group = 'runtime' },
     'deptry>=0.25.1',
-    "gmcodec",
-    "griffe>=2.1.0",
-    "griffe-inherited-docstrings>=1.1.3",
-    "griffelib>=2.1.0",
-    "markdown>=3.10.2",
-    "pillow>=12.3.0",
-    "pre-commit>=4.6.2",
-    "pyahocorasick>=2.3.1",
-    "pygments>=2.20.0",
-    "pytest>=9.1.1",
-    "rich>=15.0.0",
-    "ruff>=0.15.20",
-    "rustworkx>=0.18.0",
-    "ty>=0.0.57",
-    "zensical>=0.0.47",
+    'griffe>=2.1.0',
+    'griffe-inherited-docstrings>=1.1.3',
+    'griffelib>=2.1.0',
+    'markdown>=3.10.2',
+    'pre-commit>=4.6.2',
+    'pygments>=2.20.0',
+    'pytest>=9.1.1',
+    'ruff>=0.15.20',
+    'ty>=0.0.57',
+    'zensical>=0.0.47',
 ]
 
 [tool.pytest.ini_options]
@@ -41,7 +45,7 @@ quote-style = 'single'
 docstring-code-format = false
 preview = true
 
-exclude = ["scripts/readme.py"]
+exclude = ['scripts/readme.py']
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'
@@ -150,7 +154,7 @@ ignore = [
 ]
 
 [tool.ty.rules]
-all = "error"
+all = 'error'
 
 [tool.deptry.per_rule_ignores]
 DEP004 = [
@@ -159,6 +163,6 @@ DEP004 = [
 ]
 
 [tool.uv.sources]
-gmcodec = { git = "https://github.com/shaperones0/gmcodec.git" }
+gmcodec = { git = 'https://github.com/shaperones0/gmcodec.git' }
 [tool.deptry]
-extend_exclude = [ "main.py" ]
+extend_exclude = [ 'main.py' ]

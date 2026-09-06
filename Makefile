@@ -45,6 +45,10 @@ docserve: docgen ## Generate docs Markdown files and serve
 check: format lint test docbuild ## Run all local checks, fixes, and tests
 	@echo "========= Clear! =========="
 
+.PHONY: export
+export: format lint
+	@uv export --only-group runtime --format requirements.txt > requirements.txt
+
 .PHONY: help
 help:
 	@uv run python -c "import re; \
