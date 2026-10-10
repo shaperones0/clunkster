@@ -37,7 +37,13 @@ def tasks_filter_stale(
         if cache.task_is_fresh(task):
             cached += 1
         else:
+            # snapshot inputs before execution, so edits made during the
+            #  build are picked up by the next one
+            _ = task.inputs_stats, task.inputs_hash
             stale.append(task)
+
+    # freshness checks may have refreshed input stats
+    cache.save()
 
     return stale, cached
 
@@ -60,7 +66,7 @@ def tasks_apply_results(
 
     for task, result in results:
         if result.success:
-            cache.update(task.task_id, task.inputs_hash)
+            cache.update(task.task_id, task.inputs_hash, task.inputs_stats)
             success += 1
         else:
             print(f'\nTask {task.task_id} failed:\n{result.error}')

@@ -1384,6 +1384,16 @@ def main_ex_graph(
     """
     # <snip MAIN_EX_GRAPH>
 
+    # most references are repeats of the same (source, target, contexts)
+    #  triple, while graphs only need unique edges; collapse them once
+    #  (dict keeps the order deterministic)
+    edges: dict[tuple[str, str, tuple[str, ...]], None] = {
+        (dep.source_asset.name, dep.target_asset.name, dep.contexts): None
+        for dep in dependencies
+        # delete references to rooms
+        if not isinstance(dep.target_asset, my_asset.Room)
+    }
+
     def build_graph(
         active_clusters: set[str],
     ) -> tuple[rx.PyDiGraph, dict[str, int]]:
@@ -1395,20 +1405,15 @@ def main_ex_graph(
             # add_node() returns the rx's assigned node id
             asset_name2index[asset.name] = g.add_node(asset.name)
 
-        e = 0
-        for dep in dependencies:
-            source_idx = asset_name2index[dep.source_asset.name]
-            target_idx = asset_name2index[dep.target_asset.name]
-
-            # delete references to rooms
-            if isinstance(dep.target_asset, my_asset.Room):
-                continue
+        for source_name, target_name, contexts in edges:
+            source_idx = asset_name2index[source_name]
+            target_idx = asset_name2index[target_name]
 
             # context guards (nested guards intersect)
-            if dep.contexts:
+            if contexts:
                 edge_can_execute = True
 
-                for raw_ctx in dep.contexts:
+                for raw_ctx in contexts:
                     # get granted clusters for guard
 
                     # room must satisfy this guard to proceed deeper into
@@ -1423,7 +1428,6 @@ def main_ex_graph(
                 if not edge_can_execute:
                     continue
 
-            e += 1
             g.add_edge(source_idx, target_idx, None)
 
         return g, asset_name2index

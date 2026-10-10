@@ -63,6 +63,10 @@ class GmlIndex:
         self.ignored_ranges = ignored_ranges
         self.context_ranges = context_ranges
 
+        # range starts for bisecting
+        self._ignored_starts = [r.start for r in ignored_ranges]
+        self._context_starts = [r.start for r in context_ranges]
+
     @classmethod
     def from_text(cls, text: str) -> Self:
         """Build analyzer from script source.
@@ -137,12 +141,7 @@ class GmlIndex:
         :param char_index: Index to check.
         :return: True is ignored.
         """
-        idx = (
-            bisect.bisect_right(
-                [r.start for r in self.ignored_ranges], char_index
-            )
-            - 1
-        )
+        idx = bisect.bisect_right(self._ignored_starts, char_index) - 1
         if idx >= 0:
             item = self.ignored_ranges[idx]
             if item.start <= char_index < item.end:
@@ -155,12 +154,7 @@ class GmlIndex:
         :param char_index: Index to check.
         :return: List of script guards.
         """
-        idx = (
-            bisect.bisect_right(
-                [r.start for r in self.context_ranges], char_index
-            )
-            - 1
-        )
+        idx = bisect.bisect_right(self._context_starts, char_index) - 1
 
         while idx >= 0:
             item = self.context_ranges[idx]

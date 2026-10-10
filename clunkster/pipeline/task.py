@@ -10,6 +10,15 @@ from typing import override
 
 from clunkster import project
 
+# modification time (ns), size, file id
+FileStat = tuple[int, int, int]
+
+
+def file_stat(path: Path) -> FileStat:
+    """Get file's stat used to detect changes without reading the file."""
+    st = path.stat()
+    return st.st_mtime_ns, st.st_size, st.st_ino
+
 
 def file_hash(*paths: Path) -> str:
     """Calculate MD5 hash of all input files."""
@@ -56,6 +65,15 @@ class Task(ABC):
     def outputs_cached(self) -> col.Sequence[Path]:
         """Output files."""
         return self.outputs
+
+    @ft.cached_property
+    def inputs_stats(self) -> tuple[FileStat, ...]:
+        """Stats of all input files.
+
+        Access this before ``inputs_hash``, so that a file changed in between
+        gets rehashed next time instead of being trusted.
+        """
+        return tuple(file_stat(file) for file in self.inputs_cached)
 
     @ft.cached_property
     def inputs_hash(self) -> str:
