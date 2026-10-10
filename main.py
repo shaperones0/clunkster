@@ -3047,7 +3047,7 @@ def main() -> None:
 
         room_data = main_ex_graph(assets, deps)
 
-        # main_ex_lint_unused_graph(assets, room_data)
+        main_ex_lint_unused_graph(assets, room_data)
         main_ex_lint_crossref_graph(assets, room_data)
 
         print('All ok, exiting regardless :D')
