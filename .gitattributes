@@ -1,0 +1,2 @@
+# zensical writes CRLF on Windows; store the built site as LF (text=auto skips binaries)
+docs/** text=auto eol=lf

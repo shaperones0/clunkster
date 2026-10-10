@@ -14,7 +14,7 @@ from scripts import (
     doc_patch,
 )
 from scripts.doc_code import gen_stub_cls, gen_stub_func, gen_stub_var
-from scripts.doc_snippets import Snippet, s_py
+from scripts.doc_snippets import Snippet
 
 FILE_README = Path(__file__).parent.parent / 'README.md'
 DIR_DOCS = Path(__file__).parent.parent / 'docs_md'
@@ -943,110 +943,21 @@ original path relative to the project root>`.
 
 {head.header_parse('## Pipeline architecture', 'h_pipeline_architecture')}
 
-Pipeline has a number of systems and abstractions that run all throughout examples and might appear confusing. The deal behind was about solving few annoying issues:
+The library is split from the pipeline on purpose: the library (`clunkster` package) does the GameMaker-specific heavy lifting and returns data, while the pipeline (`main.py`) decides how things are configured, printed and run. The library never prints, raises on linter errors or picks a UI; it has no dependencies beyond the ones its parsers need.
 
-1. We should be able to run our asset processing logic in parallel, for more expensive / IO-bound operations, without loosing the ability to report on the progress (status prints, progress bars).
-2. We should be able to have different interfaces (CLI mode / TUI mode (not implemented yet but would be rad af)).
+Pipeline systems live in the [pipeline folder](https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline):
 
-Following outlines our solutions. Most of them are housed in [pipeline folder](https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline).
+- `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching, and houses the `execute` method that actually does the thing.
+- `cache.py`: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.
+- `run.py`: Task execution. `tasks_filter_stale` drops tasks that are fresh in the cache, `tasks_run` executes the rest in a given `concurrent.futures` pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task, so workers don't need to communicate anything.
 
-- `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching and house the `execute` method that actually does the thing.
-- `cache.py`: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are present, and input files haven't changed, are skipped.
-- `executor`: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.
+Linting follows the same idea (see `lint.py`): checks are `Rule`s, problems are `Violation`s collected into plain lists, and `format_report` turns them into text. Printing the report and raising on errors is up to the pipeline.
 
-    - `executor/base.py`: Shared util logic.
-    - `executor/mp.py`: Multiprocessing executor.
-    - `executor/thread.py`: Threading executor.
-
-- `events`: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.
-
-    - `events/event.py`: The actual event models.
-    - `events/dispatcher.py`: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.
-    - `events/sink.py`: Sink are where workers send their events. Regular `DispatchEventSink` simply passes the event to underlying dispatcher. However, concurrent executors implement their own sinks:
-
-        - threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.
-        - multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see `QueueEventReceiver`).
-
-    - `events/context.py`: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.
-
-The flow of things in multiprocessing case can be expressed by this diagram:
-
-```mermaid
-graph TD
-    subgraph Worker Processes
-        W1[Worker 1: Task Execution]
-        W2[Worker 2: Task Execution]
-
-        S1[QueueEventSink<br/>Injects PID/Thread ID]
-        S2[QueueEventSink<br/>Injects PID/Thread ID]
-
-        W1 -- "emit(TaskFinished)" --> S1
-        W2 -- "emit(TaskFinished)" --> S2
-    end
-
-    Q[(multiprocessing.Queue)]
-
-    S1 -->|Puts WorkerEvent| Q
-    S2 -->|Puts WorkerEvent| Q
-
-    subgraph Main Process
-        R[QueueEventReceiver<br/>Daemon Thread]
-        D[EventDispatcher]
-        UI["UI logic<br/>(UiRichAsync/UiSimpleAsync)"]
-
-        Q -- "Pops Event" --> R
-        R -- "dispatch(event)" --> D
-        D -- "Triggers Handlers" --> UI
-    end
-
-    UI -- "Renders Table & Progress" --> Term[Terminal Output]
-```
-
-With simple and justifiable systems out of the way, next things might seem questionable:
-
-- `ui`: UI abstraction system.
-
-    - `ui/base.py`: Abstract UI class, automatically registers its own methods as dispatcher's handlers.
-    - `ui/simple.py`: Simple UI implementation, using prints.
-    - `ui/adapter.py`: Given synchronous pipeline steps an easy interface over events and dispatchers via `ui_out` (print replacement) and `ui_progress` (progress bar over a sequence).
-
-The flow of things considering UI abstraction, in sync case, can be represented like this:
-
-```mermaid
-graph TD
-    subgraph Pipeline Code
-        Step["Pipeline Step Function<br/>@ui_auto_sink('StepName')"]
-        UI_PROG["ui_progress(assets)"]
-        UI_OUT["ui_out('Status message')"]
-
-        Step --> UI_PROG
-        Step --> UI_OUT
-    end
-
-    subgraph Convenience Layer
-        SA[SinkAdapter<br/>Global 'ADAPTER' Instance]
-    end
-
-    subgraph Mario Room
-        DS[DirectEventSink]
-        ED[EventDispatcher]
-        UI_SYNC[UI Component<br/>UiRich / UiSimple]
-    end
-
-    UI_PROG -- "Generates Events<br/>(Start, Advance, End)" --> SA
-    UI_OUT -- "Generates Event<br/>(Status)" --> SA
-
-    SA -- "emit(event)" --> DS
-    DS -- "Passthrough into Dispatcher" --> ED
-    ED -- "Triggers Handlers" --> UI_SYNC
-    UI_SYNC -- "Renders" --> Term[Terminal Output]
-```
-
-You'll encounter UI implementation with simple `print`-based output, as well as [rich](https://rich.readthedocs.io/en/latest/introduction.html) in the examples.
+Output in the examples goes through [rich](https://rich.readthedocs.io/en/latest/introduction.html): status messages via `logging`, progress bars via `progress`, and step headers via the `step` decorator (see {exs.href('ex_setup_output')}).
 
 Full example of a synchronous pipeline step can be found here: {exs.href('ex_setup_example')}.
 
-Full example of concurrents can be found here: {exs.href('ex_juicer_run')}.
+Full example of running tasks concurrently can be found here: {exs.href('ex_juicer_run')}.
 
 ## Integration into the game
 
@@ -1379,7 +1290,7 @@ Examples are generated from the [main pipeline file](https://github.com/shaperon
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
 
 - Config
-- Widgets
+- Output
 
 {exs.code_begin('ex_setup_main', 'Setup: Config')}
 {docs['main_ex_setup_main']}
@@ -1399,30 +1310,23 @@ This is the setup section. It covers settings up the project, linters, and other
         )
     }
 
-{exs.code_begin('ex_setup_widgets', 'Setup: Widgets')}
-{docs['main_ex_setup_widgets']}
+{exs.code_begin('ex_setup_output', 'Setup: Output')}
+{docs['main_ex_setup_output']}
 {
         exs.render(
             (
-                snips['CLS_WIDGETS'],
-                snips['WIDGETS'],
-                snips['MAIN_EX_SETUP_WIDGETS'],
+                snips['OUTPUT'],
+                snips['MAIN_EX_SETUP_OUTPUT'],
             )
         )
     }
 {
         exs.code_reg_stub_src(
             {
-                'CLS_WIDGETS': '\n'.join(
+                'OUTPUT': '\n'.join(
                     (
-                        gen_stub_cls('WidgetRenderer'),
-                        gen_stub_func('global_widget_renderer'),
-                    )
-                ),
-                'WIDGETS': '\n'.join(
-                    (
-                        gen_stub_cls('WidgetRenderer'),
-                        gen_stub_var('WIDGET: WidgetRenderer'),
+                        gen_stub_var('CONSOLE: r_console.Console', 'log: logging.Logger'),
+                        gen_stub_func('setup_output', 'step', 'progress', 'render_table'),
                     )
                 ),
             }
@@ -1431,35 +1335,16 @@ This is the setup section. It covers settings up the project, linters, and other
 
 With that out of the way you may start the {exs.href('ex_start', 'first real examples')}. However, I recommend reading a bit about the {head.header_href('h_pipeline_architecture', 'pipeline architecture')}, which should give you proper understanding on what to do if things don't work out.
 
-{exs.code_begin('ex_setup_rich', 'Setup: Rich UI')}
-{docs['main_ex_setup_rich']}
-{
-        exs.render(
-            (
-                exs.stub('CLS_WIDGETS'),
-                snips['UI_RICH'],
-                snips['MAIN_EX_SETUP_RICH'],
-            )
-        )
-    }
-
 {exs.code_begin('ex_setup_example', 'Full example (pipeline excerpt)')}
 
-Following is the full example of integrating UI logic into a pipeline step, taken from `main.py` (where you can look for more thorough examples as well).
+Following is the full example of a pipeline step with output, taken from `main.py` (where you can look for more thorough examples as well).
 
 {
         exs.render(
             (
-                s_py('CLS_UI: type[my_ui_base.Ui] = my_ui_simple.UiSimple\nCLS_UI_ASYNC: type[my_ui_base.UiAsync] = my_ui_simple.UiSimpleAsync'),
+                exs.stub('OUTPUT'),
                 snips['DEF_EXAMPLE'],
             )
-        )
-    }
-{
-        exs.code_reg_stub_src(
-            {
-                'GLOB_CLS_UI': gen_stub_var('CLS_UI: type[my_ui_base.Ui]', 'CLS_UI_ASYNC: type[my_ui_base.Ui]'),
-            }
         )
     }
 
@@ -1502,10 +1387,18 @@ validations and assigning clusters to the assets.
             (
                 exs.stub('PROJECT'),
                 exs.stub('CLS_ASSET_EXT'),
-                snips['CLS_LINT_TREE'],
+                snips['DEF_LINT_REPORT'],
+                snips['RULES_TREE'],
                 snips['CLUSTERABLE_ASSETS'],
                 snips['MAIN_EX_LINT_TREE'],
             )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'DEF_LINT_REPORT': gen_stub_func('lint_report'),
+            }
         )
     }
 
@@ -1515,11 +1408,12 @@ validations and assigning clusters to the assets.
         exs.render(
             (
                 exs.stub('PROJECT'),
-                exs.stub('WIDGETS'),
+                exs.stub('OUTPUT'),
+                exs.stub('DEF_LINT_REPORT'),
                 exs.stub('CLS_ASSET_EXT'),
                 snips['ALIAS'],
                 snips['DEF_ASSET_CLUSTERS'],
-                snips['CLS_LINT_ALIAS'],
+                snips['RULES_ALIAS'],
                 snips['CLUSTERABLE_ASSETS'],
                 snips['MAIN_EX_ALIASES'],
             )
@@ -1574,10 +1468,9 @@ validations based on them.
                 exs.stub('PROJECT'),
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
-                snips['DEF_ASSET_SORT_KEY'],
                 exs.stub('CLS_DEPENDENCY'),
-                snips['CLS_LINT_ASSET_CLUSTER'],
-                snips['CLS_LINT_UNUSED'],
+                exs.stub('DEF_LINT_REPORT'),
+                snips['RULES_UNUSED'],
                 exs.stub('VAR_ASSETS'),
                 exs.stub('VAR_DEPS'),
                 snips['MAIN_EX_LINT_UNUSED'],
@@ -1588,9 +1481,7 @@ validations based on them.
 {
         exs.code_reg_stub_src(
             {
-                'CLS_LINT_ASSET_CLUSTER': gen_stub_cls('LintAssetCluster'),
-                'CLS_LINT_UNUSED': gen_stub_cls('LintUnused'),
-                'DEF_ASSET_SORT_KEY': gen_stub_func('asset_sort_key'),
+                'RULES_UNUSED': gen_stub_var('RULE_UNUSED: my_lint.Rule'),
             }
         )
     }
@@ -1606,8 +1497,8 @@ validations based on them.
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('CLS_DEPENDENCY'),
-                exs.stub('CLS_LINT_ASSET_CLUSTER'),
-                snips['CLS_LINT_CROSSREF'],
+                exs.stub('DEF_LINT_REPORT'),
+                snips['RULES_CROSSREF'],
                 exs.stub('VAR_DEPS'),
                 snips['MAIN_EX_LINT_CROSSREF'],
             )
@@ -1669,7 +1560,8 @@ checks based on more advanced usage tracing.
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('CLS_DEPENDENCY'),
                 exs.stub('CLS_ROOM_GRAPH'),
-                exs.stub('CLS_LINT_UNUSED'),
+                exs.stub('DEF_LINT_REPORT'),
+                exs.stub('RULES_UNUSED'),
                 exs.stub('VAR_ASSETS'),
                 exs.stub('VAR_DEPS'),
                 exs.stub('VAR_ROOM_DATA'),
@@ -1687,10 +1579,10 @@ checks based on more advanced usage tracing.
                 exs.stub('LINT_RULES'),
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
-                exs.stub('DEF_ASSET_SORT_KEY'),
                 exs.stub('CLS_DEPENDENCY'),
                 exs.stub('CLS_ROOM_GRAPH'),
-                snips['CLS_LINT_CROSSREF_GRAPH'],
+                exs.stub('DEF_LINT_REPORT'),
+                snips['RULES_CROSSREF_GRAPH'],
                 exs.stub('VAR_ASSETS'),
                 exs.stub('VAR_DEPS'),
                 exs.stub('VAR_ROOM_DATA'),
@@ -1787,9 +1679,10 @@ ___
         exs.render(
             (
                 exs.stub('PROJECT'),
-                exs.stub('GLOB_CLS_UI'),
+                exs.stub('OUTPUT'),
                 exs.stub('VAR_JUICE_BUILD_TASKS'),
                 exs.stub('CLS_JUICER_CONFIG'),
+                snips['DEF_RUN_TASKS_POOL'],
                 snips['MAIN_JUICER_RUN'],
             )
         )
@@ -1907,6 +1800,7 @@ def _main() -> None:
         md_path.write_text(
             render_reference(api, module, cur_md_page=md_path).replace('```gml', '```js'),
             encoding='utf-8',
+            newline='\n',
         )
 
     file_to_parser = {
@@ -1953,7 +1847,7 @@ def _main() -> None:
     for file, parser in file_to_parser.items():
         txt = parser.render_str()
         txt = txt.replace('```gml', '```js')  # replace gml with js for hl
-        file.write_text(txt, encoding='utf-8')
+        file.write_text(txt, encoding='utf-8', newline='\n')
 
     print('Docs written.')
 

@@ -2,20 +2,22 @@
 
 import collections
 import collections.abc as col
+import concurrent.futures
 import dataclasses
+import functools as ft
 import itertools as it
 import json
+import logging
 import os
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
-import threading
 import time
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC
 from pathlib import Path
 from pprint import pprint
-from typing import Self, override
+from typing import override
 
 import rustworkx as rx
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
@@ -25,9 +27,9 @@ from gmcodec import model as gmc_model
 from gmcodec import validate as gmc_validate
 from PIL import Image
 from rich import console as r_console
-from rich import live as r_live
+from rich import progress as r_progress
 from rich import table as r_table
-from rich import text as r_text
+from rich.logging import RichHandler
 
 from clunkster import asset as my_asset
 from clunkster import lint as my_lint
@@ -36,14 +38,8 @@ from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
 from clunkster.pipeline import cache as my_cache
+from clunkster.pipeline import run as my_run
 from clunkster.pipeline import task as my_task
-from clunkster.pipeline.events import dispatcher as my_event_dispatcher
-from clunkster.pipeline.events import event as my_event
-from clunkster.pipeline.executor import mp as my_exec_mp
-from clunkster.pipeline.executor import thread as my_exec_thread
-from clunkster.pipeline.ui import base as my_ui_base
-from clunkster.pipeline.ui import simple as my_ui_simple
-from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
 from clunkster.text import location as my_location
 
 
@@ -111,368 +107,106 @@ def main_ex_setup_main() -> Config:
     return cfg  # ruff: ignore[unnecessary-assign]
 
 
-# <snip CLS_WIDGETS>
-class WidgetRenderer(ABC):
-    """Base class for our widget renderers."""
-
-    @abstractmethod
-    def render_table(
-        self,
-        table: col.Sequence[col.Sequence[str]],
-        *,
-        title: str | None = None,
-    ) -> None:
-        """Render a 2D sequence of strings.
-
-        Assumed ``table[0]`` contains the headers.
-        """
+# <snip OUTPUT>
+# rich falls back to 80 columns when not printing into a terminal (IDE
+#  consoles, logs), which is too narrow for some tables
+CONSOLE = r_console.Console(width=None if sys.stdout.isatty() else 160)
+log = logging.getLogger('clunkster')
 
 
-class WidgetRendererSimple(WidgetRenderer):
-    """Renders widgets using standard Python print statements."""
-
-    @override
-    def render_table(
-        self,
-        table: col.Sequence[col.Sequence[str]],
-        *,
-        title: str | None = None,
-    ) -> None:
-        if not table or len(table) < 2:
-            return
-
-        corner_label = table[0][0]
-        headers = table[0][1:]
-
-        if title:
-            print(f'\n--- {title} ---')
-
-        print(corner_label, *headers)
-
-        for row_data in table[1:]:
-            row_label = row_data[0]
-            cells = row_data[1:]
-
-            formatted_row = [
-                cell or ' ' * len(header)
-                for header, cell in zip(headers, cells, strict=True)
-            ]
-
-            print(f'[{row_label!s:>10}]:', '|'.join(formatted_row))
-
-
-# </snip CLS_WIDGETS>
-
-# <snip WIDGETS>
-WIDGET: WidgetRenderer
-
-
-def global_widget_renderer(renderer: WidgetRenderer) -> None:
-    """Set widget renderer."""
-    global WIDGET
-    WIDGET = renderer
-
-
-# </snip WIDGETS>
-
-
-def main_ex_setup_widgets() -> None:
-    """Populate abstract widgets used down the line.
-
-    Since most of UI is abstracted, examples don't use ``print`` or other
-    direct methods of output, but rather more abstract ``ui_out`` and other
-    shims from the same module. More complicated UI requires abstract widgets.
-    The ones required by the tool are outlined here, as well as their sample
-    implementation with ``print``.
-    """
-    # <snip MAIN_EX_SETUP_WIDGETS>
-    global_widget_renderer(WidgetRendererSimple())
-    # </snip MAIN_EX_SETUP_WIDGETS>
-
-    # silence isort on those two
-    _ = my_ui_simple.UiSimple
-    _ = my_ui_simple.UiSimpleAsync
-
-
-# <snip UI_RICH>
-# TODO remove big width param (had to use it for PyCharm's console)
-CON = r_console.Console(width=1024)
-
-
-def rich_render_row_progress(
-    text: str, current: int, total: int, width: int = 60, color: str = 'white'
-) -> r_text.Text:
-    """Renders a string where the background color acts as a progress bar."""
-    pct = 0.0 if total <= 0 else min(1.0, current / total)
-
-    text_padded = text.ljust(width)[:width]
-    fill_len = int(width * pct)
-
-    rich_text = r_text.Text('')
-    if fill_len > 0:
-        rich_text.append(
-            text_padded[:fill_len], style=f'bold black on {color}'
-        )
-    if fill_len < width:
-        rich_text.append(text_padded[fill_len:], style='bold white on default')
-
-    return rich_text
-
-
-class UiRich(my_ui_base.Ui):
-    """Rich UI."""
-
-    @override
-    def __init__(self, step_name: str, width: int = 60) -> None:
-        """Initialize Rich UI."""
-        self.step_name = step_name
-        self.width = width
-
-        # state
-        self.task_id = '...'
-        self.current = 0
-        self.total = 1
-        self.statuses: list[str] = []
-
-        self.live = r_live.Live(
-            self._generate_renderable(), refresh_per_second=10
-        )
-
-    def _generate_renderable(self) -> r_console.Group:
-        # title + progress
-        bar_text = f'Task: {self.task_id} '
-        header = rich_render_row_progress(
-            bar_text, self.current, self.total, self.width
-        )
-
-        logs = r_text.Text('\n'.join(self.statuses), style='dim')
-
-        return r_console.Group(header, logs)
-
-    def _update(self) -> None:
-        self.live.update(self._generate_renderable())
-
-    @override
-    def on_task_started(self, e: my_event.TaskStarted) -> None:
-        self.task_id = e.task_id
-        self._update()
-
-    @override
-    def on_progress_start(self, e: my_event.ProgressStart) -> None:
-        self.current = 0
-        self.total = e.total
-        self._update()
-
-    @override
-    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
-        self.current = e.completed
-        self._update()
-
-    @override
-    def on_progress_completed(self, e: my_event.ProgressCompleted) -> None:
-        self.current = self.total  # force fill
-        self._update()
-
-    @override
-    def on_status(self, e: my_event.Status) -> None:
-        self.statuses.append(f'| {e.text}')
-        self._update()
-
-    @override
-    def on_task_finished(self, e: my_event.TaskFinished) -> None:
-        self.current = self.total
-        self._update()
-
-    @override
-    def start(self) -> None:
-        self.live.start()
-
-    @override
-    def stop(self) -> None:
-        self.live.stop()
-
-
-@dataclasses.dataclass(slots=True)
-class WorkerState:
-    """Worker current state."""
-
-    task_id: str = 'Idle'
-    current: int = 0
-    total: int = 1
-
-
-class UiRichAsync(my_ui_base.UiAsync):
-    """Rich UI. Concurrents version."""
-
-    def __init__(self, step_name: str, width: int = 120) -> None:
-        """Initialize Concurrent Rich UI."""
-        self.step_name = step_name
-        self.width = width
-
-        self.total_current = 0
-        self.total_target = 1
-        self.workers: dict[str, WorkerState] = {}
-
-        self._lock = threading.Lock()
-        self.live = r_live.Live(
-            self._generate_renderable(), refresh_per_second=10
-        )
-
-    def _generate_renderable(self) -> r_console.Group:
-        # must be called within lock
-
-        # progress in header
-        header_text = (
-            f' {self.step_name} ({self.total_current}/{self.total_target}) '
-        )
-        header_bar = rich_render_row_progress(
-            header_text, self.total_current, self.total_target, self.width
-        )
-
-        # worker table
-        table = r_table.Table(show_header=False, width=self.width, expand=True)
-        table.add_column('Worker')
-        table.add_column('Task')
-
-        for worker_id, state in sorted(self.workers.items()):
-            row_bar = rich_render_row_progress(
-                state.task_id, state.current, state.total, self.width - 2
+def setup_output() -> None:
+    """Route logging and warnings through the console."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        handlers=[
+            RichHandler(
+                console=CONSOLE,
+                show_time=False,
+                show_level=False,
+                show_path=False,
             )
-            table.add_row(worker_id, row_bar)
-
-        return r_console.Group(header_bar, table)
-
-    def _update(self) -> None:
-        # must be called within lock
-        self.live.update(self._generate_renderable())
-
-    @override
-    def update_total_progress(self, current: int, total: int) -> None:
-        """Called by main thread to update the overall step progress."""
-        with self._lock:
-            self.total_current = current
-            self.total_target = total
-            self._update()
-
-    def _get_worker(self, worker_id: str) -> WorkerState:
-        # must be called within lock
-
-        if worker_id not in self.workers:
-            self.workers[worker_id] = WorkerState()
-        return self.workers[worker_id]
-
-    @override
-    def on_task_started(self, e: my_event.TaskStarted) -> None:
-        with self._lock:
-            worker = self._get_worker(e.worker_id)
-            worker.task_id = e.task_id
-            worker.current = 0
-            self._update()
-
-    @override
-    def on_progress_start(self, e: my_event.ProgressStart) -> None:
-        if e.worker_id == 'main':
-            self.update_total_progress(0, self.total_target)
-
-        with self._lock:
-            worker = self._get_worker(e.worker_id)
-            worker.total = max(1, e.total)
-            self._update()
-
-    @override
-    def on_progress_advance(self, e: my_event.ProgressAdvance) -> None:
-        if e.worker_id == 'main':
-            self.update_total_progress(e.completed, self.total_target)
-            return
-
-        with self._lock:
-            worker = self._get_worker(e.worker_id)
-            worker.current = e.completed
-            self._update()
-
-    @override
-    def on_task_finished(self, e: my_event.TaskFinished) -> None:
-        if e.worker_id == 'main':
-            self.update_total_progress(self.total_target, self.total_target)
-            return
-
-        with self._lock:
-            worker = self._get_worker(e.worker_id)
-            worker.current = worker.total  # fill on finish
-            self._update()
-
-    @override
-    def start(self) -> None:
-        self.live.start()
-
-    @override
-    def stop(self) -> None:
-        self.live.stop()
+        ],
+    )
+    logging.captureWarnings(capture=True)
 
 
-class WidgetRendererRich(WidgetRenderer):
-    """Renders widgets using the Rich library."""
+def step[**P, R](
+    name: str,
+) -> col.Callable[[col.Callable[P, R]], col.Callable[P, R]]:
+    """Pipeline step decorator: prints a header and how long the step took."""
 
-    def __init__(self, console: r_console.Console | None = None) -> None:
-        """Set up Rich Widget renderer.
+    def decorator(func: col.Callable[P, R]) -> col.Callable[P, R]:
+        @ft.wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            CONSOLE.rule(name)
+            start = time.perf_counter()
+            result = func(*args, **kwargs)
+            log.info('%s: done in %.2fs', name, time.perf_counter() - start)
+            return result
 
-        :param console: Existing Rich console.
-        """
-        self.console = console or CON
+        return wrapper
 
-    @override
-    def render_table(
-        self,
-        table: col.Sequence[col.Sequence[str]],
-        *,
-        title: str | None = None,
-    ) -> None:
-        if not table or len(table) < 2:
-            return
-
-        headers = table[0]
-
-        rich_table = r_table.Table(
-            f'[bold]{headers[0]}[/bold]', *headers[1:], title=title, padding=0
-        )
-
-        for row_data in table[1:]:
-            rich_table.add_row(*row_data)
-
-        self.console.print(rich_table)
+    return decorator
 
 
-# </snip UI_RICH>
+def progress[T](
+    seq: col.Sequence[T], description: str = 'Working'
+) -> col.Iterator[T]:
+    """Iterate over a sequence while showing a progress bar."""
+    # updating the bar is not free, so do it at most ~1000 times
+    update_every = max(1, len(seq) // 1000)
+    with r_progress.Progress(console=CONSOLE, transient=True) as bar:
+        bar_task = bar.add_task(description, total=len(seq))
+        for idx, item in enumerate(seq, start=1):
+            yield item
+            if idx % update_every == 0:
+                bar.update(bar_task, completed=idx)
 
-# <snip GLOB_CLS_UI>
-CLS_UI: type[my_ui_base.Ui] = UiRich
-CLS_UI_ASYNC: type[my_ui_base.UiAsync] = UiRichAsync
-# </snip GLOB_CLS_UI>
+
+def render_table(
+    table: col.Sequence[col.Sequence[str]], *, title: str | None = None
+) -> None:
+    """Print a 2D sequence of strings, ``table[0]`` contains the headers."""
+    if len(table) < 2:
+        return
+    headers = table[0]
+    rich_table = r_table.Table(
+        f'[bold]{headers[0]}[/bold]', *headers[1:], title=title, padding=0
+    )
+    for row in table[1:]:
+        rich_table.add_row(*row)
+    CONSOLE.print(rich_table)
 
 
-def main_ex_setup_rich() -> None:
-    """The other UI option is [rich](https://github.com/textualize/rich).
+# </snip OUTPUT>
 
-    We have to add the widget renderer and ``Ui`` implementations.
+
+def main_ex_setup_output() -> None:
+    """Set up the output.
+
+    Pipeline steps don't print directly: status messages go through
+    ``logging``, sequences get progress bars via ``progress``, and the
+    ``step`` decorator marks where a step starts and how long it took.
+    All of it goes through [rich](https://github.com/textualize/rich), which
+    falls back to plain text when the output isn't a terminal.
     """
-    # <snip MAIN_EX_SETUP_RICH>
-    global_widget_renderer(WidgetRendererRich())
-    # </snip MAIN_EX_SETUP_RICH>
+    # <snip MAIN_EX_SETUP_OUTPUT>
+    setup_output()
+    # </snip MAIN_EX_SETUP_OUTPUT>
 
 
 # <snip DEF_EXAMPLE>
-@ui_auto_sink('Example step', cls_ui=CLS_UI)
+@step('Example step')
 def main_example() -> None:
     """Example pipeline step."""
-    # no need to report start of the step
-    ui_out('Good weather up there')
+    log.info('Good weather up there')
     time.sleep(1)
-    ui_out('Makes me forget about my job: counting to 10')
-    for number in ui_progress(range(10)):
+    log.info('Makes me forget about my job: counting to 10')
+    for number in progress(range(10), 'Counting'):
         time.sleep(0.5)
-        ui_out('Number', number)
-    ui_out('Clear?!! No way')
-    # no need to report end of the step
+        log.info('Number %d', number)
+    log.info('Clear?!! No way')
 
 
 # </snip DEF_EXAMPLE>
@@ -564,18 +298,6 @@ def asset_scannables(asset: Asset, project_root: Path) -> col.Iterable[Path]:
 
 
 # </snip DEF_ASSET_SCANNABLES>
-
-
-# <snip DEF_ASSET_SORT_KEY>
-def asset_sort_key(asset: Asset) -> tuple[str, ...]:
-    """Get asset's sort key."""
-    if isinstance(asset, my_asset.AssetHasPath):
-        return type(asset).type_name(), '/'.join(asset.tree_path), asset.name
-
-    return type(asset).type_name(), asset.name
-
-
-# </snip DEF_ASSET_SORT_KEY>
 
 
 # <snip DEF_ASSET_CLUSTERS>
@@ -779,64 +501,42 @@ def main_ex_start(cfg: Config) -> None:
     # </snip MAIN_EX_START>
 
 
-# <snip CLS_LINT_TREE>
-class LintTreeDuplicateFolder(
-    my_lint.LinterViolationLocated, my_lint.LinterViolationMessage
-):
-    """Duplicate ``tree.yyd`` folder violation."""
-
-    rule = 'T100'
-    severity = my_lint.Severity.ERROR
-
-    def __init__(
-        self, *, node: my_parse_tree.TreeNode, location: my_location.Location
-    ) -> None:
-        """Initialize violation.
-
-        :param node: Offending tree node.
-        :param location: Source location.
-        """
-        self.tree_node = node
-        self.loc = location
-        super().__init__()
-
-    @override
-    @property
-    def location(self) -> my_location.Location:
-        return self.loc
-
-    @override
-    @property
-    def message(self) -> str:
-        thing = 'Folder' if self.tree_node.is_folder else 'Asset???'
-        return f"Duplicate {thing}: '{self.tree_node.name}'"
+# <snip DEF_LINT_REPORT>
+def lint_report(
+    cfg: Config, violations: col.Sequence[my_lint.Violation]
+) -> None:
+    """Print violations, raise if any of them is an error."""
+    if not violations:
+        return
+    CONSOLE.print(
+        my_lint.format_report(violations, cfg.project),
+        markup=False,
+        highlight=False,
+        soft_wrap=True,
+    )
+    errors = [
+        v for v in violations if v.rule.severity == my_lint.Severity.ERROR
+    ]
+    if errors:
+        raise my_lint.LinterFoundError(
+            f'Linter found {len(errors)} error(s)', errors
+        )
 
 
-class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
-    """Duplicate asset violation."""
-
-    rule = 'T101'
-    severity = my_lint.Severity.ERROR
-
-    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
-        """Initialize violation.
-
-        :param dupes: Names of the duplicate assets.
-        :param message_pref: Message prefix.
-        """
-        super().__init__()
-        self.dupes = tuple(dupes)
-        self.message_pref = message_pref
-
-    @override
-    @property
-    def message(self) -> str:
-        return f'{self.message_pref}: {" ".join(self.dupes)}'
+# </snip DEF_LINT_REPORT>
 
 
-# </snip CLS_LINT_TREE>
+# <snip RULES_TREE>
+RULE_TREE_DUPLICATE_FOLDER = my_lint.Rule(
+    'T100', 'duplicate tree.yyd folder', my_lint.Severity.ERROR
+)
+RULE_TREE_DUPLICATE_ASSET = my_lint.Rule(
+    'T101', 'duplicate asset name', my_lint.Severity.ERROR
+)
+# </snip RULES_TREE>
 
 
+@step('Lint: tree.yyd files')
 def main_ex_lint_tree(cfg: Config) -> None:
     """Now we must check integrity of ``tree.yyd`` files and asset names.
 
@@ -844,69 +544,27 @@ def main_ex_lint_tree(cfg: Config) -> None:
     files, so we have to ensure that they have no duplicate folders.
 
     This example also serves as an introduction to Clunkster's linter system.
-    It implements things like accumulating errors to be printed in a list view,
-    sorting and grouping them by type, verbose output, etc.
-
-    In order to make reports as thorough as possible, Clunkster provides
-    various classes and mixins for customizing violation scope:
-
-    - ``LinterViolation``: base violation, not bound to any file or asset
-    - ``LinterViolationMessage``: adds a short error message
-    - ``LinterViolationFile``: binds error to a specific file
-    - ``LinterViolationLocated``: binds error to a location in the file
-    - ``LinterViolationAsset``: mixin that binds error to a specific asset
+    Each check is a ``Rule`` (code like ``T100``, title and severity), and
+    each problem found is a ``Violation`` of a rule. Violations optionally
+    carry a message, a location in a file, an asset, a group (used to group
+    the report, e.g. by cluster) and extra detail lines. Steps collect them
+    into a list and pass it to ``lint_report``, which prints the report
+    (grouped by rule, sorted by asset and location) and raises if any of the
+    violations is an error.
 
     For linting ``tree.yyd`` files we want to check that:
 
-    1. all asset names are unique: handled by ``LintTreeDuplicateAsset``, this
-      violation is abstract and isn't really bound to a specific file,
+    1. all asset names are unique (``T101``): not bound to a specific file,
       since duplicate assets can exist across multiple types.
-    2. no duplicate folders in tree: handled by ``LintTreeDuplicateFolder``,
-      this violation is done only within same asset type and is bound to a
-      location in specific ``tree.yyd`` file.
+    2. no duplicate folders in tree (``T100``): checked within same asset
+      type and bound to a location in specific ``tree.yyd`` file.
 
-    All the linter violations should have their ID (like A100) and severity.
-    Default violation processor would print info messages, turn warn messages
-    into warnings and raise errors.
-
-    As for this specific linter; since any inconsistency in asset structure
-    will cause big issues in the pipeline, every violation is marked as error.
+    Since any inconsistency in asset structure will cause big issues in the
+    pipeline, both rules are errors.
     """
     # <snip MAIN_EX_LINT_TREE>
-    lint = my_lint.LinterSession(cfg.project)
-
-    def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
-        tree_file = asset_cls.type_get_tree_file(cfg.project.root)
-        line_map = cfg.project.line_map(tree_file)
-        seen_children: dict[str, set[str]] = {}
-
-        for node in my_parse_tree.nodes(cfg.project.lines(tree_file)):
-            # format the tuple into path string (e.g., "/Player/SkinA")
-            path_str = '/' + '/'.join(node.parent_path)
-
-            if path_str not in seen_children:
-                seen_children[path_str] = set()
-
-            if node.name in seen_children[path_str]:
-                loc_line = node.line_num
-                loc_column = node.depth + 1  # uses tab characters
-                lint.push(
-                    LintTreeDuplicateFolder(
-                        node=node,
-                        location=my_location.Location(
-                            file=tree_file,
-                            loc_line=loc_line,
-                            loc_column=loc_column,
-                            loc_index=line_map.get_abs_index(
-                                loc_line, loc_column
-                            ),
-                        ),
-                    )
-                )
-            else:
-                seen_children[path_str].add(node.name)
-
     # check that there are no duplicates
+    violations: list[my_lint.Violation] = []
     asset_names: set[str] = set()
     for asset_type in CLUSTERABLE_ASSETS:
         # check if given asset type exist in the project
@@ -918,70 +576,81 @@ def main_ex_lint_tree(cfg: Config) -> None:
             asset_type.type_discover_names(cfg.project.root)
         )
         assets_set = set(assets_from_index)
-        if len(assets_from_index) != len(assets_set):
-            dupes = [
-                item
-                for item, count in collections.Counter(
-                    assets_from_index
-                ).items()
-                if count > 1
-            ]
-            lint.push(
-                LintTreeDuplicateAsset(
-                    dupes=dupes, message_pref='Duplicate assets in one type'
+        dupes = [
+            item
+            for item, count in collections.Counter(assets_from_index).items()
+            if count > 1
+        ]
+        if dupes:
+            violations.append(
+                my_lint.Violation(
+                    RULE_TREE_DUPLICATE_ASSET,
+                    f'Duplicate assets in one type: {" ".join(dupes)}',
                 )
             )
         inters = asset_names.intersection(assets_set)
         if inters:
-            lint.push(
-                LintTreeDuplicateAsset(
-                    dupes=inters,
-                    message_pref='Duplicate assets across multiple types',
+            violations.append(
+                my_lint.Violation(
+                    RULE_TREE_DUPLICATE_ASSET,
+                    'Duplicate assets across multiple types: '
+                    + ' '.join(sorted(inters)),
                 )
             )
         asset_names.update(assets_set)
 
-        # collect errors before parsing tree.yyd
-        lint.consume()
+    # report before parsing tree.yyd
+    lint_report(cfg, violations)
 
-        # check tree.yyd for builtin assets
+    # check tree.yyd files of builtin assets
+    violations = []
+    for asset_type in CLUSTERABLE_ASSETS:
         if not issubclass(asset_type, my_asset.AssetBuiltin):
             continue
+        if not asset_type.type_is_used(cfg.project.root):
+            continue
 
-        # get assets from index, validate uniqueness
-        asset_lint_tree(asset_type)
+        tree_file = asset_type.type_get_tree_file(cfg.project.root)
+        line_map = cfg.project.line_map(tree_file)
+        seen_children: dict[str, set[str]] = {}
 
-    # collect all errors
-    lint.consume()
+        for node in my_parse_tree.nodes(cfg.project.lines(tree_file)):
+            # format the tuple into path string (e.g., "/Player/SkinA")
+            path_str = '/' + '/'.join(node.parent_path)
+            seen = seen_children.setdefault(path_str, set())
+
+            if node.name not in seen:
+                seen.add(node.name)
+                continue
+
+            loc_line = node.line_num
+            loc_column = node.depth + 1  # uses tab characters
+            thing = 'Folder' if node.is_folder else 'Asset???'
+            violations.append(
+                my_lint.Violation(
+                    RULE_TREE_DUPLICATE_FOLDER,
+                    f"Duplicate {thing}: '{node.name}'",
+                    location=my_location.Location(
+                        file=tree_file,
+                        loc_line=loc_line,
+                        loc_column=loc_column,
+                        loc_index=line_map.get_abs_index(loc_line, loc_column),
+                    ),
+                )
+            )
+
+    lint_report(cfg, violations)
     # </snip MAIN_EX_LINT_TREE>
 
 
-# <snip CLS_LINT_ALIAS>
-class LintAliasMismatch(my_lint.LinterViolationMessage):
-    """Alias mismatch violation."""
-
-    rule = 'A100'
-    severity = my_lint.Severity.WARNING
-
-    def __init__(self, dupes: col.Iterable[str], message_pref: str) -> None:
-        """Initialize violation.
-
-        :param dupes: Duplicate alias names.
-        :param message_pref: Message prefix.
-        """
-        super().__init__()
-        self.dupes = tuple(dupes)
-        self.message_pref = message_pref
-
-    @override
-    @property
-    def message(self) -> str:
-        return f'{self.message_pref}: {" ".join(self.dupes)}'
+# <snip RULES_ALIAS>
+RULE_ALIAS_MISMATCH = my_lint.Rule(
+    'A100', 'alias mismatch', my_lint.Severity.WARNING
+)
+# </snip RULES_ALIAS>
 
 
-# </snip CLS_LINT_ALIAS>
-
-
+@step('Clusters')
 def main_ex_aliases(cfg: Config) -> list[Asset]:
     """Generate clusters.
 
@@ -997,7 +666,6 @@ def main_ex_aliases(cfg: Config) -> list[Asset]:
     It can be useful to discern where exactly any extra names are located.
     """
     # <snip MAIN_EX_ALIASES>
-    lint = my_lint.LinterSession(cfg.project)
     assets: list[Asset] = []
 
     # ALIAS linter: find existing names in ALIAS
@@ -1053,26 +721,28 @@ def main_ex_aliases(cfg: Config) -> list[Asset]:
 
         table.append(row)
 
-    WIDGET.render_table(table, title='Clusters')
+    render_table(table, title='Clusters')
 
     # lint
     lint_unused_aliases = lint_existing_aliases - lint_used_aliases
     lint_extra_aliases = lint_used_aliases - lint_existing_aliases
+    violations: list[my_lint.Violation] = []
     if lint_unused_aliases:
-        lint.push(
-            LintAliasMismatch(
-                dupes=lint_unused_aliases, message_pref='Unused aliases'
+        violations.append(
+            my_lint.Violation(
+                RULE_ALIAS_MISMATCH,
+                f'Unused aliases: {" ".join(sorted(lint_unused_aliases))}',
             )
         )
     if lint_extra_aliases:
         # after the initial project setup, I'd upgrade this to raise
-        lint.push(
-            LintAliasMismatch(
-                dupes=lint_extra_aliases, message_pref='Extra aliases'
+        violations.append(
+            my_lint.Violation(
+                RULE_ALIAS_MISMATCH,
+                f'Extra aliases: {" ".join(sorted(lint_extra_aliases))}',
             )
         )
-    lint.consume()
-    lint.assert_empty()
+    lint_report(cfg, violations)
     # <md>
     # Keep using the table thing until all aliases are gone.
     # </md>
@@ -1080,7 +750,7 @@ def main_ex_aliases(cfg: Config) -> list[Asset]:
     return assets
 
 
-@ui_auto_sink('Scanning references', cls_ui=CLS_UI)
+@step('Scanning references')
 def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
     """Reference scanner.
 
@@ -1114,7 +784,7 @@ def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
         for file_path in asset_scannables(asset, cfg.project.root)
     )
 
-    for asset, file_path in ui_progress(scans):
+    for asset, file_path in progress(scans):
         text = cfg.project.read(file_path)
         line_map = cfg.project.line_map(file_path)
         matches: list[my_scan_dep.DependencyMatch] = list(
@@ -1141,86 +811,17 @@ def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
                 )
             )
 
-    ui_out(f'Found {total_matches} total dependency references.')
+    log.info('Found %d total dependency references.', total_matches)
     # </snip MAIN_EX_SCAN_SYNC>
     return dependencies
 
 
-# <snip CLS_LINT_ASSET_CLUSTER>
-class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
-    """Group linter list output by assets' clusters."""
-
-    # violation's asset cluster, must be set by subclasses
-    cluster: str
-
-    @override
-    @classmethod
-    def format_many(
-        cls,
-        errors: col.Iterable[Self],
-        *,
-        project: my_proj.Project,
-        verbose: bool = False,
-    ) -> str:
-        errors = list(errors)
-        if not errors:
-            return f'=== {cls.rule}: no issues'
-
-        # group by clusters
-        cluster_errors: dict[str, list[Self]] = {}
-        for err in errors:
-            cluster_errors.setdefault(err.cluster, []).append(err)
-
-        lines = [
-            (
-                f'=== {cls.rule}: {len(errors)} issue(s) across '
-                f'{len(cluster_errors)} clusters:'
-            )
-        ]
-        for cluster, errors in sorted(cluster_errors.items()):
-            lines.append(f'\n=== {cluster} ===')
-
-            # sort
-            errors.sort(key=lambda e: asset_sort_key(e.asset))
-            for err in errors:
-                if verbose:
-                    lines.append(err.format_verbose(project))
-                else:
-                    lines.append(f'  {err.format_li(project)}')
-
-        return '\n'.join(lines)
+# <snip RULES_UNUSED>
+RULE_UNUSED = my_lint.Rule('U100', 'unused asset', my_lint.Severity.WARNING)
+# </snip RULES_UNUSED>
 
 
-# </snip CLS_LINT_ASSET_CLUSTER>
-
-
-# <snip CLS_LINT_UNUSED>
-class LintUnused(LintAssetCluster):
-    """Unused asset violation."""
-
-    rule = 'U100'
-    severity = my_lint.Severity.WARNING
-
-    def __init__(self, asset: Asset, cluster: str) -> None:
-        """Initialize violation.
-
-        :param asset: The unused asset.
-        :param cluster: Asset's cluster.
-        """
-        super().__init__()
-        self._asset = asset
-        self.cluster = cluster
-
-    @override
-    @property
-    def asset(self) -> Asset:
-        return self._asset
-
-
-# </snip CLS_LINT_UNUSED>
-
-
-@ui_auto_sink('Lint: unused assets', cls_ui=CLS_UI)
+@step('Lint: unused assets')
 def main_ex_lint_unused(
     cfg: Config, dependencies: list[Dependency], assets: list[Asset]
 ) -> None:
@@ -1235,80 +836,43 @@ def main_ex_lint_unused(
     Take the output of this with a grain of salt.
     """
     # <snip MAIN_EX_LINT_UNUSED>
-    lint = my_lint.LinterSession(cfg.project)
     all_assets = {asset.name: asset for asset in assets}
 
     # populate used set from dependencies
     used_asset_names: set[str] = set()
-    for dep in ui_progress(dependencies):
+    for dep in progress(dependencies):
         # ignore self-references
         if dep.source_asset.name == dep.target_asset.name:
             continue
         used_asset_names.add(dep.target_asset.name)
 
     orphan_names = set(all_assets.keys()) - used_asset_names
-    for name in orphan_names:
-        asset = all_assets[name]
-        lint.push(LintUnused(asset, asset_cluster(cfg, asset)))
+    violations = [
+        # group the report by cluster
+        my_lint.Violation(
+            RULE_UNUSED,
+            asset=all_assets[name],
+            group=asset_cluster(cfg, all_assets[name]),
+        )
+        for name in orphan_names
+    ]
 
-    # unwrap
-    violations_cnt = lint.consume(LintUnused)
-    if violations_cnt:
-        ui_out(f'\nFound {violations_cnt} violations.')
+    if violations:
+        log.info('Found %d violations.', len(violations))
     else:
-        ui_out('\nSomehow all clear...')
+        log.info('Somehow all clear...')
+    lint_report(cfg, violations)
     # </snip MAIN_EX_LINT_UNUSED>
 
 
-# <snip CLS_LINT_CROSSREF>
-class LintCrossref(
-    my_lint.LinterViolationLocated,
-    LintAssetCluster,
-    my_lint.LinterViolationMessage,
-):
-    """Cross-cluster reference violation."""
-
-    rule = 'C100'
-    severity = my_lint.Severity.ERROR
-
-    def __init__(
-        self, dependency: Dependency, *, cluster: str, target_cluster: str
-    ) -> None:
-        """Initialize the violation.
-
-        :param dependency: Offending dependency edge.
-        :param cluster: Source asset's cluster.
-        :param target_cluster: Target asset's cluster.
-        """
-        super().__init__()
-        self._dependency = dependency
-        self.cluster = cluster
-        self.target_cluster = target_cluster
-
-    @override
-    @property
-    def location(self) -> my_location.Location:
-        return self._dependency.location
-
-    @override
-    @property
-    def asset(self) -> Asset:
-        return self._dependency.source_asset
-
-    @override
-    @property
-    def message(self) -> str:
-        # hack: use message (appended to the end) for dep repr.
-        target = self._dependency.target_asset
-        ctx = self._dependency.contexts
-        ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
-        return f'{target.name} [{self.target_cluster}]{ctx_str}'
+# <snip RULES_CROSSREF>
+RULE_CROSSREF = my_lint.Rule(
+    'C100', 'cross-cluster reference', my_lint.Severity.ERROR
+)
+# </snip RULES_CROSSREF>
 
 
-# </snip CLS_LINT_CROSSREF>
-
-
-@ui_auto_sink('Lint: cross-cluster references', cls_ui=CLS_UI)
+@step('Lint: cross-cluster references')
 def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
     """Validate cluster boundaries.
 
@@ -1349,8 +913,8 @@ def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
     of hidden bugs.
     """
     # <snip MAIN_EX_LINT_CROSSREF>
-    lint = my_lint.LinterSession(cfg.project)
-    for dep in ui_progress(dependencies):
+    violations: list[my_lint.Violation] = []
+    for dep in progress(dependencies):
         source = dep.source_asset
         target = dep.target_asset
 
@@ -1375,23 +939,28 @@ def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
 
         # check for structural violations
         if target_cluster not in allowed_targets:
-            lint.push(
-                LintCrossref(
-                    dep, cluster=source_cluster, target_cluster=target_cluster
+            ctx = dep.contexts
+            ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
+            violations.append(
+                my_lint.Violation(
+                    RULE_CROSSREF,
+                    f'{target.name} [{target_cluster}]{ctx_str}',
+                    location=dep.location,
+                    asset=source,
+                    group=source_cluster,
                 )
             )
 
-    # you can turn on verbose=True
-    violations_cnt = lint.consume(LintCrossref)
-    if violations_cnt:
-        ui_out(f'\nFound {violations_cnt} violations.')
+    if violations:
+        log.info('Found %d violations.', len(violations))
     else:
-        ui_out('Clear!!!')
+        log.info('Clear!!!')
+    lint_report(cfg, violations)
 
     # </snip MAIN_EX_LINT_CROSSREF>
 
 
-@ui_auto_sink('Building graph', cls_ui=CLS_UI)
+@step('Building graph')
 def main_ex_graph(
     cfg: Config, assets: list[Asset], dependencies: list[Dependency]
 ) -> dict[str, RoomGraph]:
@@ -1491,17 +1060,16 @@ def main_ex_graph(
             asset_room
         )
 
-    ui_out('Clusterset to rooms:')
+    log.info('Clusterset to rooms:')
     for cluster_set, rooms in cluster_groups.items():
-        ui_out(*cluster_set)
+        log.info(' '.join(sorted(cluster_set)))
         for room in rooms:
-            ui_out(' ', room.name)
-        ui_out()
+            log.info('  %s', room.name)
 
     room_graph_data: dict[str, RoomGraph] = {}
 
     # process clustersets
-    ui_out('Building graphs:')
+    log.info('Building graphs:')
     for cluster_set, rooms in cluster_groups.items():
         graph, name_to_index = build_graph(set(cluster_set))
 
@@ -1510,8 +1078,8 @@ def main_ex_graph(
             name_to_index[p] for p in cfg.extra_roots if p in name_to_index
         ]
 
-        ui_out('- ' + ' '.join(sorted(cluster_set)))
-        for room in ui_progress(rooms):
+        log.info('- %s', ' '.join(sorted(cluster_set)))
+        for room in progress(rooms):
             room_name = room.name
             if room_name not in name_to_index:
                 continue
@@ -1541,7 +1109,7 @@ def main_ex_graph(
     return room_graph_data
 
 
-@ui_auto_sink('Lint: unreachable assets', cls_ui=CLS_UI)
+@step('Lint: unreachable assets')
 def main_ex_lint_unused_graph(
     cfg: Config,
     assets: list[Asset],
@@ -1554,7 +1122,6 @@ def main_ex_lint_unused_graph(
     been skipping over in the simpler linter.
     """
     # <snip MAIN_EX_LINT_UNUSED_GRAPH>
-    lint = my_lint.LinterSession(cfg.project)
 
     # master set
     all_used_names: set[str] = set()
@@ -1576,119 +1143,30 @@ def main_ex_lint_unused_graph(
     )
 
     # detect unuseds
-    for asset in assets:
-        if asset.name in all_used_names:
-            continue
-        lint.push(LintUnused(asset, asset_cluster(cfg, asset)))
+    violations = [
+        my_lint.Violation(
+            RULE_UNUSED, asset=asset, group=asset_cluster(cfg, asset)
+        )
+        for asset in assets
+        if asset.name not in all_used_names
+    ]
 
-    violations_cnt = lint.consume(LintUnused)
-    if violations_cnt:
-        ui_out(f'\nFound {violations_cnt} unreachable assets.')
+    if violations:
+        log.info('Found %d unreachable assets.', len(violations))
     else:
-        ui_out('\nClear??? omg')
+        log.info('Clear??? omg')
+    lint_report(cfg, violations)
     # </snip MAIN_EX_LINT_UNUSED_GRAPH>
 
 
-# <snip CLS_LINT_CROSSREF_GRAPH>
-class LintCrossrefGraph(my_lint.LinterViolationAsset):
-    """Room cluster boundary violation."""
-
-    rule = 'C101'
-    severity = my_lint.Severity.ERROR
-
-    def __init__(  # ruff: ignore[too-many-arguments]
-        self,
-        *,
-        room: my_asset.Room,
-        room_cluster: str,
-        room_allowed_clusters: set[str],
-        target_name: str,
-        target_cluster: str,
-        trace: str,
-    ) -> None:
-        """Initialize the violation.
-
-        :param room: Offending room.
-        :param room_cluster: Room's cluster.
-        :param room_allowed_clusters: Room's allowed clusters.
-        :param target_name: Offending asset name.
-        :param target_cluster: Offending asset's cluster.
-        :param trace: Trace info.
-        """
-        super().__init__()
-        self.room = room
-        self.room_cluster = room_cluster
-        self.room_allowed_clusters = room_allowed_clusters
-        self.target_name = target_name
-        self.target_cluster = target_cluster
-        self.trace = trace
-
-    @override
-    @property
-    def asset(self) -> Asset:
-        return self.room
-
-    @override
-    @classmethod
-    def format_many(
-        cls,
-        errors: col.Iterable[Self],
-        *,
-        project: my_proj.Project,
-        verbose: bool = False,
-    ) -> str:
-        errors = list(errors)
-        if not errors:
-            return f'=== {cls.rule}: no issues'
-
-        # group by clusters
-        cluster_errors: dict[str, list[Self]] = {}
-        rooms_allowed_clusters: dict[str, set[str]] = {}
-        for err in errors:
-            room = err.room
-            cluster_errors.setdefault(err.room_cluster, []).append(err)
-            if room.name not in rooms_allowed_clusters:
-                rooms_allowed_clusters[room.name] = err.room_allowed_clusters
-
-        lines = [
-            (
-                f'=== {cls.rule}: {len(errors)} issue(s) across '
-                f'{len(cluster_errors)} clusters:'
-            )
-        ]
-        for cluster, errors in sorted(cluster_errors.items()):
-            lines.append(f'\n=== {cluster} ===')
-            # sort
-            errors.sort(key=lambda e: asset_sort_key(e.room))
-            # group by room
-            room_errors: dict[str, list[Self]] = {}
-            for err in errors:
-                room = err.room
-                room_errors.setdefault(room.name, []).append(err)
-            for room, errors in sorted(room_errors.items()):
-                lines.extend((
-                    f'Violations in Room: {room}',
-                    (
-                        f'-- Allowed Clusters: '
-                        f'{" ".join(rooms_allowed_clusters[room])}'
-                    ),
-                ))
-
-                # group by target
-                target_errors: dict[str, list[Self]] = {}
-                for err in errors:
-                    target_errors.setdefault(err.target_name, []).append(err)
-                for target, errors in sorted(target_errors.items()):
-                    lines.append(f'  {target} [{errors[0].target_cluster}]')
-                    lines.extend(f'    {err.trace}' for err in errors)
-
-        return '\n'.join(lines)
+# <snip RULES_CROSSREF_GRAPH>
+RULE_CROSSREF_GRAPH = my_lint.Rule(
+    'C101', 'room cluster boundary', my_lint.Severity.ERROR
+)
+# </snip RULES_CROSSREF_GRAPH>
 
 
-# </snip CLS_LINT_CROSSREF_GRAPH>
-
-
-@ui_auto_sink('Lint: room cluster boundaries', cls_ui=CLS_UI)
+@step('Lint: room cluster boundaries')
 def main_ex_lint_crossref_graph(
     cfg: Config,
     assets: list[Asset],
@@ -1707,15 +1185,13 @@ def main_ex_lint_crossref_graph(
     the exact offenders. Also, I recommend re-running the tool after each fix.
     """
     # <snip MAIN_EX_LINT_CROSSREF_GRAPH>
-    lint = my_lint.LinterSession(cfg.project)
-
     # asset clusters lookup
     asset_to_cluster: dict[str, str] = {
         asset.name: asset_cluster(cfg, asset) for asset in assets
     }
-    total_violations = 0
+    violations: list[my_lint.Violation] = []
 
-    for rg in ui_progress(list(room_graph_data.values())):
+    for rg in progress(list(room_graph_data.values())):
         room_cluster = asset_to_cluster.get(rg.room.name)
         if not room_cluster:
             continue
@@ -1732,7 +1208,11 @@ def main_ex_lint_crossref_graph(
             continue
 
         room_idx = rg.name2index[rg.room.name]
-        illegal_assets.sort(key=lambda name: asset_to_cluster.get(name, ''))
+        # report is grouped by room cluster, then by room
+        group = (
+            f'{room_cluster} / {rg.room.name} '
+            f'(allowed: {" ".join(sorted(room_allowed))})'
+        )
 
         # pre-resolve active persistent root ids
         active_persistent_roots = [
@@ -1744,9 +1224,7 @@ def main_ex_lint_crossref_graph(
         for illegal_name in illegal_assets:
             target_idx = rg.name2index[illegal_name]
             target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
-            total_violations += 1
-
-            path_found = False
+            traces: list[str] = []
 
             # trace 1 - room contamination
             room_paths = rx.dijkstra_shortest_paths(
@@ -1754,18 +1232,9 @@ def main_ex_lint_crossref_graph(
             )
             if target_idx in room_paths:
                 path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
-                lint.push(
-                    LintCrossrefGraph(
-                        room=rg.room,
-                        room_cluster=room_cluster,
-                        room_allowed_clusters=room_allowed,
-                        target_name=illegal_name,
-                        target_cluster=target_cluster,
-                        trace=f'Traceback via Room Root: '
-                        f'{" -> ".join(path_names)}',
-                    )
+                traces.append(
+                    f'Traceback via Room Root: {" -> ".join(path_names)}'
                 )
-                path_found = True
 
             # trace 2 - implicit contamination via global controllers
             for p_name, p_idx in active_persistent_roots:
@@ -1774,42 +1243,36 @@ def main_ex_lint_crossref_graph(
                 )
                 if target_idx in p_paths:
                     path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
-                    lint.push(
-                        LintCrossrefGraph(
-                            room=rg.room,
-                            room_cluster=room_cluster,
-                            room_allowed_clusters=room_allowed,
-                            target_name=illegal_name,
-                            target_cluster=target_cluster,
-                            trace=f'Traceback via Persistent Root ({p_name}): '
-                            f'{" -> ".join(path_names)}',
-                        )
+                    traces.append(
+                        f'Traceback via Persistent Root ({p_name}): '
+                        f'{" -> ".join(path_names)}'
                     )
-
-                    path_found = True
                     break
 
-            if not path_found:
-                lint.push(
-                    LintCrossrefGraph(
-                        room=rg.room,
-                        room_cluster=room_cluster,
-                        room_allowed_clusters=room_allowed,
-                        target_name=illegal_name,
-                        target_cluster=target_cluster,
-                        trace='Traceback: Path unknown (Possibly '
-                        'misconfigured structure)',
-                    )
+            if not traces:
+                traces.append(
+                    'Traceback: Path unknown '
+                    '(Possibly misconfigured structure)'
                 )
 
-        if total_violations > 1000:
-            ui_out('\nLinter exceeded 1000 violations, bailing out')
+            violations.append(
+                my_lint.Violation(
+                    RULE_CROSSREF_GRAPH,
+                    f'{illegal_name} [{target_cluster}]',
+                    group=group,
+                    details=tuple(traces),
+                )
+            )
+
+        if len(violations) > 1000:
+            log.warning('Linter exceeded 1000 violations, bailing out')
             break
-    violations_cnt = lint.consume(LintCrossrefGraph)
-    if violations_cnt:
-        ui_out(f'Found {violations_cnt} violations')
+
+    if violations:
+        log.info('Found %d violations', len(violations))
     else:
-        ui_out('No errors! Awesome!')
+        log.info('No errors! Awesome!')
+    lint_report(cfg, violations)
     # <md>
     # Once you've cleared this one, you may call the game qualified for using
     # the dangerous toys down the line.
@@ -2306,7 +1769,7 @@ class BuildTasks:
 # </snip CLS_JUICE_BUILD_TASKS>
 
 
-@ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
+@step('Juicer: generate tasks')
 def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
     """Step 3 - ~~Fly~~ Run the thing.
 
@@ -2589,36 +2052,67 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
     return build_tasks  # ruff: ignore[unnecessary-assign]
 
 
-@ui_auto_sink('Juicer: run tasks', cls_ui=CLS_UI)
+# <snip DEF_RUN_TASKS_POOL>
+def run_tasks_pool(
+    name: str,
+    tasks: col.Sequence[my_task.Task],
+    cache: my_cache.FileBuildCache,
+    pool: concurrent.futures.Executor,
+) -> list[my_run.TaskFailure]:
+    """Run stale tasks in the pool with a progress bar."""
+    stale, cached = my_run.tasks_filter_stale(tasks, cache)
+    log.info('%s: %d to run, %d cached', name, len(stale), cached)
+    if not stale:
+        return []
+    with (
+        pool,
+        r_progress.Progress(
+            *r_progress.Progress.get_default_columns(),
+            r_progress.MofNCompleteColumn(),
+            console=CONSOLE,
+        ) as bar,
+    ):
+        bar_task = bar.add_task(name, total=len(stale))
+        return my_run.tasks_run(
+            stale, cache, pool, on_done=lambda *_: bar.advance(bar_task)
+        )
+
+
+# </snip DEF_RUN_TASKS_POOL>
+
+
+@step('Juicer: run tasks')
 def main_juicer_run(cfg: Config, tasks: BuildTasks) -> None:
     """Run generated build tasks.
 
-    In contrast, this example is pretty small. Thanks to our brazillion
-    abstractions.
+    Copy tasks are IO-bound, so they go into a thread pool, while encoding
+    is CPU-bound and gets a process pool. Tasks that are still fresh in the
+    build cache are skipped.
     """
     # <snip MAIN_JUICER_RUN>
-    dispatcher = my_event_dispatcher.EventDispatcher()
     cache = my_cache.FileBuildCache(cfg.juicer.file_cache)
 
-    ui_out('Starting threaded tasks')
-    with CLS_UI_ASYNC('Threaded tasks') as ui:
-        ui.register(dispatcher)
-        ui.update_total_progress(0, len(tasks.tasks_threaded))
+    failures = run_tasks_pool(
+        'Copying',
+        tasks.tasks_threaded,
+        cache,
+        concurrent.futures.ThreadPoolExecutor(),
+    )
+    failures += run_tasks_pool(
+        'Encoding',
+        tasks.tasks_mp,
+        cache,
+        concurrent.futures.ProcessPoolExecutor(),
+    )
 
-        my_exec_thread.execute_threaded(
-            tasks.tasks_threaded, cache, dispatcher
-        )
-
-    ui_out('Starting mp tasks')
-    with CLS_UI_ASYNC('Multiprocessing tasks') as ui:
-        ui.register(dispatcher)
-        ui.update_total_progress(0, len(tasks.tasks_mp))
-
-        my_exec_mp.execute_mp(tasks.tasks_mp, cache, dispatcher)
+    for failure in failures:
+        log.error('Task %s failed:\n%s', failure.task_id, failure.error)
+    if failures:
+        raise RuntimeError(f'{len(failures)} task(s) failed')
     # </snip MAIN_JUICER_RUN>
 
 
-@ui_auto_sink('Juicer: generating gml', cls_ui=CLS_UI)
+@step('Juicer: generating gml')
 def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
     """It is time to finally integrate Clunkster into the project.
 
@@ -2632,7 +2126,7 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
     should review this code extra thoroughly before pasting it...
     """
     # <snip MAIN_JUICER_GEN_GML>
-    ui_out('Generating Clunkster scripts...')
+    log.info('Generating Clunkster scripts...')
 
     dir_scripts = my_asset.Script.type_get_dir(cfg.juicer.dir_out)
 
@@ -2881,7 +2375,7 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
     # </snip MAIN_JUICER_GEN_GML>
 
 
-@ui_auto_sink('Juicer: compiling the game', cls_ui=CLS_UI)
+@step('Juicer: compiling the game')
 def main_juicer_gm_compile(cfg: Config) -> None:
     r"""This is it Luigi.
 
@@ -2901,7 +2395,7 @@ def main_juicer_gm_compile(cfg: Config) -> None:
     one guy.
     """
     # <snip MAIN_JUICER_GM_COMPILE>
-    ui_out('Jostling Game Maker 8.2 compiler...')
+    log.info('Jostling Game Maker 8.2 compiler...')
 
     project_file = cfg.juicer.dir_out / cfg.juicer.fname_gm82
     output_exe = cfg.juicer.dir_out / 'game.exe'
@@ -2927,7 +2421,7 @@ def main_juicer_gm_compile(cfg: Config) -> None:
             'environment variable.'
         )
 
-    ui_out(f'Compiling {output_exe.name}...')
+    log.info('Compiling %s...', output_exe.name)
 
     try:
         subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
@@ -2941,7 +2435,7 @@ def main_juicer_gm_compile(cfg: Config) -> None:
             f'GameMaker 8.2 compilation failed with exit code {e.returncode}'
         ) from e
 
-    ui_out('Build completely successfully!')
+    log.info('Build completely successfully!')
     subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
         [str(output_exe)],
         cwd=cfg.juicer.dir_out,
@@ -3085,14 +2579,14 @@ def main() -> None:
         _run_tutorials(cfg)
         return
 
-    # main_ex_setup_rich()
+    # setup_output()
     # main_ex_lint_tree(cfg)
     # assets = main_ex_aliases(cfg)
     # deps = main_ex_scan_sync(cfg, assets)
     # bgs = main_bm_get(cfg, assets, deps)
     # return
 
-    main_ex_setup_rich()
+    setup_output()
     main_ex_lint_tree(cfg)
     assets = main_ex_aliases(cfg)
     if is_check:

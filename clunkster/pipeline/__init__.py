@@ -1,4 +1,4 @@
 """Pipeline bones.
 
-Contains a system of tasks and executors, events and UI abstractions.
+Contains tasks, build cache and task execution.
 """
