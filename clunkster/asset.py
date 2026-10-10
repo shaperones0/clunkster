@@ -1,18 +1,21 @@
 """Abstract asset type and builtin definitions."""
 
 import collections.abc as col
-import functools as ft
 import itertools as it
 import pathlib as pl
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self, override
 
-from clunkster import project as my_proj
 from clunkster.parse import csv as my_parse_csv
 from clunkster.parse import index as my_parse_index
 from clunkster.parse import kv as my_parse_kv
 from clunkster.parse import tree as my_parse_tree
+
+
+def _read_lines(path: pl.Path) -> tuple[str, ...]:
+    """Read lines of a text file."""
+    return tuple(path.read_text(encoding='utf-8').splitlines())
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,7 +421,7 @@ class AssetBuiltin(AssetHasPath, AssetHasDir, ABC):
         Uses ``tree.yyd`` files for scanning, and populating tree paths.
         """
         tree_file = cls.type_get_tree_file(project_root)
-        tree_lines = my_proj.lines(tree_file)
+        tree_lines = _read_lines(tree_file)
         return (
             cls(name=asset_name, tree_path=path)
             for asset_name, path in my_parse_tree.parse(tree_lines)
@@ -432,7 +435,7 @@ class AssetBuiltin(AssetHasPath, AssetHasDir, ABC):
         Uses ``index.yyd`` files.
         """
         index_file = cls.type_get_index_file(project_root)
-        index_lines = my_proj.lines(index_file)
+        index_lines = _read_lines(index_file)
         return my_parse_index.parse_skimmed(index_lines)
 
 
@@ -499,9 +502,8 @@ class AssetSingleFile(AssetHasPath, AssetHasDir, ABC):
         )
 
 
-@ft.lru_cache
 def _background_metadata(metadata_file: pl.Path) -> BackgroundMetadata:
-    lines = my_proj.lines(metadata_file)
+    lines = _read_lines(metadata_file)
     return my_parse_kv.parse_dataclass(BackgroundMetadata, lines)
 
 
@@ -526,11 +528,7 @@ class Background(AssetBuiltin):
     def get_background_metadata(
         self, project_root: pl.Path
     ) -> BackgroundMetadata:
-        """Get background's metadata.
-
-        This method is cached, assumes ``project_root`` to be registered in
-        ``read`` module.
-        """
+        """Get background's metadata."""
         file = self.get_background_metadata_file(project_root)
         return _background_metadata(file)
 
@@ -569,9 +567,8 @@ class Font(AssetBuiltin):
         return pl.Path('fonts')
 
 
-@ft.lru_cache
 def _object_metadata(metadata_file: pl.Path) -> ObjectMetadata:
-    lines = my_proj.lines(metadata_file)
+    lines = _read_lines(metadata_file)
     return my_parse_kv.parse_dataclass(ObjectMetadata, lines)
 
 
@@ -594,11 +591,7 @@ class Object(AssetBuiltin):
         return type(self).type_get_dir(project_root) / f'{self.name}.txt'
 
     def get_object_metadata(self, project_root: pl.Path) -> ObjectMetadata:
-        """Get object's metadata.
-
-        This method is cached, assumes ``project_root`` to be registered in
-        ``read`` module.
-        """
+        """Get object's metadata."""
         file = self.get_object_metadata_file(project_root)
         return _object_metadata(file)
 
@@ -622,13 +615,11 @@ class Path(AssetBuiltin):
         return pl.Path('paths')
 
 
-@ft.lru_cache
 def _room_metadata(metadata_file: pl.Path) -> RoomMetadata:
-    lines = my_proj.lines(metadata_file)
+    lines = _read_lines(metadata_file)
     return my_parse_kv.parse_dataclass(RoomMetadata, lines)
 
 
-@ft.lru_cache
 def _room_layers(room_folder: pl.Path) -> tuple[int, ...]:
     return tuple(
         int(file.stem)
@@ -637,9 +628,8 @@ def _room_layers(room_folder: pl.Path) -> tuple[int, ...]:
     )
 
 
-@ft.lru_cache
 def _room_layer(layer_file: pl.Path) -> tuple[RoomTile, ...]:
-    lines = my_proj.lines(layer_file)
+    lines = _read_lines(layer_file)
     return tuple(my_parse_csv.parse(RoomTile, lines))
 
 
@@ -666,11 +656,7 @@ class Room(AssetBuiltin):
         return self.get_room_folder(project_root) / 'room.txt'
 
     def get_room_metadata(self, project_root: pl.Path) -> RoomMetadata:
-        """Get room's metadata.
-
-        This method is cached, assumes ``project_root`` to be registered in
-        ``read`` module.
-        """
+        """Get room's metadata."""
         file = self.get_room_metadata_file(project_root)
         return _room_metadata(file)
 
@@ -715,9 +701,8 @@ class Script(AssetBuiltin):
         return type(self).type_get_dir(project_root) / f'{self.name}.gml'
 
 
-@ft.lru_cache
 def _sprite_metadata(metadata_file: pl.Path) -> SpriteMetadata:
-    lines = my_proj.lines(metadata_file)
+    lines = _read_lines(metadata_file)
     return my_parse_kv.parse_dataclass(SpriteMetadata, lines)
 
 
@@ -744,11 +729,7 @@ class Sprite(AssetBuiltin):
         return self.get_sprite_folder(project_root) / 'sprite.txt'
 
     def get_sprite_metadata(self, project_root: pl.Path) -> SpriteMetadata:
-        """Get sprite's metadata.
-
-        This method is cached, assumes ``project_root`` to be registered in
-        ``read`` module.
-        """
+        """Get sprite's metadata."""
         file = self.get_sprite_metadata_file(project_root)
         return _sprite_metadata(file)
 

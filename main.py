@@ -46,36 +46,69 @@ from clunkster.pipeline.ui import simple as my_ui_simple
 from clunkster.pipeline.ui.adapter import ui_auto_sink, ui_out, ui_progress
 from clunkster.text import location as my_location
 
+
 # <snip PROJECT>
-PROJECT: Path
-LINT = my_lint.LinterSession()
+@dataclasses.dataclass(frozen=True, slots=True)
+class Config:
+    """Pipeline configuration, passed into every pipeline step."""
 
+    # source project (root, where game's .gm82 file is stored + file reads)
+    project: my_proj.Project
+    # cluster name -> top level folders merged into it (see ALIAS)
+    alias: dict[str, list[str]]
+    # cluster -> clusters it may reference (see LINT_RULES)
+    lint_rules: dict[str, set[str]]
+    # guard script -> clusters it grants (see CONTEXT_RULES)
+    context_rules: dict[str, set[str]]
+    # persistent objects present in every room (see EXTRA_ROOTS)
+    extra_roots: set[str]
+    # Game Juicer settings (see JUICER)
+    juicer: ConfJuicer
+    # top level folder -> cluster name, derived from alias
+    alias_inv: dict[str, str] = dataclasses.field(init=False)
 
-def global_set_project(project_root: Path) -> None:
-    """Convenience function for initializing the project."""
-    global PROJECT
-    PROJECT = project_root
-    my_proj.set_root(PROJECT)
+    def __post_init__(self) -> None:
+        """Derive ``alias_inv`` from ``alias``."""
+        alias_inv: dict[str, str] = {}
+        for name, clusters in self.alias.items():
+            for cluster in clusters:
+                if cluster in alias_inv:
+                    raise ValueError(f"Invalid alias (duplicate: '{cluster}')")
+                alias_inv[cluster] = name
+        object.__setattr__(self, 'alias_inv', alias_inv)
 
 
 # </snip PROJECT>
 
 
-def main_ex_setup_main() -> None:
-    """Setup project and linter session.
+def main_ex_setup_main() -> Config:
+    """Setup the configuration.
 
-    Mandatory stuff includes setting these variables:
+    There's no global state: every pipeline step receives ``Config`` as its
+    first argument. It holds:
 
-    - ``PROJECT``: project root path, where game's ``.gm82`` files is stored
-    - ``LINT``: linter session (contains violation queue, resolvers, etc.)
+    - ``project``: source project root (where game's ``.gm82`` file is
+      stored), also caches file reads
+    - ``alias``, ``lint_rules``, ``context_rules``, ``extra_roots``: cluster
+      setup, explained in the examples that use them
+    - ``juicer``: Game Juicer settings
     """
     # <snip MAIN_EX_SETUP_MAIN>
-    global_set_project(Path('path/to/the/project'))
+    cfg = Config(
+        # project root must be absolute
+        project=my_proj.Project(Path('path/to/the/project').resolve()),
+        alias=ALIAS,
+        lint_rules=LINT_RULES,
+        context_rules=CONTEXT_RULES,
+        extra_roots=EXTRA_ROOTS,
+        juicer=JUICER,
+    )
     # <md>
-    # Notice the humble helper function `global_set_project` and what it does.
-    # Calling `my_proj.set_root(PROJECT)` is very important.
+    # Values for the rest of the fields are introduced in the examples that
+    # need them.
     # </md>
     # </snip MAIN_EX_SETUP_MAIN>
+    return cfg  # ruff: ignore[unnecessary-assign]
 
 
 # <snip CLS_WIDGETS>
@@ -551,11 +584,11 @@ def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
     return asset.tree_path[0] if asset.tree_path else 'Common'
 
 
-def asset_cluster(asset: my_asset.Asset) -> str:
+def asset_cluster(cfg: Config, asset: my_asset.Asset) -> str:
     """Get asset's cluster."""
     if isinstance(asset, my_asset.AssetHasPath):
         cluster = asset_cluster_raw(asset)
-        alias = ALIAS_INV.get(cluster)
+        alias = cfg.alias_inv.get(cluster)
         return cluster if alias is None else alias
     return 'Unknown?'
 
@@ -616,22 +649,6 @@ ALIAS: dict[str, list[str]] = {
     ],
     # ...
 }
-ALIAS_INV: dict[str, str]
-
-
-def global_set_alias(alias: dict[str, list[str]]) -> None:
-    """Global alias setting helper."""
-    global ALIAS, ALIAS_INV
-    ALIAS = alias
-
-    ALIAS_INV = {}
-    for name, clusters in ALIAS.items():
-        for cluster in clusters:
-            if cluster in ALIAS_INV:
-                raise ValueError(f"Invalid ALIAS (duplicate: '{cluster}')")
-            ALIAS_INV[cluster] = name
-
-
 # </snip ALIAS>
 
 # <snip LINT_RULES>
@@ -641,6 +658,16 @@ LINT_RULES: dict[str, set[str]] = {
     # example of a stage that shares assets with another
     # "StageB": {"StageB", "StageA", "Common"},
 }
+
+
+def allowed_clusters(cfg: Config, cluster: str) -> set[str]:
+    """Get clusters that assets of the given cluster may reference.
+
+    Defaults to the cluster itself and Common.
+    """
+    return set(cfg.lint_rules.get(cluster, {cluster, 'Common'}))
+
+
 # </snip LINT_RULES>
 
 # <snip CONTEXT_RULES>
@@ -724,7 +751,7 @@ JUICER = ConfJuicer(
 # </snip CLS_JUICER_CONFIG>
 
 
-def main_ex_start() -> None:
+def main_ex_start(cfg: Config) -> None:
     """Let's start with some simple scanning.
 
     Clunkster already provides utils for scanning builtin assets and
@@ -737,12 +764,12 @@ def main_ex_start() -> None:
 
     for asset_type in CLUSTERABLE_ASSETS:
         # check if given asset type exist in the project
-        if not asset_type.type_is_used(PROJECT):
+        if not asset_type.type_is_used(cfg.project.root):
             continue
 
         # type_discover_all handles the discovery of all assets per
         #  asset type.
-        assets.extend(asset_type.type_discover_all(PROJECT))
+        assets.extend(asset_type.type_discover_all(cfg.project.root))
 
     print(f'Discovered {len(assets)} total assets.')
     # <md>
@@ -810,7 +837,7 @@ class LintTreeDuplicateAsset(my_lint.LinterViolationMessage):
 # </snip CLS_LINT_TREE>
 
 
-def main_ex_lint_tree() -> None:
+def main_ex_lint_tree(cfg: Config) -> None:
     """Now we must check integrity of ``tree.yyd`` files and asset names.
 
     Asset discovery and clusterization is based on scanning ``tree.yyd``
@@ -845,14 +872,15 @@ def main_ex_lint_tree() -> None:
     As for this specific linter; since any inconsistency in asset structure
     will cause big issues in the pipeline, every violation is marked as error.
     """
-
     # <snip MAIN_EX_LINT_TREE>
+    lint = my_lint.LinterSession(cfg.project)
+
     def asset_lint_tree(asset_cls: type[my_asset.AssetBuiltin]) -> None:
-        tree_file = asset_cls.type_get_tree_file(PROJECT)
-        line_map = my_proj.line_map(tree_file)
+        tree_file = asset_cls.type_get_tree_file(cfg.project.root)
+        line_map = cfg.project.line_map(tree_file)
         seen_children: dict[str, set[str]] = {}
 
-        for node in my_parse_tree.nodes(my_proj.lines(tree_file)):
+        for node in my_parse_tree.nodes(cfg.project.lines(tree_file)):
             # format the tuple into path string (e.g., "/Player/SkinA")
             path_str = '/' + '/'.join(node.parent_path)
 
@@ -862,7 +890,7 @@ def main_ex_lint_tree() -> None:
             if node.name in seen_children[path_str]:
                 loc_line = node.line_num
                 loc_column = node.depth + 1  # uses tab characters
-                LINT.push(
+                lint.push(
                     LintTreeDuplicateFolder(
                         node=node,
                         location=my_location.Location(
@@ -882,11 +910,13 @@ def main_ex_lint_tree() -> None:
     asset_names: set[str] = set()
     for asset_type in CLUSTERABLE_ASSETS:
         # check if given asset type exist in the project
-        if not asset_type.type_is_used(PROJECT):
+        if not asset_type.type_is_used(cfg.project.root):
             continue
 
         # populate namespace
-        assets_from_index = list(asset_type.type_discover_names(PROJECT))
+        assets_from_index = list(
+            asset_type.type_discover_names(cfg.project.root)
+        )
         assets_set = set(assets_from_index)
         if len(assets_from_index) != len(assets_set):
             dupes = [
@@ -896,14 +926,14 @@ def main_ex_lint_tree() -> None:
                 ).items()
                 if count > 1
             ]
-            LINT.push(
+            lint.push(
                 LintTreeDuplicateAsset(
                     dupes=dupes, message_pref='Duplicate assets in one type'
                 )
             )
         inters = asset_names.intersection(assets_set)
         if inters:
-            LINT.push(
+            lint.push(
                 LintTreeDuplicateAsset(
                     dupes=inters,
                     message_pref='Duplicate assets across multiple types',
@@ -912,7 +942,7 @@ def main_ex_lint_tree() -> None:
         asset_names.update(assets_set)
 
         # collect errors before parsing tree.yyd
-        LINT.consume()
+        lint.consume()
 
         # check tree.yyd for builtin assets
         if not issubclass(asset_type, my_asset.AssetBuiltin):
@@ -922,7 +952,7 @@ def main_ex_lint_tree() -> None:
         asset_lint_tree(asset_type)
 
     # collect all errors
-    LINT.consume()
+    lint.consume()
     # </snip MAIN_EX_LINT_TREE>
 
 
@@ -952,7 +982,7 @@ class LintAliasMismatch(my_lint.LinterViolationMessage):
 # </snip CLS_LINT_ALIAS>
 
 
-def main_ex_aliases() -> list[Asset]:
+def main_ex_aliases(cfg: Config) -> list[Asset]:
     """Generate clusters.
 
     Once we validated assets and trees, we can do cluster generation. We'll
@@ -967,11 +997,12 @@ def main_ex_aliases() -> list[Asset]:
     It can be useful to discern where exactly any extra names are located.
     """
     # <snip MAIN_EX_ALIASES>
+    lint = my_lint.LinterSession(cfg.project)
     assets: list[Asset] = []
 
     # ALIAS linter: find existing names in ALIAS
     lint_existing_aliases: set[str] = set()
-    for name, clusters in ALIAS.items():
+    for name, clusters in cfg.alias.items():
         for cluster in clusters:
             lint_existing_aliases.add(cluster)
             lint_existing_aliases.add(name)
@@ -982,13 +1013,13 @@ def main_ex_aliases() -> list[Asset]:
     # ALIAS linter: find actually used names in ALIAS
     lint_used_aliases: set[str] = set()
     for asset_type in CLUSTERABLE_ASSETS:
-        if not asset_type.type_is_used(PROJECT):
+        if not asset_type.type_is_used(cfg.project.root):
             continue
 
         cluster_set: set[str] = set()
-        for asset in asset_type.type_discover_all(PROJECT):
+        for asset in asset_type.type_discover_all(cfg.project.root):
             # add both generated cluster and its alias
-            cluster = asset_cluster(asset)
+            cluster = asset_cluster(cfg, asset)
             lint_used_aliases.add(asset_cluster_raw(asset))
             lint_used_aliases.add(cluster)
 
@@ -1028,20 +1059,20 @@ def main_ex_aliases() -> list[Asset]:
     lint_unused_aliases = lint_existing_aliases - lint_used_aliases
     lint_extra_aliases = lint_used_aliases - lint_existing_aliases
     if lint_unused_aliases:
-        LINT.push(
+        lint.push(
             LintAliasMismatch(
                 dupes=lint_unused_aliases, message_pref='Unused aliases'
             )
         )
     if lint_extra_aliases:
         # after the initial project setup, I'd upgrade this to raise
-        LINT.push(
+        lint.push(
             LintAliasMismatch(
                 dupes=lint_extra_aliases, message_pref='Extra aliases'
             )
         )
-    LINT.consume()
-    LINT.assert_empty()
+    lint.consume()
+    lint.assert_empty()
     # <md>
     # Keep using the table thing until all aliases are gone.
     # </md>
@@ -1050,7 +1081,7 @@ def main_ex_aliases() -> list[Asset]:
 
 
 @ui_auto_sink('Scanning references', cls_ui=CLS_UI)
-def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
+def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
     """Reference scanner.
 
     In order to run dependency linters, we need to scan the actual references.
@@ -1080,12 +1111,12 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
     scans = tuple(
         (asset, file_path)
         for asset in assets
-        for file_path in asset_scannables(asset, PROJECT)
+        for file_path in asset_scannables(asset, cfg.project.root)
     )
 
     for asset, file_path in ui_progress(scans):
-        text = my_proj.read(file_path)
-        line_map = my_proj.line_map(file_path)
+        text = cfg.project.read(file_path)
+        line_map = cfg.project.line_map(file_path)
         matches: list[my_scan_dep.DependencyMatch] = list(
             my_scan_dep.scan(
                 text,
@@ -1119,10 +1150,17 @@ def main_ex_scan_sync(assets: list[Asset]) -> list[Dependency]:
 class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
     """Group linter list output by assets' clusters."""
 
+    # violation's asset cluster, must be set by subclasses
+    cluster: str
+
     @override
     @classmethod
     def format_many(
-        cls, errors: col.Iterable[Self], *, verbose: bool = False
+        cls,
+        errors: col.Iterable[Self],
+        *,
+        project: my_proj.Project,
+        verbose: bool = False,
     ) -> str:
         errors = list(errors)
         if not errors:
@@ -1131,8 +1169,7 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
         # group by clusters
         cluster_errors: dict[str, list[Self]] = {}
         for err in errors:
-            asset = err.asset
-            cluster_errors.setdefault(asset_cluster(asset), []).append(err)
+            cluster_errors.setdefault(err.cluster, []).append(err)
 
         lines = [
             (
@@ -1147,9 +1184,9 @@ class LintAssetCluster(my_lint.LinterViolationAsset, ABC):
             errors.sort(key=lambda e: asset_sort_key(e.asset))
             for err in errors:
                 if verbose:
-                    lines.append(err.format_verbose())
+                    lines.append(err.format_verbose(project))
                 else:
-                    lines.append(f'  {err.format_li()}')
+                    lines.append(f'  {err.format_li(project)}')
 
         return '\n'.join(lines)
 
@@ -1164,13 +1201,15 @@ class LintUnused(LintAssetCluster):
     rule = 'U100'
     severity = my_lint.Severity.WARNING
 
-    def __init__(self, asset: Asset) -> None:
+    def __init__(self, asset: Asset, cluster: str) -> None:
         """Initialize violation.
 
         :param asset: The unused asset.
+        :param cluster: Asset's cluster.
         """
         super().__init__()
         self._asset = asset
+        self.cluster = cluster
 
     @override
     @property
@@ -1183,7 +1222,7 @@ class LintUnused(LintAssetCluster):
 
 @ui_auto_sink('Lint: unused assets', cls_ui=CLS_UI)
 def main_ex_lint_unused(
-    dependencies: list[Dependency], assets: list[Asset]
+    cfg: Config, dependencies: list[Dependency], assets: list[Asset]
 ) -> None:
     """Find and report assets that are never referenced by anything.
 
@@ -1196,6 +1235,7 @@ def main_ex_lint_unused(
     Take the output of this with a grain of salt.
     """
     # <snip MAIN_EX_LINT_UNUSED>
+    lint = my_lint.LinterSession(cfg.project)
     all_assets = {asset.name: asset for asset in assets}
 
     # populate used set from dependencies
@@ -1208,10 +1248,11 @@ def main_ex_lint_unused(
 
     orphan_names = set(all_assets.keys()) - used_asset_names
     for name in orphan_names:
-        LINT.push(LintUnused(all_assets[name]))
+        asset = all_assets[name]
+        lint.push(LintUnused(asset, asset_cluster(cfg, asset)))
 
     # unwrap
-    violations_cnt = LINT.consume(LintUnused)
+    violations_cnt = lint.consume(LintUnused)
     if violations_cnt:
         ui_out(f'\nFound {violations_cnt} violations.')
     else:
@@ -1230,13 +1271,19 @@ class LintCrossref(
     rule = 'C100'
     severity = my_lint.Severity.ERROR
 
-    def __init__(self, dependency: Dependency) -> None:
+    def __init__(
+        self, dependency: Dependency, *, cluster: str, target_cluster: str
+    ) -> None:
         """Initialize the violation.
 
         :param dependency: Offending dependency edge.
+        :param cluster: Source asset's cluster.
+        :param target_cluster: Target asset's cluster.
         """
         super().__init__()
         self._dependency = dependency
+        self.cluster = cluster
+        self.target_cluster = target_cluster
 
     @override
     @property
@@ -1255,14 +1302,14 @@ class LintCrossref(
         target = self._dependency.target_asset
         ctx = self._dependency.contexts
         ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
-        return f'{target.name} [{asset_cluster(target)}]{ctx_str}'
+        return f'{target.name} [{self.target_cluster}]{ctx_str}'
 
 
 # </snip CLS_LINT_CROSSREF>
 
 
 @ui_auto_sink('Lint: cross-cluster references', cls_ui=CLS_UI)
-def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
+def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
     """Validate cluster boundaries.
 
     Simple check of clusters on both ends of dependency edge will filter
@@ -1302,40 +1349,40 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
     of hidden bugs.
     """
     # <snip MAIN_EX_LINT_CROSSREF>
+    lint = my_lint.LinterSession(cfg.project)
     for dep in ui_progress(dependencies):
         source = dep.source_asset
         target = dep.target_asset
 
-        source_cluster = asset_cluster(source)
-        target_cluster = asset_cluster(target)
+        source_cluster = asset_cluster(cfg, source)
+        target_cluster = asset_cluster(cfg, target)
 
         # remove deps to room
         if isinstance(target, my_asset.Room):
             continue
 
         # get permissions from lint rules
-        allowed_targets = set(
-            LINT_RULES.get(source_cluster, {source_cluster, 'Common'})
-        )
+        allowed_targets = allowed_clusters(cfg, source_cluster)
 
         # expand permissions based on script guards
         for ctx in dep.contexts:
-            if ctx in CONTEXT_RULES:
-                granted_primaries = CONTEXT_RULES[ctx]
+            if ctx in cfg.context_rules:
+                granted_primaries = cfg.context_rules[ctx]
 
                 # look up what the primary cluster knows
                 for primary in granted_primaries:
-                    expanded_permissions = LINT_RULES.get(
-                        primary, {primary, 'Common'}
-                    )
-                    allowed_targets.update(expanded_permissions)
+                    allowed_targets.update(allowed_clusters(cfg, primary))
 
         # check for structural violations
         if target_cluster not in allowed_targets:
-            LINT.push(LintCrossref(dep))
+            lint.push(
+                LintCrossref(
+                    dep, cluster=source_cluster, target_cluster=target_cluster
+                )
+            )
 
     # you can turn on verbose=True
-    violations_cnt = LINT.consume(LintCrossref)
+    violations_cnt = lint.consume(LintCrossref)
     if violations_cnt:
         ui_out(f'\nFound {violations_cnt} violations.')
     else:
@@ -1346,7 +1393,7 @@ def main_ex_lint_crossref(dependencies: list[Dependency]) -> None:
 
 @ui_auto_sink('Building graph', cls_ui=CLS_UI)
 def main_ex_graph(
-    assets: list[Asset], dependencies: list[Dependency]
+    cfg: Config, assets: list[Asset], dependencies: list[Dependency]
 ) -> dict[str, RoomGraph]:
     """Build dependency graph.
 
@@ -1418,7 +1465,7 @@ def main_ex_graph(
 
                     # room must satisfy this guard to proceed deeper into
                     #   the nested guards
-                    granted_clusters = CONTEXT_RULES.get(raw_ctx)
+                    granted_clusters = cfg.context_rules.get(raw_ctx)
                     if granted_clusters and not active_clusters.intersection(
                         granted_clusters
                     ):
@@ -1438,11 +1485,9 @@ def main_ex_graph(
     for asset_room in assets:
         if not isinstance(asset_room, my_asset.Room):
             continue
-        room_cluster = asset_cluster(asset_room)
-        allowed_clusters = LINT_RULES.get(
-            room_cluster, {room_cluster, 'Common'}
-        )
-        cluster_groups.setdefault(frozenset(allowed_clusters), []).append(
+        room_cluster = asset_cluster(cfg, asset_room)
+        room_allowed = allowed_clusters(cfg, room_cluster)
+        cluster_groups.setdefault(frozenset(room_allowed), []).append(
             asset_room
         )
 
@@ -1462,7 +1507,7 @@ def main_ex_graph(
 
         # resolve persistent root indices
         persistent_idx = [
-            name_to_index[p] for p in EXTRA_ROOTS if p in name_to_index
+            name_to_index[p] for p in cfg.extra_roots if p in name_to_index
         ]
 
         ui_out('- ' + ' '.join(sorted(cluster_set)))
@@ -1498,7 +1543,9 @@ def main_ex_graph(
 
 @ui_auto_sink('Lint: unreachable assets', cls_ui=CLS_UI)
 def main_ex_lint_unused_graph(
-    assets: list[Asset], room_graph_data: dict[str, RoomGraph]
+    cfg: Config,
+    assets: list[Asset],
+    room_graph_data: dict[str, RoomGraph],
 ) -> None:
     """Identify unreachable assets.
 
@@ -1507,6 +1554,7 @@ def main_ex_lint_unused_graph(
     been skipping over in the simpler linter.
     """
     # <snip MAIN_EX_LINT_UNUSED_GRAPH>
+    lint = my_lint.LinterSession(cfg.project)
 
     # master set
     all_used_names: set[str] = set()
@@ -1531,9 +1579,9 @@ def main_ex_lint_unused_graph(
     for asset in assets:
         if asset.name in all_used_names:
             continue
-        LINT.push(LintUnused(asset))
+        lint.push(LintUnused(asset, asset_cluster(cfg, asset)))
 
-    violations_cnt = LINT.consume(LintUnused)
+    violations_cnt = lint.consume(LintUnused)
     if violations_cnt:
         ui_out(f'\nFound {violations_cnt} unreachable assets.')
     else:
@@ -1548,9 +1596,11 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
     rule = 'C101'
     severity = my_lint.Severity.ERROR
 
-    def __init__(
+    def __init__(  # ruff: ignore[too-many-arguments]
         self,
+        *,
         room: my_asset.Room,
+        room_cluster: str,
         room_allowed_clusters: set[str],
         target_name: str,
         target_cluster: str,
@@ -1559,6 +1609,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
         """Initialize the violation.
 
         :param room: Offending room.
+        :param room_cluster: Room's cluster.
         :param room_allowed_clusters: Room's allowed clusters.
         :param target_name: Offending asset name.
         :param target_cluster: Offending asset's cluster.
@@ -1566,6 +1617,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
         """
         super().__init__()
         self.room = room
+        self.room_cluster = room_cluster
         self.room_allowed_clusters = room_allowed_clusters
         self.target_name = target_name
         self.target_cluster = target_cluster
@@ -1579,7 +1631,11 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
     @override
     @classmethod
     def format_many(
-        cls, errors: col.Iterable[Self], *, verbose: bool = False
+        cls,
+        errors: col.Iterable[Self],
+        *,
+        project: my_proj.Project,
+        verbose: bool = False,
     ) -> str:
         errors = list(errors)
         if not errors:
@@ -1590,7 +1646,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
         rooms_allowed_clusters: dict[str, set[str]] = {}
         for err in errors:
             room = err.room
-            cluster_errors.setdefault(asset_cluster(room), []).append(err)
+            cluster_errors.setdefault(err.room_cluster, []).append(err)
             if room.name not in rooms_allowed_clusters:
                 rooms_allowed_clusters[room.name] = err.room_allowed_clusters
 
@@ -1634,6 +1690,7 @@ class LintCrossrefGraph(my_lint.LinterViolationAsset):
 
 @ui_auto_sink('Lint: room cluster boundaries', cls_ui=CLS_UI)
 def main_ex_lint_crossref_graph(
+    cfg: Config,
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
 ) -> None:
@@ -1650,10 +1707,11 @@ def main_ex_lint_crossref_graph(
     the exact offenders. Also, I recommend re-running the tool after each fix.
     """
     # <snip MAIN_EX_LINT_CROSSREF_GRAPH>
+    lint = my_lint.LinterSession(cfg.project)
 
     # asset clusters lookup
     asset_to_cluster: dict[str, str] = {
-        asset.name: asset_cluster(asset) for asset in assets
+        asset.name: asset_cluster(cfg, asset) for asset in assets
     }
     total_violations = 0
 
@@ -1662,14 +1720,12 @@ def main_ex_lint_crossref_graph(
         if not room_cluster:
             continue
 
-        allowed_clusters = LINT_RULES.get(
-            room_cluster, {room_cluster, 'Common'}
-        )
+        room_allowed = allowed_clusters(cfg, room_cluster)
 
         illegal_assets: list[str] = []
         for reached_name in rg.reachable_names:
             reached_cluster = asset_to_cluster.get(reached_name)
-            if reached_cluster and reached_cluster not in allowed_clusters:
+            if reached_cluster and reached_cluster not in room_allowed:
                 illegal_assets.append(reached_name)
 
         if not illegal_assets:
@@ -1681,7 +1737,7 @@ def main_ex_lint_crossref_graph(
         # pre-resolve active persistent root ids
         active_persistent_roots = [
             (p_name, rg.name2index[p_name])
-            for p_name in EXTRA_ROOTS
+            for p_name in cfg.extra_roots
             if p_name in rg.name2index
         ]
 
@@ -1698,10 +1754,11 @@ def main_ex_lint_crossref_graph(
             )
             if target_idx in room_paths:
                 path_names = [rg.graph[idx] for idx in room_paths[target_idx]]
-                LINT.push(
+                lint.push(
                     LintCrossrefGraph(
                         room=rg.room,
-                        room_allowed_clusters=allowed_clusters,
+                        room_cluster=room_cluster,
+                        room_allowed_clusters=room_allowed,
                         target_name=illegal_name,
                         target_cluster=target_cluster,
                         trace=f'Traceback via Room Root: '
@@ -1717,10 +1774,11 @@ def main_ex_lint_crossref_graph(
                 )
                 if target_idx in p_paths:
                     path_names = [rg.graph[idx] for idx in p_paths[target_idx]]
-                    LINT.push(
+                    lint.push(
                         LintCrossrefGraph(
                             room=rg.room,
-                            room_allowed_clusters=allowed_clusters,
+                            room_cluster=room_cluster,
+                            room_allowed_clusters=room_allowed,
                             target_name=illegal_name,
                             target_cluster=target_cluster,
                             trace=f'Traceback via Persistent Root ({p_name}): '
@@ -1732,10 +1790,11 @@ def main_ex_lint_crossref_graph(
                     break
 
             if not path_found:
-                LINT.push(
+                lint.push(
                     LintCrossrefGraph(
                         room=rg.room,
-                        room_allowed_clusters=allowed_clusters,
+                        room_cluster=room_cluster,
+                        room_allowed_clusters=room_allowed,
                         target_name=illegal_name,
                         target_cluster=target_cluster,
                         trace='Traceback: Path unknown (Possibly '
@@ -1746,7 +1805,7 @@ def main_ex_lint_crossref_graph(
         if total_violations > 1000:
             ui_out('\nLinter exceeded 1000 violations, bailing out')
             break
-    violations_cnt = LINT.consume(LintCrossrefGraph)
+    violations_cnt = lint.consume(LintCrossrefGraph)
     if violations_cnt:
         ui_out(f'Found {violations_cnt} violations')
     else:
@@ -2197,10 +2256,7 @@ class TaskFixMaskObjects(my_task.TaskGeneric):
         self.obj_name = obj.name
         self.obj_has_parent = bool(meta.parent)
         # objects gml files are guaranteed to exist
-        # using read module because this gml was likely already read before
-        self.obj_input_gml = my_proj.read(
-            obj.get_object_gml_file(dir_input_root)
-        )
+        self.obj_input_gml = self.file_input_gml.read_text(encoding='utf-8')
         self.obj_output_gml_file = dir_out_root / obj.get_object_gml_file(
             dir_input_root
         ).relative_to(dir_input_root)
@@ -2251,7 +2307,7 @@ class BuildTasks:
 
 
 @ui_auto_sink('Juicer: generate tasks', cls_ui=CLS_UI)
-def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
+def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
     """Step 3 - ~~Fly~~ Run the thing.
 
     This stage is responsible for mapping out source project, generating
@@ -2282,11 +2338,9 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         if isinstance(asset, AssetExtAudio):
             asset_audio.append(asset)
 
-    img_dry = (
-        JUICER.dir_dry
-        / f'{"img_prod.png" if JUICER.is_prod else "img_dev.png"}'
-    )
-    dir_wet = JUICER.dir_out / JUICER.rel_dir_wet
+    build_type = 'prod' if cfg.juicer.is_prod else 'dev'
+    img_dry = cfg.juicer.dir_dry / f'img_{build_type}.png'
+    dir_wet = cfg.juicer.dir_out / cfg.juicer.rel_dir_wet
     tasks_threaded: list[my_task.Task] = []
     tasks_mp: list[my_task.Task] = []
 
@@ -2294,7 +2348,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     def pth_symlink(pth: Path) -> None:
         """Create a symlink from input project root to build output."""
         # this ain't IO bound operation so do it in-place
-        output_dir = JUICER.dir_out / pth.relative_to(PROJECT)
+        output_dir = cfg.juicer.dir_out / pth.relative_to(cfg.project.root)
         if not output_dir.is_symlink():
             output_dir.symlink_to(pth, target_is_directory=True)
 
@@ -2302,16 +2356,17 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         tasks_threaded.append(
             my_task.TaskCopy(
                 *(
-                    (fl, JUICER.dir_out / fl.relative_to(PROJECT))
+                    (fl, cfg.juicer.dir_out / fl.relative_to(cfg.project.root))
                     for fl in files
-                )
+                ),
+                root=cfg.project.root,
             )
         )
 
     def type_copy_yyd(asset_type: type[my_asset.AssetBuiltin]) -> None:
         copy_rebase(
-            asset_type.type_get_tree_file(PROJECT),
-            asset_type.type_get_index_file(PROJECT),
+            asset_type.type_get_tree_file(cfg.project.root),
+            asset_type.type_get_index_file(cfg.project.root),
         )
 
     def map_root(dir_root: Path) -> None:
@@ -2320,7 +2375,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
             if pth.is_file():
                 # count in project root file and also ini files that are
                 #  generated by extensions; talking about you imgui
-                if pth.suffix in ['.gm82', '.ini']:
+                if pth.suffix in {'.gm82', '.ini'}:
                     copy_rebase(pth)
                 else:
                     raise NotImplementedError('Unknown file in project root')
@@ -2358,7 +2413,8 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
                     tasks_threaded.append(
                         my_task.TaskCopyTree(
                             pth,
-                            JUICER.dir_out / pth.relative_to(PROJECT),
+                            cfg.juicer.dir_out
+                            / pth.relative_to(cfg.project.root),
                         )
                     )
                 case 'settings':
@@ -2376,7 +2432,9 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
     def map_data(dir_data: Path) -> None:
         """Map data folder."""
         # make sure data folder exists
-        (JUICER.dir_out / dir_data.relative_to(PROJECT)).mkdir(exist_ok=True)
+        (cfg.juicer.dir_out / dir_data.relative_to(cfg.project.root)).mkdir(
+            exist_ok=True
+        )
 
         # you wanna change names to reflect paths in AssetExtAudio classes
         for pth in dir_data.iterdir():
@@ -2395,7 +2453,8 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
                     tasks_threaded.append(
                         my_task.TaskCopyTree(
                             pth,
-                            JUICER.dir_out / pth.relative_to(PROJECT),
+                            cfg.juicer.dir_out
+                            / pth.relative_to(cfg.project.root),
                         )
                     )
 
@@ -2405,28 +2464,28 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         type_copy_yyd(my_asset.Background)
 
         for bg in asset_backgrounds:
-            if asset_cluster(bg) == 'Common':
+            if asset_cluster(cfg, bg) == 'Common':
                 # copy as is
                 copy_rebase(
-                    bg.get_background_metadata_file(PROJECT),
-                    bg.get_background_image(PROJECT),
+                    bg.get_background_metadata_file(cfg.project.root),
+                    bg.get_background_image(cfg.project.root),
                 )
                 continue
             # copy metadata
-            copy_rebase(bg.get_background_metadata_file(PROJECT))
+            copy_rebase(bg.get_background_metadata_file(cfg.project.root))
             # copy dry image
             tasks_threaded.append(
-                my_task.TaskCopy((
-                    img_dry,
-                    bg.get_background_image(JUICER.dir_out),
-                ))
+                my_task.TaskCopy(
+                    (img_dry, bg.get_background_image(cfg.juicer.dir_out)),
+                    root=cfg.project.root,
+                )
             )
             # generate wet image
             tasks_mp.append(
                 TaskEncodeBackground(
                     background=bg,
-                    dir_input_root=PROJECT,
-                    dir_wet_root=dir_wet / asset_cluster(bg),
+                    dir_input_root=cfg.project.root,
+                    dir_wet_root=dir_wet / asset_cluster(cfg, bg),
                 )
             )
 
@@ -2436,26 +2495,31 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         type_copy_yyd(my_asset.Sprite)
 
         for sprite in asset_sprites:
-            if asset_cluster(sprite) == 'Common':
+            if asset_cluster(cfg, sprite) == 'Common':
                 # copy as is
                 tasks_threaded.append(
                     my_task.TaskCopyTree(
-                        dir_input=sprite.get_sprite_folder(PROJECT),
-                        dir_output=sprite.get_sprite_folder(JUICER.dir_out),
+                        dir_input=sprite.get_sprite_folder(cfg.project.root),
+                        dir_output=sprite.get_sprite_folder(
+                            cfg.juicer.dir_out
+                        ),
                     )
                 )
                 continue
             # copy metadata
-            copy_rebase(sprite.get_sprite_metadata_file(PROJECT))
+            copy_rebase(sprite.get_sprite_metadata_file(cfg.project.root))
             # copy dry images
-            meta = sprite.get_sprite_metadata(PROJECT)
+            meta = sprite.get_sprite_metadata(cfg.project.root)
             # make separate tasks cause some images are large
             tasks_threaded.extend(
                 my_task.TaskCopy(
                     (
                         img_dry,
-                        sprite.get_sprite_image(JUICER.dir_out, image_index),
+                        sprite.get_sprite_image(
+                            cfg.juicer.dir_out, image_index
+                        ),
                     ),
+                    root=cfg.project.root,
                 )
                 for image_index in range(meta.frames)
             )
@@ -2464,8 +2528,8 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
             tasks_mp.append(
                 TaskEncodeSprite(
                     sprite=sprite,
-                    dir_input_root=PROJECT,
-                    dir_wet_root=dir_wet / asset_cluster(sprite),
+                    dir_input_root=cfg.project.root,
+                    dir_wet_root=dir_wet / asset_cluster(cfg, sprite),
                 )
             )
 
@@ -2473,14 +2537,15 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         """Map music."""
         # no yyd files
         for audio in asset_audio:
-            if asset_cluster(audio) == 'Common':
+            if asset_cluster(cfg, audio) == 'Common':
                 # copy as is
                 copy_rebase(audio.file)
                 continue
             # no metadata or dry stuff
             tasks_mp.append(
                 TaskCompressAudio(
-                    audio=audio, dir_wet_root=dir_wet / asset_cluster(audio)
+                    audio=audio,
+                    dir_wet_root=dir_wet / asset_cluster(cfg, audio),
                 )
             )
 
@@ -2493,17 +2558,17 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
         tasks_threaded.extend(
             TaskFixMaskObjects(
                 obj=obj,
-                dir_input_root=PROJECT,
-                dir_out_root=JUICER.dir_out,
+                dir_input_root=cfg.project.root,
+                dir_out_root=cfg.juicer.dir_out,
             )
             for obj in asset_objects
         )
 
     # ensure output dir exists before creating symlinks
-    JUICER.dir_out.mkdir(parents=True, exist_ok=True)
+    cfg.juicer.dir_out.mkdir(parents=True, exist_ok=True)
 
     # run mapper
-    map_root(PROJECT)
+    map_root(cfg.project.root)
 
     # validate all tasks have unique ids juuust in case
     dupes = [
@@ -2525,7 +2590,7 @@ def main_juicer_gen_tasks(assets: list[Asset]) -> BuildTasks:
 
 
 @ui_auto_sink('Juicer: run tasks', cls_ui=CLS_UI)
-def main_juicer_run(tasks: BuildTasks) -> None:
+def main_juicer_run(cfg: Config, tasks: BuildTasks) -> None:
     """Run generated build tasks.
 
     In contrast, this example is pretty small. Thanks to our brazillion
@@ -2533,7 +2598,7 @@ def main_juicer_run(tasks: BuildTasks) -> None:
     """
     # <snip MAIN_JUICER_RUN>
     dispatcher = my_event_dispatcher.EventDispatcher()
-    cache = my_cache.FileBuildCache(JUICER.file_cache)
+    cache = my_cache.FileBuildCache(cfg.juicer.file_cache)
 
     ui_out('Starting threaded tasks')
     with CLS_UI_ASYNC('Threaded tasks') as ui:
@@ -2554,7 +2619,7 @@ def main_juicer_run(tasks: BuildTasks) -> None:
 
 
 @ui_auto_sink('Juicer: generating gml', cls_ui=CLS_UI)
-def main_juicer_gen_gml(assets: list[Asset]) -> None:
+def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
     """It is time to finally integrate Clunkster into the project.
 
     For this we won't be "creating" scripts, but more like replacing ones
@@ -2569,7 +2634,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
     # <snip MAIN_JUICER_GEN_GML>
     ui_out('Generating Clunkster scripts...')
 
-    dir_scripts = my_asset.Script.type_get_dir(JUICER.dir_out)
+    dir_scripts = my_asset.Script.type_get_dir(cfg.juicer.dir_out)
 
     scr_gen_type = dir_scripts / 'clunkster_gen_type.gml'
     scr_gen_init_audio = dir_scripts / 'clunkster_gen_init_audio.gml'
@@ -2604,11 +2669,11 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
     asset_name_to_file_wet: dict[str, str] = {}
     dehydrated_clusters: set[str] = set()
     for asset in assets:
-        if asset_cluster(asset) == 'Common':
+        if asset_cluster(cfg, asset) == 'Common':
             # skip common assets
             continue
 
-        dehydrated_clusters.add(asset_cluster(asset))
+        dehydrated_clusters.add(asset_cluster(cfg, asset))
 
         # populate specific array
         if isinstance(asset, AssetExtBgm):
@@ -2630,8 +2695,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
         # get wet file location
 
         asset_name_to_file_wet[asset.name] = (
-            JUICER.rel_dir_wet
-            / asset_cluster(asset)
+            cfg.juicer.rel_dir_wet
+            / asset_cluster(cfg, asset)
             / type(asset).type_get_dir_rel()
             / asset_wet_fname(asset)
         ).as_posix()
@@ -2654,12 +2719,10 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
 
     cluster_to_rooms: dict[str, list[str]] = {}
     for room in assets_rooms:
-        room_cluster = asset_cluster(room)
+        room_cluster = asset_cluster(cfg, room)
         cluster_to_rooms.setdefault(room_cluster, []).append(room.name)
 
-        needed_clusters = set(
-            LINT_RULES.get(room_cluster, {room_cluster, 'Common'})
-        )
+        needed_clusters = allowed_clusters(cfg, room_cluster)
         needed_clusters.discard('Common')
 
         gml_deps.extend(
@@ -2684,8 +2747,8 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
         'var _violations;_violations=""',
     ]
 
-    for context_guard, allowed_clusters in CONTEXT_RULES.items():
-        for clusters in allowed_clusters:
+    for context_guard, granted_clusters in cfg.context_rules.items():
+        for clusters in granted_clusters:
             gml_validate.extend(
                 f'if not {context_guard}({room}) _violations+="Failed ctx '
                 f'check on {room} and {context_guard}"+lf'
@@ -2697,21 +2760,12 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
 
     # write the clunkster_gen_init_audio, prepare the code for music/sound
 
-    stub_sfx = (
-        f'data/dry/{"snd_prod.wav" if JUICER.is_prod else "snd_dev.wav"}'
-    )
-    stub_sfx3 = (
-        f'data/dry/{"snd3_prod.ogg" if JUICER.is_prod else "snd3_dev.ogg"}'
-    )
-    stub_bgm = (
-        f'data/dry/{"mus_prod.ogg" if JUICER.is_prod else "mus_dev.ogg"}'
-    )
-    stub_bg = (
-        f'data/dry/{"bg_prod.gmbck" if JUICER.is_prod else "bg_dev.gmbck"}'
-    )
-    stub_spr = (
-        f'data/dry/{"spr_prod.gmspr" if JUICER.is_prod else "spr_dev.gmspr"}'
-    )
+    build_type = 'prod' if cfg.juicer.is_prod else 'dev'
+    stub_sfx = f'data/dry/snd_{build_type}.wav'
+    stub_sfx3 = f'data/dry/snd3_{build_type}.ogg'
+    stub_bgm = f'data/dry/mus_{build_type}.ogg'
+    stub_bg = f'data/dry/bg_{build_type}.gmbck'
+    stub_spr = f'data/dry/spr_{build_type}.gmspr'
 
     gml_gen_init_audio = [
         '///clunkster_gen_init_audio()',
@@ -2750,7 +2804,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
 
         # populate load code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(asset)
+        cluster = asset_cluster(cfg, asset)
         cluster_load_code.setdefault(cluster, []).append(
             f'    sound_replace({asset.name},"{pth_wet}",{kind},{preload}) '
             f'sndreg_apply({asset.name})'
@@ -2767,7 +2821,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
     for asset in assets_spr:
         # no need for any init code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(asset)
+        cluster = asset_cluster(cfg, asset)
         cluster_load_code.setdefault(cluster, []).append(
             f'    sprite_replace_sprite({asset.name},"{pth_wet}")'
         )
@@ -2778,7 +2832,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
     for asset in assets_bg:
         # no need for any init code
         pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(asset)
+        cluster = asset_cluster(cfg, asset)
         cluster_load_code.setdefault(cluster, []).append(
             f'    background_replace_background({asset.name},"{pth_wet}")'
         )
@@ -2828,7 +2882,7 @@ def main_juicer_gen_gml(assets: list[Asset]) -> None:
 
 
 @ui_auto_sink('Juicer: compiling the game', cls_ui=CLS_UI)
-def main_juicer_gm_compile() -> None:
+def main_juicer_gm_compile(cfg: Config) -> None:
     r"""This is it Luigi.
 
     Game Maker's CLI for compiling is:
@@ -2849,8 +2903,8 @@ def main_juicer_gm_compile() -> None:
     # <snip MAIN_JUICER_GM_COMPILE>
     ui_out('Jostling Game Maker 8.2 compiler...')
 
-    project_file = JUICER.dir_out / JUICER.fname_gm82
-    output_exe = JUICER.dir_out / 'game.exe'
+    project_file = cfg.juicer.dir_out / cfg.juicer.fname_gm82
+    output_exe = cfg.juicer.dir_out / 'game.exe'
 
     custom_path = os.getenv('GM82_PATH')
     if custom_path:
@@ -2890,7 +2944,7 @@ def main_juicer_gm_compile() -> None:
     ui_out('Build completely successfully!')
     subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
         [str(output_exe)],
-        cwd=JUICER.dir_out,
+        cwd=cfg.juicer.dir_out,
         creationflags=subprocess.DETACHED_PROCESS
         | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
@@ -2908,7 +2962,9 @@ class BMTile:
     height: int
 
 
-def main_bm_get(assets: list[Asset], dependencies: list[Dependency]) -> None:
+def main_bm_get(
+    cfg: Config, assets: list[Asset], dependencies: list[Dependency]
+) -> None:
     """Get mergeable backgrounds."""
     bgs_used_code: set[str] = set()
     for dep in dependencies:
@@ -2933,8 +2989,8 @@ def main_bm_get(assets: list[Asset], dependencies: list[Dependency]) -> None:
     for room in assets:
         if not isinstance(room, my_asset.Room):
             continue
-        for layer in room.get_room_layers(PROJECT):
-            for tile in room.get_room_layer(PROJECT, layer):
+        for layer in room.get_room_layers(cfg.project.root):
+            for tile in room.get_room_layer(cfg.project.root, layer):
                 if tile.bg not in bgs_unused:
                     continue
                 bm_tiles.add(
@@ -2949,30 +3005,31 @@ def main_bm_get(assets: list[Asset], dependencies: list[Dependency]) -> None:
     pprint(sorted(bm_tiles))
 
 
-def _run_tutorials() -> None:
-    main_ex_start()
-    main_ex_aliases()
-
-    assets = main_ex_aliases()
-    main_ex_scan_sync(assets)
+def _run_tutorials(cfg: Config) -> None:
+    main_ex_start(cfg)
+    assets = main_ex_aliases(cfg)
+    main_ex_scan_sync(cfg, assets)
 
 
 def test_tutorials() -> None:
     """Ensure the tutorial snippets don't rot."""
-    global PROJECT
     dummy_proj = Path(__file__).parent / 'tests' / 'dummy_project'
     if not dummy_proj.exists():
         return  # skip if dummy project isn't set up yet
-    PROJECT = dummy_proj
 
     # TODO dummy project and config
+    cfg = Config(
+        project=my_proj.Project(dummy_proj),
+        alias=ALIAS,
+        lint_rules=LINT_RULES,
+        context_rules=CONTEXT_RULES,
+        extra_roots=EXTRA_ROOTS,
+        juicer=JUICER,
+    )
+    _run_tutorials(cfg)
 
-    _run_tutorials()
 
-
-def _load_private(config_dir: Path) -> None:
-    global LINT_RULES, CONTEXT_RULES, JUICER
-
+def _load_private(config_dir: Path) -> Config:
     file_private_config = config_dir / 'config.json'
     if not file_private_config.exists():
         raise FileNotFoundError(
@@ -2981,11 +3038,7 @@ def _load_private(config_dir: Path) -> None:
 
     config = json.loads(file_private_config.read_text())
 
-    # PROJECT
-    global_set_project(config_dir.parent / 'source')
-
-    # JUICER
-    JUICER = ConfJuicer(
+    juicer = ConfJuicer(
         is_prod=False,
         dir_out=config_dir.parent / '_build',
         dir_dry=JUICER.dir_dry,  # og dir
@@ -2994,32 +3047,30 @@ def _load_private(config_dir: Path) -> None:
         fname_gm82=config['fname_gm82'],
     )
 
-    # ALIAS
     file_private_alias = config_dir / 'alias.json'
-    global_set_alias(
-        json.loads(file_private_alias.read_text(encoding='utf-8'))
-    )
+    alias = json.loads(file_private_alias.read_text(encoding='utf-8'))
 
-    # LINT_RULES
     file_private_lint_rules = config_dir / 'lint_rules.json'
     rules = json.loads(file_private_lint_rules.read_text(encoding='utf-8'))
-    LINT_RULES = {
-        cluster: set(allowed_clusters)
-        for cluster, allowed_clusters in rules.items()
-    }
+    lint_rules = {cluster: set(allowed) for cluster, allowed in rules.items()}
 
-    # CONTEXT RULES
     file_private_context_rules = config_dir / 'context_rules.json'
     rules = json.loads(file_private_context_rules.read_text(encoding='utf-8'))
-    CONTEXT_RULES = {
-        cluster: set(allowed_clusters)
-        for cluster, allowed_clusters in rules.items()
-    }
+    context_rules = {guard: set(granted) for guard, granted in rules.items()}
+
+    return Config(
+        project=my_proj.Project(config_dir.parent / 'source'),
+        alias=alias,
+        lint_rules=lint_rules,
+        context_rules=context_rules,
+        extra_roots=EXTRA_ROOTS,
+        juicer=juicer,
+    )
 
 
 def main() -> None:
     """Pipeline private entrypoint."""
-    _load_private(Path(sys.argv[1]))
+    cfg = _load_private(Path(sys.argv[1]).resolve())
 
     # allow testing tutorials on private data as well
     is_test = False
@@ -3031,28 +3082,28 @@ def main() -> None:
             is_check = True
 
     if is_test:
-        _run_tutorials()
+        _run_tutorials(cfg)
         return
 
     # main_ex_setup_rich()
-    # main_ex_lint_tree()
-    # assets = main_ex_aliases()
-    # deps = main_ex_scan_sync(assets)
-    # bgs = main_bm_get(assets, deps)
+    # main_ex_lint_tree(cfg)
+    # assets = main_ex_aliases(cfg)
+    # deps = main_ex_scan_sync(cfg, assets)
+    # bgs = main_bm_get(cfg, assets, deps)
     # return
 
     main_ex_setup_rich()
-    main_ex_lint_tree()
-    assets = main_ex_aliases()
+    main_ex_lint_tree(cfg)
+    assets = main_ex_aliases(cfg)
     if is_check:
-        deps = main_ex_scan_sync(assets)
-        # main_ex_lint_unused(deps, assets)
-        main_ex_lint_crossref(deps)
+        deps = main_ex_scan_sync(cfg, assets)
+        # main_ex_lint_unused(cfg, deps, assets)
+        main_ex_lint_crossref(cfg, deps)
 
-        room_data = main_ex_graph(assets, deps)
+        room_data = main_ex_graph(cfg, assets, deps)
 
-        main_ex_lint_unused_graph(assets, room_data)
-        main_ex_lint_crossref_graph(assets, room_data)
+        main_ex_lint_unused_graph(cfg, assets, room_data)
+        main_ex_lint_crossref_graph(cfg, assets, room_data)
 
         print('All ok, exiting regardless :D')
         return
@@ -3060,10 +3111,10 @@ def main() -> None:
     # cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
     # main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
     # main_juicer2_mp(assets, cl_cache, cl_processors)
-    tasks = main_juicer_gen_tasks(assets)
-    main_juicer_run(tasks)
-    main_juicer_gen_gml(assets)
-    main_juicer_gm_compile()
+    tasks = main_juicer_gen_tasks(cfg, assets)
+    main_juicer_run(cfg, tasks)
+    main_juicer_gen_gml(cfg, assets)
+    main_juicer_gm_compile(cfg)
 
 
 if __name__ == '__main__':

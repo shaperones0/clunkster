@@ -8,8 +8,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import override
 
-from clunkster import project
-
 # modification time (ns), size, file id
 FileStat = tuple[int, int, int]
 
@@ -18,6 +16,13 @@ def file_stat(path: Path) -> FileStat:
     """Get file's stat used to detect changes without reading the file."""
     st = path.stat()
     return st.st_mtime_ns, st.st_size, st.st_ino
+
+
+def path_id(path: Path, root: Path | None) -> str:
+    """Format path for task ids: POSIX relative to ``root`` if inside it."""
+    if root is None or not path.is_relative_to(root):
+        return str(path)
+    return path.relative_to(root).as_posix()
 
 
 def file_hash(*paths: Path) -> str:
@@ -120,10 +125,13 @@ class TaskGeneric(Task, ABC):
 class TaskCopy(TaskGeneric):
     """File copy task."""
 
-    def __init__(self, *files: tuple[Path, Path]) -> None:
+    def __init__(
+        self, *files: tuple[Path, Path], root: Path | None = None
+    ) -> None:
         """Initialize file copy task.
 
         :param files: Pairs of (input file, output file).
+        :param root: Project root; paths inside it are shortened in task id.
         """
         files_input, files_output = zip(*files, strict=True)
 
@@ -143,8 +151,8 @@ class TaskCopy(TaskGeneric):
         self.files = files
         super().__init__(
             task_id=f'copy_{
-                ":".join(project.try_rel(file) for file in files_input)
-            }->{":".join(project.try_rel(file) for file in files_output)}',
+                ":".join(path_id(file, root) for file in files_input)
+            }->{":".join(path_id(file, root) for file in files_output)}',
             inputs=files_input,
             outputs=files_output,
         )

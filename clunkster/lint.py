@@ -9,8 +9,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar, TypeVar, override
 
-from clunkster import project
 from clunkster.asset import Asset, AssetHasPath
+from clunkster.project import Project
 from clunkster.text.location import Location
 
 TError = TypeVar('TError', bound='LinterViolation')
@@ -35,6 +35,7 @@ class LinterViolation(ABC):
         cls: type[TError],
         errors: col.Iterable[TError],
         *,
+        project: Project,
         verbose: bool = False,
     ) -> str:
         """Compose an error message from a block of linter errors.
@@ -55,27 +56,27 @@ class LinterViolation(ABC):
         ]
         for err in errors:
             if verbose:
-                lines.append(err.format_verbose())
+                lines.append(err.format_verbose(project))
             else:
-                lines.append(f'  {err.format_li()}')
+                lines.append(f'  {err.format_li(project)}')
         return '\n'.join(lines)
 
-    def format_li(self) -> str:
+    def format_li(self, project: Project) -> str:
         """Compose an error message to appear in a standard error list.
 
         Default implementation uses builtin formatter.
         """
-        return linter_format_li(self)
+        return linter_format_li(self, project)
 
-    def format_verbose(self) -> str:
+    def format_verbose(self, project: Project) -> str:
         """Compose verbose error message.
 
         Default implementation falls back to list item format ``format_li``.
         Linter bound to a location in a file should output part of the file.
         """
-        return self.format_li()
+        return self.format_li(project)
 
-    def sort_key(self) -> tuple[str, ...]:
+    def sort_key(self, project: Project) -> tuple[str, ...]:
         """Generate a sort key for this violation."""
         return (type(self).rule,)
 
@@ -98,7 +99,7 @@ class LinterViolationFile(LinterViolation, ABC):
         """File for this linter violation."""
 
     @override
-    def sort_key(self) -> tuple[str, ...]:
+    def sort_key(self, project: Project) -> tuple[str, ...]:
         """Generate a sort key for this violation.
 
         This one adds file path.
@@ -129,7 +130,7 @@ class LinterViolationAsset(LinterViolation, ABC):
         return '/'.join((type(asset).type_name(), asset.name))
 
     @override
-    def sort_key(self) -> tuple[str, ...]:
+    def sort_key(self, project: Project) -> tuple[str, ...]:
         """Generate a sort key for this violation.
 
         This one adds asset name (or path).
@@ -152,7 +153,7 @@ class LinterViolationLocated(LinterViolationFile, ABC):
         return self.location.file
 
     @override
-    def format_verbose(self) -> str:
+    def format_verbose(self, project: Project) -> str:
         """Compose verbose error message.
 
         Adds few lines of the source file to the output.
@@ -162,7 +163,7 @@ class LinterViolationLocated(LinterViolationFile, ABC):
         lines_slice = lines[
             max(0, loc.loc_line - 3) : min(len(lines), loc.loc_line + 3)
         ]
-        output_lines: list[str] = [self.format_li()]
+        output_lines: list[str] = [self.format_li(project)]
 
         for num, line in lines_slice:
             output_lines.append(f'{num:>3}|{line}')
@@ -171,7 +172,7 @@ class LinterViolationLocated(LinterViolationFile, ABC):
         return '\n'.join(output_lines)
 
     @override
-    def sort_key(self) -> tuple[str, ...]:
+    def sort_key(self, project: Project) -> tuple[str, ...]:
         """Generate a sort key for this violation.
 
         This one adds location data, or asset path, if such is present.
@@ -187,7 +188,7 @@ class LinterViolationLocated(LinterViolationFile, ABC):
         return tuple(key)
 
 
-def linter_format_li(violation: LinterViolation) -> str:
+def linter_format_li(violation: LinterViolation, project: Project) -> str:
     """Formats linter list item representation, accounting for subclasses."""
     parts: list[str] = []
     if isinstance(violation, LinterViolationFile):
@@ -230,7 +231,11 @@ class DiagnosticConsumer(ABC):
 
     @abstractmethod
     def consume(
-        self, batch: DiagnosticBatch, *, verbose: bool = False
+        self,
+        batch: DiagnosticBatch,
+        *,
+        project: Project,
+        verbose: bool = False,
     ) -> None:
         """Consume a diagnostic batch."""
 
@@ -254,30 +259,41 @@ class CliConsumer(DiagnosticConsumer):
 
     @override
     def consume(
-        self, batch: DiagnosticBatch, *, verbose: bool = False
+        self,
+        batch: DiagnosticBatch,
+        *,
+        project: Project,
+        verbose: bool = False,
     ) -> None:
         if batch.infos:
-            print(err_format(batch.infos, verbose=verbose))
+            print(err_format(batch.infos, project=project, verbose=verbose))
         if batch.warnings:
             warnings.warn(
-                '\n' + err_format(batch.warnings, verbose=verbose),
+                '\n'
+                + err_format(batch.warnings, project=project, verbose=verbose),
                 stacklevel=1,
             )
         if batch.errors:
             raise LinterFoundError(
-                '\n' + err_format(batch.errors, verbose=verbose), batch.errors
+                '\n'
+                + err_format(batch.errors, project=project, verbose=verbose),
+                batch.errors,
             )
 
 
 class LinterSession:
     """Linter session."""
 
-    def __init__(self, consumer: DiagnosticConsumer | None = None) -> None:
+    def __init__(
+        self, project: Project, consumer: DiagnosticConsumer | None = None
+    ) -> None:
         """Initialize linter session.
 
+        :param project: Linted project, used for formatting paths.
         :param consumer: Consumer for found violations. Defaults to simple
           ``CliConsumer``.
         """
+        self.project = project
         self.consumer: DiagnosticConsumer = (
             consumer if consumer is not None else CliConsumer()
         )
@@ -321,7 +337,7 @@ class LinterSession:
         :return: Number of errors collected.
         """
         batch = self.collect(*cl, flush=flush)
-        self.consumer.consume(batch, verbose=verbose)
+        self.consumer.consume(batch, project=self.project, verbose=verbose)
         return batch.len_total()
 
     def flush(self, *cl: type[LinterViolation]) -> int:
@@ -371,11 +387,15 @@ class LinterSession:
 
 
 def err_format(
-    errors: col.Iterable[LinterViolation], *, verbose: bool = False
+    errors: col.Iterable[LinterViolation],
+    *,
+    project: Project,
+    verbose: bool = False,
 ) -> str:
     """Turn errors into messages.
 
     :param errors: Errors to turn into messages.
+    :param project: Linted project, used for formatting paths.
     :param verbose: Whether to use verbose output.
     :return: Composed text.
     """
@@ -385,11 +405,11 @@ def err_format(
             type(err), []
         ).append(err)
     for cls_grouped in grouped.values():
-        for cls, violations in cls_grouped.items():
-            violations.sort(key=cls.sort_key)
+        for violations in cls_grouped.values():
+            violations.sort(key=lambda v: v.sort_key(project))
 
     return '\n\n'.join(
-        cls.format_many(violations, verbose=verbose)
+        cls.format_many(violations, project=project, verbose=verbose)
         for cls_grouped in grouped.values()
         for cls, violations in cls_grouped.items()
     )

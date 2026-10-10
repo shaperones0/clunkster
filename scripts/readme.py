@@ -1378,10 +1378,10 @@ Examples are generated from the [main pipeline file](https://github.com/shaperon
 
 This is the setup section. It covers settings up the project, linters, and other pipeline shims. Of these, mandatory ones are:
 
-- Project
+- Config
 - Widgets
 
-{exs.code_begin('ex_setup_main', 'Setup: Project')}
+{exs.code_begin('ex_setup_main', 'Setup: Config')}
 {docs['main_ex_setup_main']}
 {
         exs.render(
@@ -1394,7 +1394,7 @@ This is the setup section. It covers settings up the project, linters, and other
 {
         exs.code_reg_stub_src(
             {
-                'PROJECT': gen_stub_var('PROJECT: Path', 'LINT: my_lint.LinterSession'),
+                'PROJECT': gen_stub_cls('Config'),
             }
         )
     }
@@ -1617,7 +1617,7 @@ validations based on them.
 {
         exs.code_reg_stub_src(
             {
-                'LINT_RULES': gen_stub_var('LINT_RULES: dict[str, set[str]]'),
+                'LINT_RULES': gen_stub_func('allowed_clusters'),
                 'CONTEXT_RULES': gen_stub_var('CONTEXT_RULES: dict[str, set[str]]'),
             }
         )
@@ -1635,8 +1635,8 @@ checks based on more advanced usage tracing.
 {
         exs.render(
             (
+                exs.stub('PROJECT'),
                 exs.stub('LINT_RULES'),
-                exs.stub('CONTEXT_RULES'),
                 snips['EXTRA_ROOTS'],
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
@@ -1665,10 +1665,8 @@ checks based on more advanced usage tracing.
         exs.render(
             (
                 exs.stub('PROJECT'),
-                exs.stub('LINT_RULES'),
-                exs.stub('CONTEXT_RULES'),
-                exs.stub('EXTRA_ROOTS'),
                 exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('CLS_DEPENDENCY'),
                 exs.stub('CLS_ROOM_GRAPH'),
                 exs.stub('CLS_LINT_UNUSED'),
@@ -1687,8 +1685,6 @@ checks based on more advanced usage tracing.
             (
                 exs.stub('PROJECT'),
                 exs.stub('LINT_RULES'),
-                exs.stub('CONTEXT_RULES'),
-                exs.stub('EXTRA_ROOTS'),
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('DEF_ASSET_SORT_KEY'),
@@ -1732,7 +1728,7 @@ ___
         )
     }
 
-Notice how none of both of the functions or Tasks above depend on `PROJECT`, or any other global state. Awesome!
+Notice how none of the functions or Tasks above depend on `Config`, or any other pipeline state. Awesome!
 
 ___
 
@@ -1790,6 +1786,7 @@ ___
 {
         exs.render(
             (
+                exs.stub('PROJECT'),
                 exs.stub('GLOB_CLS_UI'),
                 exs.stub('VAR_JUICE_BUILD_TASKS'),
                 exs.stub('CLS_JUICER_CONFIG'),
@@ -1803,8 +1800,8 @@ ___
 {
         exs.render(
             (
+                exs.stub('PROJECT'),
                 exs.stub('LINT_RULES'),
-                exs.stub('CONTEXT_RULES'),
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('DEF_ASSET_WET_FNAME'),
@@ -1820,6 +1817,7 @@ ___
 {
         exs.render(
             (
+                exs.stub('PROJECT'),
                 exs.stub('CLS_JUICER_CONFIG'),
                 snips['MAIN_JUICER_GM_COMPILE'],
             )
