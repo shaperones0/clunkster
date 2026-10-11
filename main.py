@@ -3,15 +3,19 @@
 import collections
 import collections.abc as col
 import concurrent.futures
+import contextlib
 import dataclasses
 import functools as ft
+import hashlib
 import itertools as it
 import json
 import logging
 import os
+import queue
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
+import threading
 import time
 import warnings
 from abc import ABC
@@ -20,6 +24,7 @@ from pprint import pprint
 from typing import override
 
 import rustworkx as rx
+import watchfiles
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
 from gmcodec import core as gmc_core
 from gmcodec import file as gmc_file
@@ -34,6 +39,7 @@ from rich.logging import RichHandler
 from clunkster import asset as my_asset
 from clunkster import lint as my_lint
 from clunkster import project as my_proj
+from clunkster.analyze import scan_cache as my_scan_cache
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
 from clunkster.parse import tree as my_parse_tree
@@ -41,6 +47,7 @@ from clunkster.pipeline import cache as my_cache
 from clunkster.pipeline import run as my_run
 from clunkster.pipeline import task as my_task
 from clunkster.text import location as my_location
+from clunkster.text.line import LineMap
 
 
 # <snip PROJECT>
@@ -60,6 +67,8 @@ class Config:
     extra_roots: set[str]
     # Game Juicer settings (see JUICER)
     juicer: ConfJuicer
+    # reference scan cache file
+    scan_cache: Path
     # top level folder -> cluster name, derived from alias
     alias_inv: dict[str, str] = dataclasses.field(init=False)
 
@@ -98,6 +107,7 @@ def main_ex_setup_main() -> Config:
         context_rules=CONTEXT_RULES,
         extra_roots=EXTRA_ROOTS,
         juicer=JUICER,
+        scan_cache=Path(__file__).parent / 'scan_cache.json',
     )
     # <md>
     # Values for the rest of the fields are introduced in the examples that
@@ -750,8 +760,59 @@ def main_ex_aliases(cfg: Config) -> list[Asset]:
     return assets
 
 
+# <snip DEFS_SCAN_FILES>
+# scanning more files than this is done in a process pool
+SCAN_POOL_MIN_FILES = 500
+
+# automaton of the scanning process, see _scan_init
+_SCAN_AUTOMATON: Automaton | None = None
+
+
+def _scan_init(names: col.Iterable[str]) -> None:
+    """Build the automaton for searching names (once per process)."""
+    global _SCAN_AUTOMATON
+    _SCAN_AUTOMATON = Automaton()
+    for name in names:
+        _SCAN_AUTOMATON.add_word(name, name)
+    _SCAN_AUTOMATON.make_automaton()
+
+
+def _scan_file(file: Path) -> tuple[my_scan_cache.FileMatch, ...]:
+    """Find references in a file."""
+    assert _SCAN_AUTOMATON is not None, 'call _scan_init first'
+    text = file.read_text(encoding='utf-8')
+    line_map = LineMap.from_text(text)
+    return tuple(
+        my_scan_cache.FileMatch(
+            match.idx,
+            *line_map.get_line_col(match.idx),
+            match.target,
+            match.contexts,
+        )
+        for match in my_scan_dep.scan(text, _SCAN_AUTOMATON.iter(text))
+    )
+
+
+def scan_files(
+    names: col.Sequence[str], files: col.Sequence[Path]
+) -> list[tuple[my_scan_cache.FileMatch, ...]]:
+    """Find references to given names in files, return matches per file."""
+    if len(files) < SCAN_POOL_MIN_FILES:
+        _scan_init(names)
+        return [_scan_file(file) for file in progress(files, 'Scanning')]
+    with concurrent.futures.ProcessPoolExecutor(
+        initializer=_scan_init, initargs=(names,)
+    ) as pool:
+        return list(pool.map(_scan_file, files, chunksize=64))
+
+
+# </snip DEFS_SCAN_FILES>
+
+
 @step('Scanning references')
-def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
+def main_ex_scan(
+    cfg: Config, assets: list[Asset], scan_cache: my_scan_cache.ScanCache
+) -> list[Dependency]:
     """Reference scanner.
 
     In order to run dependency linters, we need to scan the actual references.
@@ -767,52 +828,62 @@ def main_ex_scan_sync(cfg: Config, assets: list[Asset]) -> list[Dependency]:
     technically reference every asset, but don't instantiate them,
     we added a special directive: ``//!clunkster: ignore``. Add it in any
     GML scripts that should be skipped.
+
+    Scanning every file on every run is slow-ish, so results are cached
+    per file in ``ScanCache``, and only files whose stat changed are
+    rescanned. Changing the set of asset names (e.g. adding an asset)
+    rescans everything, in parallel. Saving the cache is left to the caller.
     """
-    # <snip MAIN_EX_SCAN_SYNC>
-    automaton = Automaton()
-    for asset in assets:
-        automaton.add_word(asset.name, asset.name)
-    automaton.make_automaton()
+    # <snip MAIN_EX_SCAN>
+    names = sorted(asset.name for asset in assets)
+    scan_cache.set_names(
+        hashlib.md5('\n'.join(names).encode('utf-8')).hexdigest()
+    )
 
-    dependencies: list[Dependency] = []
-
-    name2asset = {asset.name: asset for asset in assets}
-    total_matches = 0
     scans = tuple(
         (asset, file_path)
         for asset in assets
         for file_path in asset_scannables(asset, cfg.project.root)
     )
 
-    for asset, file_path in progress(scans):
-        text = cfg.project.read(file_path)
-        line_map = cfg.project.line_map(file_path)
-        matches: list[my_scan_dep.DependencyMatch] = list(
-            my_scan_dep.scan(
-                text,
-                automaton.iter(text),
-            )
+    # look up cached matches, stat files before reading them
+    file_matches: dict[Path, tuple[my_scan_cache.FileMatch, ...]] = {}
+    stale: list[tuple[Path, my_task.FileStat]] = []
+    for _, file_path in scans:
+        stat = my_task.file_stat(file_path)
+        matches = scan_cache.get(file_path, stat)
+        if matches is None:
+            stale.append((file_path, stat))
+        else:
+            file_matches[file_path] = matches
+    log.info('%d file(s) cached, %d to scan', len(file_matches), len(stale))
+
+    stale_files = [file_path for file_path, _ in stale]
+    for (file_path, stat), matches in zip(
+        stale, scan_files(names, stale_files), strict=True
+    ):
+        scan_cache.put(file_path, stat, matches)
+        file_matches[file_path] = matches
+
+    name2asset = {asset.name: asset for asset in assets}
+    dependencies = [
+        Dependency(
+            location=my_location.Location(
+                file=file_path,
+                loc_index=match.idx,
+                loc_line=match.line,
+                loc_column=match.column,
+            ),
+            source_asset=asset,
+            target_asset=name2asset[match.target],
+            contexts=match.contexts,
         )
+        for asset, file_path in scans
+        for match in file_matches[file_path]
+    ]
 
-        total_matches += len(matches)
-        for match in matches:
-            line, column = line_map.get_line_col(match.idx)
-            dependencies.append(
-                Dependency(
-                    location=my_location.Location(
-                        file=file_path,
-                        loc_index=match.idx,
-                        loc_line=line,
-                        loc_column=column,
-                    ),
-                    source_asset=asset,
-                    target_asset=name2asset[match.target],
-                    contexts=match.contexts,
-                )
-            )
-
-    log.info('Found %d total dependency references.', total_matches)
-    # </snip MAIN_EX_SCAN_SYNC>
+    log.info('Found %d total dependency references.', len(dependencies))
+    # </snip MAIN_EX_SCAN>
     return dependencies
 
 
@@ -1060,16 +1131,16 @@ def main_ex_graph(
             asset_room
         )
 
-    log.info('Clusterset to rooms:')
+    log.debug('Clusterset to rooms:')
     for cluster_set, rooms in cluster_groups.items():
-        log.info(' '.join(sorted(cluster_set)))
+        log.debug(' '.join(sorted(cluster_set)))
         for room in rooms:
-            log.info('  %s', room.name)
+            log.debug('  %s', room.name)
 
     room_graph_data: dict[str, RoomGraph] = {}
 
     # process clustersets
-    log.info('Building graphs:')
+    log.debug('Building graphs:')
     for cluster_set, rooms in cluster_groups.items():
         graph, name_to_index = build_graph(set(cluster_set))
 
@@ -1078,7 +1149,7 @@ def main_ex_graph(
             name_to_index[p] for p in cfg.extra_roots if p in name_to_index
         ]
 
-        log.info('- %s', ' '.join(sorted(cluster_set)))
+        log.debug('- %s', ' '.join(sorted(cluster_set)))
         for room in progress(rooms):
             room_name = room.name
             if room_name not in name_to_index:
@@ -2376,7 +2447,7 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
 
 
 @step('Juicer: compiling the game')
-def main_juicer_gm_compile(cfg: Config) -> None:
+def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
     r"""This is it Luigi.
 
     Game Maker's CLI for compiling is:
@@ -2393,6 +2464,9 @@ def main_juicer_gm_compile(cfg: Config) -> None:
 
     but I also added a new environment variable ``GM82_PATH`` just for that
     one guy.
+
+    Returns the launched game's process, so that the development loop can
+    close it before the next build.
     """
     # <snip MAIN_JUICER_GM_COMPILE>
     log.info('Jostling Game Maker 8.2 compiler...')
@@ -2436,7 +2510,7 @@ def main_juicer_gm_compile(cfg: Config) -> None:
         ) from e
 
     log.info('Build completely successfully!')
-    subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
+    return subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
         [str(output_exe)],
         cwd=cfg.juicer.dir_out,
         creationflags=subprocess.DETACHED_PROCESS
@@ -2502,7 +2576,9 @@ def main_bm_get(
 def _run_tutorials(cfg: Config) -> None:
     main_ex_start(cfg)
     assets = main_ex_aliases(cfg)
-    main_ex_scan_sync(cfg, assets)
+    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
+    main_ex_scan(cfg, assets, scan_cache)
+    scan_cache.save()
 
 
 def test_tutorials() -> None:
@@ -2519,6 +2595,7 @@ def test_tutorials() -> None:
         context_rules=CONTEXT_RULES,
         extra_roots=EXTRA_ROOTS,
         juicer=JUICER,
+        scan_cache=Path(__file__).parent / 'scan_cache.json',
     )
     _run_tutorials(cfg)
 
@@ -2559,56 +2636,238 @@ def _load_private(config_dir: Path) -> Config:
         context_rules=context_rules,
         extra_roots=EXTRA_ROOTS,
         juicer=juicer,
+        scan_cache=config_dir.parent / 'clunkster_scan_cache.json',
     )
 
 
-def main() -> None:
-    """Pipeline private entrypoint."""
-    cfg = _load_private(Path(sys.argv[1]).resolve())
-
-    # allow testing tutorials on private data as well
-    is_test = False
-    is_check = False
-    if len(sys.argv) > 2:
-        if sys.argv[2] == 'test':
-            is_test = True
-        elif sys.argv[2] == 'check':
-            is_check = True
-
-    if is_test:
-        _run_tutorials(cfg)
-        return
-
-    # setup_output()
-    # main_ex_lint_tree(cfg)
-    # assets = main_ex_aliases(cfg)
-    # deps = main_ex_scan_sync(cfg, assets)
-    # bgs = main_bm_get(cfg, assets, deps)
-    # return
-
-    setup_output()
+# <snip DEF_RUN_CHECK>
+def run_check(cfg: Config, scan_cache: my_scan_cache.ScanCache) -> list[Asset]:
+    """Run all linters, return the assets."""
     main_ex_lint_tree(cfg)
     assets = main_ex_aliases(cfg)
-    if is_check:
-        deps = main_ex_scan_sync(cfg, assets)
-        # main_ex_lint_unused(cfg, deps, assets)
-        main_ex_lint_crossref(cfg, deps)
+    deps = main_ex_scan(cfg, assets, scan_cache)
+    # main_ex_lint_unused(cfg, deps, assets)
+    main_ex_lint_crossref(cfg, deps)
 
-        room_data = main_ex_graph(cfg, assets, deps)
+    room_data = main_ex_graph(cfg, assets, deps)
 
-        main_ex_lint_unused_graph(cfg, assets, room_data)
-        main_ex_lint_crossref_graph(cfg, assets, room_data)
+    main_ex_lint_unused_graph(cfg, assets, room_data)
+    main_ex_lint_crossref_graph(cfg, assets, room_data)
+    return assets
 
-        print('All ok, exiting regardless :D')
-        return
 
-    # cl_cache, cl_ignore, cl_processors = main_juicer2_cls()
-    # main_juicer2_copy(cl_cache, cl_ignore, cl_processors)
-    # main_juicer2_mp(assets, cl_cache, cl_processors)
+def run_build(
+    cfg: Config, scan_cache: my_scan_cache.ScanCache
+) -> subprocess.Popen[bytes]:
+    """Run all linters, build the game and launch it."""
+    assets = run_check(cfg, scan_cache)
     tasks = main_juicer_gen_tasks(cfg, assets)
     main_juicer_run(cfg, tasks)
     main_juicer_gen_gml(cfg, assets)
-    main_juicer_gm_compile(cfg)
+    return main_juicer_gm_compile(cfg)
+
+
+def project_watch_filter(root: Path) -> watchfiles.BaseFilter:
+    """Filter for watching project's source files."""
+
+    class ProjectFilter(watchfiles.DefaultFilter):
+        @override
+        def __call__(self, change: watchfiles.Change, path: str) -> bool:
+            # GameMaker's cache isn't part of the project, and the game
+            #  writes saves into save folder (symlinked into the build)
+            top = Path(path).relative_to(root).parts[:1]
+            return super().__call__(change, path) and top not in {
+                ('cache',),
+                ('save',),
+            }
+
+    return ProjectFilter()
+
+
+# </snip DEF_RUN_CHECK>
+
+
+def main_ex_watch(cfg: Config) -> None:
+    """Rerun all linters whenever project files change.
+
+    Watch mode makes cluster violations show up right after saving, not at
+    build time. Thanks to the scan cache only changed files get rescanned,
+    so reruns take a second or two.
+
+    Linter errors don't stop the watch; it reports them and waits for the
+    next change. Uses [watchfiles](https://github.com/samuelcolvin/watchfiles)
+    for watching.
+    """
+    # <snip MAIN_EX_WATCH>
+    root = cfg.project.root
+    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
+
+    def check() -> None:
+        errors = 0
+        try:
+            run_check(cfg, scan_cache)
+        except my_lint.LinterFoundError as e:
+            errors = len(e.violations)
+        except Exception:
+            # e.g. a file caught in the middle of being saved
+            log.exception('Check failed')
+        if errors:
+            log.error('Found %d error(s)', errors)
+        log.info('Watching %s for changes, Ctrl+C to stop', root)
+
+    # the watcher yields an empty set on timeout, which is used to run the
+    #  first check once it's watching, so that no changes are missed
+    first = True
+    watcher = watchfiles.watch(
+        root,
+        watch_filter=project_watch_filter(root),
+        yield_on_timeout=True,
+        rust_timeout=200,
+    )
+    try:
+        for changes in watcher:
+            if first:
+                first = False
+                check()
+                continue
+            if not changes:
+                continue
+            if CONSOLE.is_terminal:
+                CONSOLE.clear()
+            log.info('%d file(s) changed', len(changes))
+            # fresh project, so that file reads aren't cached from before
+            cfg = dataclasses.replace(cfg, project=my_proj.Project(root))
+            check()
+    finally:
+        # saved once on exit, saving on every change takes too long
+        scan_cache.save()
+    # </snip MAIN_EX_WATCH>
+
+
+def main_ex_dev(cfg: Config) -> None:
+    """Build and run the game on demand.
+
+    Development loop for the frequent "small edit, build, play" cycle:
+    press Enter to check and build the project and launch the game. The
+    game launched by the previous build is closed first, since the compiler
+    can't overwrite a running ``game.exe``. Caches stay in memory between
+    builds, so only what changed gets processed.
+
+    Saved changes are reported as they happen. Type ``a`` to toggle
+    building automatically after every save, and ``q`` to quit.
+    """
+    # <snip MAIN_EX_DEV>
+    root = cfg.project.root
+    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
+    # commands from the keyboard ('', 'a', 'q') and the watcher ('changed')
+    commands: queue.Queue[str] = queue.Queue()
+    stop_watching = threading.Event()
+
+    def read_input() -> None:
+        for line in sys.stdin:
+            commands.put(line.strip().lower())
+        commands.put('q')
+
+    def watch_changes() -> None:
+        for _ in watchfiles.watch(
+            root,
+            watch_filter=project_watch_filter(root),
+            stop_event=stop_watching,
+        ):
+            commands.put('changed')
+
+    threading.Thread(target=read_input, daemon=True).start()
+    threading.Thread(target=watch_changes, daemon=True).start()
+
+    usage = 'Enter: build and run, a: toggle auto build, q: quit'
+    log.info(usage)
+    auto_build = False
+    game: subprocess.Popen[bytes] | None = None
+    try:
+        while True:
+            try:
+                # timeout, so that Ctrl+C gets through on Windows
+                command = commands.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            if command == 'q':
+                break
+            if command == 'a':
+                auto_build = not auto_build
+                log.info('Auto build: %s', 'on' if auto_build else 'off')
+                continue
+            if command == 'changed' and not auto_build:
+                log.info('Project changed, press Enter to build')
+                continue
+            if command not in {'', 'changed'}:
+                log.info(usage)
+                continue
+
+            if CONSOLE.is_terminal:
+                CONSOLE.clear()
+            if game is not None and game.poll() is None:
+                log.info('Closing the game')
+                game.terminate()
+                game.wait()
+            # fresh project, so that file reads aren't cached from before
+            cfg = dataclasses.replace(cfg, project=my_proj.Project(root))
+            errors = 0
+            try:
+                game = run_build(cfg, scan_cache)
+            except my_lint.LinterFoundError as e:
+                errors = len(e.violations)
+            except Exception:
+                log.exception('Build failed')
+            if errors:
+                log.error('Build stopped, found %d error(s)', errors)
+            log.info(usage)
+    finally:
+        stop_watching.set()
+        scan_cache.save()
+    # </snip MAIN_EX_DEV>
+
+
+def main() -> None:
+    """Pipeline private entrypoint.
+
+    Usage: ``main.py <config dir> [build|check|watch|dev|test]``, defaults to
+    ``build``.
+    """
+    cfg = _load_private(Path(sys.argv[1]).resolve())
+    mode = sys.argv[2] if len(sys.argv) > 2 else 'build'
+
+    # allow testing tutorials on private data as well
+    if mode == 'test':
+        _run_tutorials(cfg)
+        return
+
+    setup_output()
+
+    if mode == 'check':
+        scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
+        try:
+            run_check(cfg, scan_cache)
+        finally:
+            scan_cache.save()
+        log.info('All ok, exiting regardless :D')
+        return
+    if mode == 'watch':
+        with contextlib.suppress(KeyboardInterrupt):
+            main_ex_watch(cfg)
+        return
+    if mode == 'dev':
+        with contextlib.suppress(KeyboardInterrupt):
+            main_ex_dev(cfg)
+        return
+    if mode != 'build':
+        raise ValueError(f'Unknown mode: {mode}')
+
+    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
+    try:
+        run_build(cfg, scan_cache)
+    finally:
+        scan_cache.save()
 
 
 if __name__ == '__main__':

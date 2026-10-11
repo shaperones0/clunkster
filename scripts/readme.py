@@ -951,6 +951,8 @@ Pipeline systems live in the [pipeline folder](https://github.com/shaperones0/cl
 - `cache.py`: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.
 - `run.py`: Task execution. `tasks_filter_stale` drops tasks that are fresh in the cache, `tasks_run` executes the rest in a given `concurrent.futures` pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task, so workers don't need to communicate anything.
 
+Reference scanning results are cached per file (see `analyze/scan_cache.py`): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks and the {exs.href('ex_watch', 'watch mode')} fast.
+
 Linting follows the same idea (see `lint.py`): checks are `Rule`s, problems are `Violation`s collected into plain lists, and `format_report` turns them into text. Printing the report and raising on errors is up to the pipeline.
 
 Output in the examples goes through [rich](https://rich.readthedocs.io/en/latest/introduction.html): status messages via `logging`, progress bars via `progress`, and step headers via the `step` decorator (see {exs.href('ex_setup_output')}).
@@ -1434,8 +1436,8 @@ validations and assigning clusters to the assets.
 This section is about finding asset references in `.gml` files, and running
 validations based on them.
 
-{exs.code_begin('ex_scan_sync', 'Reference scanning')}
-{docs['main_ex_scan_sync']}
+{exs.code_begin('ex_scan', 'Reference scanning')}
+{docs['main_ex_scan']}
 {
         exs.render(
             (
@@ -1444,8 +1446,9 @@ validations based on them.
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 snips['DEF_ASSET_SCANNABLES'],
                 snips['CLS_DEPENDENCY'],
+                snips['DEFS_SCAN_FILES'],
                 exs.stub('VAR_ASSETS'),
-                snips['MAIN_EX_SCAN_SYNC'],
+                snips['MAIN_EX_SCAN'],
             )
         )
     }
@@ -1587,6 +1590,41 @@ checks based on more advanced usage tracing.
                 exs.stub('VAR_DEPS'),
                 exs.stub('VAR_ROOM_DATA'),
                 snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
+            )
+        )
+    }
+
+{exs.code_begin('ex_watch', 'Watch mode')}
+{docs['main_ex_watch']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                exs.stub('DEF_LINT_REPORT'),
+                snips['DEF_RUN_CHECK'],
+                snips['MAIN_EX_WATCH'],
+            )
+        )
+    }
+
+{
+        exs.code_reg_stub_src(
+            {
+                'DEF_RUN_CHECK': gen_stub_func('run_check', 'run_build', 'project_watch_filter'),
+            }
+        )
+    }
+
+{exs.code_begin('ex_dev', 'Development loop')}
+{docs['main_ex_dev']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                exs.stub('DEF_RUN_CHECK'),
+                snips['MAIN_EX_DEV'],
             )
         )
     }
