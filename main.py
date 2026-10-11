@@ -42,6 +42,7 @@ from clunkster import project as my_proj
 from clunkster.analyze import scan_cache as my_scan_cache
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
+from clunkster.parse import png as my_parse_png
 from clunkster.parse import tree as my_parse_tree
 from clunkster.pipeline import cache as my_cache
 from clunkster.pipeline import run as my_run
@@ -69,6 +70,11 @@ class Config:
     juicer: ConfJuicer
     # reference scan cache file
     scan_cache: Path
+    # RAM budget (MB) for assets moved to Common because of cluster violations
+    common_budget_mb: float = 500
+    # assets moved to Common because of cluster violations, derived by the
+    #  cluster checks (see main_ex_promote_refs)
+    promoted: frozenset[str] = frozenset()
     # top level folder -> cluster name, derived from alias
     alias_inv: dict[str, str] = dataclasses.field(init=False)
 
@@ -87,7 +93,7 @@ class Config:
 
 
 def main_ex_setup_main() -> Config:
-    """Setup the configuration.
+    """Set up the configuration.
 
     There's no global state: every pipeline step receives ``Config`` as its
     first argument. It holds:
@@ -318,6 +324,8 @@ def asset_cluster_raw(asset: my_asset.AssetHasPath) -> str:
 
 def asset_cluster(cfg: Config, asset: my_asset.Asset) -> str:
     """Get asset's cluster."""
+    if asset.name in cfg.promoted:
+        return 'Common'
     if isinstance(asset, my_asset.AssetHasPath):
         cluster = asset_cluster_raw(asset)
         alias = cfg.alias_inv.get(cluster)
@@ -936,21 +944,38 @@ def main_ex_lint_unused(
     # </snip MAIN_EX_LINT_UNUSED>
 
 
-# <snip RULES_CROSSREF>
-RULE_CROSSREF = my_lint.Rule(
-    'C100', 'cross-cluster reference', my_lint.Severity.ERROR
-)
-# </snip RULES_CROSSREF>
+# <snip CLS_PROMOTION>
+@dataclasses.dataclass(frozen=True, slots=True)
+class Promotion:
+    """Asset moved to Common because of a cluster violation."""
+
+    asset: Asset
+    # cluster the asset was in
+    cluster: str
+    # why it was moved
+    reason: str
+    location: my_location.Location | None = None
+    # moved asset that caused this one to move, if any
+    caused_by: str | None = None
+    # extra lines for the report (e.g. traces)
+    details: tuple[str, ...] = ()
 
 
-@step('Lint: cross-cluster references')
-def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
-    """Validate cluster boundaries.
+# </snip CLS_PROMOTION>
 
-    Simple check of clusters on both ends of dependency edge will filter
-    out the majority of "stageA object referenced stageB asset" cases.
 
-    However, this iteration (and following linters) have a few special rules:
+@step('Clusters: cross-cluster references')
+def main_ex_promote_refs(
+    cfg: Config,
+    dependencies: list[Dependency],
+    promotions: dict[str, Promotion],
+) -> Config:
+    """Move assets referenced across cluster boundaries to Common.
+
+    Simple check of clusters on both ends of dependency edge will catch
+    the majority of "stageA object referenced stageB asset" cases.
+
+    However, this check (and the following ones) have a few special rules:
 
     1. Most clusters are allowed to reference only themselves and Common
     cluster, but some may need to reference certain more localized "nonlocal"
@@ -975,60 +1000,75 @@ def main_ex_lint_crossref(cfg: Config, dependencies: list[Dependency]) -> None:
     "instantiate" a room is to go there, for all intents and purposes
     whatever references a room doesn't really depend on it.
 
-    Make sure to fill in the ``LINT_RULES`` and ``CONTEXT_RULES`` - they'll
-    be used by future linters as well.
-
-    Note: I strongly advise clearing out the project to satisfy this linter
-    (even though this might take a lot of effort). Skipping it would make
-    using Game Juicer and other project-transforming tools a nightmare realm
-    of hidden bugs.
+    Instead of failing, an asset referenced from a cluster that isn't allowed
+    to reference it is moved to Common: it stays in the base executable
+    instead of being dehydrated, so the game can't run into its stub. A moved
+    asset's own references are then checked as Common's, which may move
+    more assets, until nothing changes. Moves are reported and their RAM is
+    limited by a budget (see the report example below), since every moved
+    asset is RAM the game always pays for. Fixing the reported references is
+    still the way to get that RAM back.
     """
-    # <snip MAIN_EX_LINT_CROSSREF>
-    violations: list[my_lint.Violation] = []
-    for dep in progress(dependencies):
-        source = dep.source_asset
-        target = dep.target_asset
 
-        source_cluster = asset_cluster(cfg, source)
-        target_cluster = asset_cluster(cfg, target)
+    # <snip MAIN_EX_PROMOTE_REFS>
+    def cluster_of(asset: Asset) -> str:
+        if asset.name in promotions:
+            return 'Common'
+        return asset_cluster(cfg, asset)
 
-        # remove deps to room
-        if isinstance(target, my_asset.Room):
-            continue
-
-        # get permissions from lint rules
-        allowed_targets = allowed_clusters(cfg, source_cluster)
-
-        # expand permissions based on script guards
+    def allowed_targets(dep: Dependency) -> set[str]:
+        # permissions from lint rules
+        allowed = allowed_clusters(cfg, cluster_of(dep.source_asset))
+        # expanded based on script guards
         for ctx in dep.contexts:
-            if ctx in cfg.context_rules:
-                granted_primaries = cfg.context_rules[ctx]
+            for primary in cfg.context_rules.get(ctx, ()):
+                allowed.update(allowed_clusters(cfg, primary))
+        return allowed
 
-                # look up what the primary cluster knows
-                for primary in granted_primaries:
-                    allowed_targets.update(allowed_clusters(cfg, primary))
+    # references to rooms are severed
+    by_source: dict[str, list[Dependency]] = {}
+    for dep in dependencies:
+        if not isinstance(dep.target_asset, my_asset.Room):
+            by_source.setdefault(dep.source_asset.name, []).append(dep)
 
-        # check for structural violations
-        if target_cluster not in allowed_targets:
+    moved_before = len(promotions)
+    pending = list(by_source)
+    while pending:
+        source_name = pending.pop()
+        for dep in by_source[source_name]:
+            target = dep.target_asset
+            if target.name in promotions:
+                continue
+            target_cluster = cluster_of(target)
+            if target_cluster in allowed_targets(dep):
+                continue
+
+            source = dep.source_asset
+            source_moved = promotions.get(source.name)
+            source_cluster = (
+                cluster_of(source)
+                if source_moved is None
+                else f'{source_moved.cluster}, moved'
+            )
             ctx = dep.contexts
             ctx_str = f' [Contexts: {", ".join(ctx)}]' if ctx else ''
-            violations.append(
-                my_lint.Violation(
-                    RULE_CROSSREF,
-                    f'{target.name} [{target_cluster}]{ctx_str}',
-                    location=dep.location,
-                    asset=source,
-                    group=source_cluster,
-                )
+            promotions[target.name] = Promotion(
+                asset=target,
+                cluster=target_cluster,
+                reason=(
+                    f'referenced from {source.name} '
+                    f'[{source_cluster}]{ctx_str}'
+                ),
+                location=dep.location,
+                caused_by=source.name if source.name in promotions else None,
             )
+            # its own references now have to be allowed for Common
+            if target.name in by_source:
+                pending.append(target.name)
 
-    if violations:
-        log.info('Found %d violations.', len(violations))
-    else:
-        log.info('Clear!!!')
-    lint_report(cfg, violations)
-
-    # </snip MAIN_EX_LINT_CROSSREF>
+    log.info('Moved %d asset(s) to Common', len(promotions) - moved_before)
+    # </snip MAIN_EX_PROMOTE_REFS>
+    return dataclasses.replace(cfg, promoted=frozenset(promotions))
 
 
 @step('Building graph')
@@ -1230,37 +1270,29 @@ def main_ex_lint_unused_graph(
     # </snip MAIN_EX_LINT_UNUSED_GRAPH>
 
 
-# <snip RULES_CROSSREF_GRAPH>
-RULE_CROSSREF_GRAPH = my_lint.Rule(
-    'C101', 'room cluster boundary', my_lint.Severity.ERROR
-)
-# </snip RULES_CROSSREF_GRAPH>
-
-
-@step('Lint: room cluster boundaries')
-def main_ex_lint_crossref_graph(
+@step('Clusters: room boundaries')
+def main_ex_promote_rooms(
     cfg: Config,
     assets: list[Asset],
     room_graph_data: dict[str, RoomGraph],
-) -> None:
-    """Validate room and their dependencies clustering boundaries.
+    promotions: dict[str, Promotion],
+) -> Config:
+    """Move assets that rooms reach outside of their clusters to Common.
 
-    Final step of linting process is validating cluster boundaries
-    on rooms as a whole.
+    Final cluster check validates boundaries on rooms as a whole: everything
+    a room reaches must be in the clusters it loads. This catches cases the
+    per-reference check can't see, like a guard granting several clusters
+    in a room that loads only some of them, or persistent objects.
 
-    Note 1: this tool is intended to be used only after resolved every
-    issue raised by simpler crossref linter.
-
-    Note 2: this tool will output a lot of violations for each offending
-    dependency edge, therefore some deduction is required in order to pinpoint
-    the exact offenders. Also, I recommend re-running the tool after each fix.
+    Offending assets are moved to Common, same as with cross-cluster
+    references, and reported with traces of how the room reaches them.
     """
-    # <snip MAIN_EX_LINT_CROSSREF_GRAPH>
-    # asset clusters lookup
+    # <snip MAIN_EX_PROMOTE_ROOMS>
     asset_to_cluster: dict[str, str] = {
         asset.name: asset_cluster(cfg, asset) for asset in assets
     }
-    violations: list[my_lint.Violation] = []
+    name2asset = {asset.name: asset for asset in assets}
+    moved_before = len(promotions)
 
     for rg in progress(list(room_graph_data.values())):
         room_cluster = asset_to_cluster.get(rg.room.name)
@@ -1268,23 +1300,15 @@ def main_ex_lint_crossref_graph(
             continue
 
         room_allowed = allowed_clusters(cfg, room_cluster)
-
-        illegal_assets: list[str] = []
-        for reached_name in rg.reachable_names:
-            reached_cluster = asset_to_cluster.get(reached_name)
-            if reached_cluster and reached_cluster not in room_allowed:
-                illegal_assets.append(reached_name)
-
+        illegal_assets = sorted(
+            name
+            for name in rg.reachable_names
+            if asset_to_cluster[name] not in {'Common', *room_allowed}
+        )
         if not illegal_assets:
             continue
 
         room_idx = rg.name2index[rg.room.name]
-        # report is grouped by room cluster, then by room
-        group = (
-            f'{room_cluster} / {rg.room.name} '
-            f'(allowed: {" ".join(sorted(room_allowed))})'
-        )
-
         # pre-resolve active persistent root ids
         active_persistent_roots = [
             (p_name, rg.name2index[p_name])
@@ -1293,8 +1317,10 @@ def main_ex_lint_crossref_graph(
         ]
 
         for illegal_name in illegal_assets:
+            if illegal_name in promotions:
+                # already moved because of another room
+                continue
             target_idx = rg.name2index[illegal_name]
-            target_cluster = asset_to_cluster.get(illegal_name, 'Unknown')
             traces: list[str] = []
 
             # trace 1 - room contamination
@@ -1326,31 +1352,134 @@ def main_ex_lint_crossref_graph(
                     '(Possibly misconfigured structure)'
                 )
 
-            violations.append(
-                my_lint.Violation(
-                    RULE_CROSSREF_GRAPH,
-                    f'{illegal_name} [{target_cluster}]',
-                    group=group,
-                    details=tuple(traces),
-                )
+            promotions[illegal_name] = Promotion(
+                asset=name2asset[illegal_name],
+                cluster=asset_to_cluster[illegal_name],
+                reason=(
+                    f'reached from room {rg.room.name} [{room_cluster}], '
+                    f'which loads {" ".join(sorted(room_allowed))}'
+                ),
+                details=tuple(traces),
             )
 
-        if len(violations) > 1000:
-            log.warning('Linter exceeded 1000 violations, bailing out')
-            break
+    log.info('Moved %d asset(s) to Common', len(promotions) - moved_before)
+    # </snip MAIN_EX_PROMOTE_ROOMS>
+    return dataclasses.replace(cfg, promoted=frozenset(promotions))
 
-    if violations:
-        log.info('Found %d violations', len(violations))
-    else:
-        log.info('No errors! Awesome!')
+
+# <snip RULES_PROMOTED>
+RULE_PROMOTED = my_lint.Rule(
+    'P100', 'moved to Common', my_lint.Severity.WARNING
+)
+RULE_PROMOTED_BUDGET = my_lint.Rule(
+    'P101', 'moved to Common over RAM budget', my_lint.Severity.ERROR
+)
+# </snip RULES_PROMOTED>
+
+
+# <snip DEF_ASSET_RAM>
+def next_pow2(n: int) -> int:
+    """Get the smallest power of two that is at least ``n``."""
+    return 1 << max(0, (n - 1).bit_length())
+
+
+def asset_ram_estimate(cfg: Config, asset: Asset) -> int:
+    """Estimate how much RAM a loaded asset takes, in bytes.
+
+    Only covers assets that get dehydrated, others always stay in the base
+    executable anyway. Rough GameMaker 8.2 model:
+
+    - sprites: every frame is a texture padded to power of two sizes, 4 bytes
+      per pixel, plus a collision mask of 1 byte per pixel (one per frame if
+      masks are separate)
+    - backgrounds: a single padded texture
+    - external audio: file size (sound effects are loaded whole, for streamed
+      music it's a generous estimate)
+    """
+    root = cfg.project.root
+    if isinstance(asset, my_asset.Sprite):
+        meta = asset.get_sprite_metadata(root)
+        if meta.frames == 0:
+            return 0
+        width, height = my_parse_png.size(asset.get_sprite_image(root, 0))
+        masks = meta.frames if meta.per_frame_colliders else 1
+        texture = next_pow2(width) * next_pow2(height) * 4
+        return meta.frames * texture + masks * width * height
+    if isinstance(asset, my_asset.Background):
+        image = asset.get_background_image(root)
+        if not image.exists():
+            return 0
+        width, height = my_parse_png.size(image)
+        return next_pow2(width) * next_pow2(height) * 4
+    if isinstance(asset, AssetExtAudio):
+        return asset.file.stat().st_size
+    return 0
+
+
+# </snip DEF_ASSET_RAM>
+
+
+@step('Clusters: moved to Common')
+def main_ex_report_promotions(
+    cfg: Config, promotions: dict[str, Promotion]
+) -> None:
+    """Report assets moved to Common and check their RAM budget.
+
+    Every move is listed once, under the cluster the asset was in, with the
+    reason, the estimated RAM, and the chain of moves that led to it. Only
+    assets moved because of violations count towards the budget
+    (``common_budget_mb`` in ``Config``). Exceeding it stops the build,
+    since that likely means some reference pulled a large part of a stage
+    into Common.
+    """
+    # <snip MAIN_EX_REPORT_PROMOTIONS>
+    violations: list[my_lint.Violation] = []
+    total_ram = 0
+    for promotion in promotions.values():
+        ram = asset_ram_estimate(cfg, promotion.asset)
+        total_ram += ram
+
+        # chain of moves that led to this one
+        chain: list[str] = []
+        cause = promotion.caused_by
+        while cause is not None and len(chain) < 10:
+            chain.append(f'because {cause} moved: {promotions[cause].reason}')
+            cause = promotions[cause].caused_by
+
+        size = f' (~{ram / 2**20:.1f} MB)' if ram else ''
+        violations.append(
+            my_lint.Violation(
+                RULE_PROMOTED,
+                f'{promotion.reason}{size}',
+                location=promotion.location,
+                asset=promotion.asset,
+                group=promotion.cluster,
+                details=promotion.details + tuple(chain),
+            )
+        )
+
+    log.info(
+        'Moved %d asset(s) to Common, ~%.1f MB of RAM (budget: %.0f MB)',
+        len(promotions),
+        total_ram / 2**20,
+        cfg.common_budget_mb,
+    )
+    if total_ram > cfg.common_budget_mb * 2**20:
+        violations.append(
+            my_lint.Violation(
+                RULE_PROMOTED_BUDGET,
+                f'~{total_ram / 2**20:.1f} MB moved to Common, '
+                f'budget is {cfg.common_budget_mb:.0f} MB',
+            )
+        )
     lint_report(cfg, violations)
     # <md>
-    # Once you've cleared this one, you may call the game qualified for using
-    # the dangerous toys down the line.
+    # Once nothing gets moved anymore, you may call the game qualified for
+    # using the dangerous toys down the line.
     #
     # Congrats on defeating the tutorial boss.
     # </md>
-    # </snip MAIN_EX_LINT_CROSSREF_GRAPH>
+    # </snip MAIN_EX_REPORT_PROMOTIONS>
 
 
 # <snip DEFS_JUICE>
@@ -2637,30 +2766,45 @@ def _load_private(config_dir: Path) -> Config:
         extra_roots=EXTRA_ROOTS,
         juicer=juicer,
         scan_cache=config_dir.parent / 'clunkster_scan_cache.json',
+        common_budget_mb=config.get('common_budget_mb', 500),
     )
 
 
 # <snip DEF_RUN_CHECK>
-def run_check(cfg: Config, scan_cache: my_scan_cache.ScanCache) -> list[Asset]:
-    """Run all linters, return the assets."""
+def run_check(
+    cfg: Config, scan_cache: my_scan_cache.ScanCache
+) -> tuple[Config, list[Asset]]:
+    """Run all checks.
+
+    :return: Config with assets moved to Common, and the assets.
+    """
     main_ex_lint_tree(cfg)
     assets = main_ex_aliases(cfg)
     deps = main_ex_scan(cfg, assets, scan_cache)
     # main_ex_lint_unused(cfg, deps, assets)
-    main_ex_lint_crossref(cfg, deps)
 
+    promotions: dict[str, Promotion] = {}
+    cfg = main_ex_promote_refs(cfg, deps, promotions)
+    # graphs don't depend on moved assets, rooms are never moved
     room_data = main_ex_graph(cfg, assets, deps)
+    while True:
+        moved = len(promotions)
+        cfg = main_ex_promote_rooms(cfg, assets, room_data, promotions)
+        if len(promotions) == moved:
+            break
+        # moved assets' references now have to be allowed for Common
+        cfg = main_ex_promote_refs(cfg, deps, promotions)
 
     main_ex_lint_unused_graph(cfg, assets, room_data)
-    main_ex_lint_crossref_graph(cfg, assets, room_data)
-    return assets
+    main_ex_report_promotions(cfg, promotions)
+    return cfg, assets
 
 
 def run_build(
     cfg: Config, scan_cache: my_scan_cache.ScanCache
 ) -> subprocess.Popen[bytes]:
-    """Run all linters, build the game and launch it."""
-    assets = run_check(cfg, scan_cache)
+    """Run all checks, build the game and launch it."""
+    cfg, assets = run_check(cfg, scan_cache)
     tasks = main_juicer_gen_tasks(cfg, assets)
     main_juicer_run(cfg, tasks)
     main_juicer_gen_gml(cfg, assets)

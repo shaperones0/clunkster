@@ -32,8 +32,7 @@ Non-destructive tools:
 - Linter: `tree.yyd` validator (see {exs.href('ex_lint_tree')})
 - Linter: unused assets detector (see {exs.href('ex_lint_unused')} and {exs.href('ex_lint_unused_graph')})
 - (TODO) Linter: heavy assets detector (RAM & disk size)
-- Linter: cross-cluster reference boundary validator (see {exs.href('ex_lint_crossref')})
-- Linter: room indirect reference validator via dependency graph (see {exs.href('ex_lint_crossref_graph')})
+- Cluster boundaries: assets referenced across clusters, directly (see {exs.href('ex_promote_refs')}) or through the dependency graph (see {exs.href('ex_promote_rooms')}), are moved to Common, with a report and a RAM budget (see {exs.href('ex_report_promotions')})
 - Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see {exs.href('ex_juicer_processing')}; {exs.href('h_dehydration', 'Dehydration')})
 
 Lightly destructive tools:
@@ -124,7 +123,9 @@ From those dependencies, the tool can:
 
 - find orphaned assets that are not referenced by anything
 - find assets that reference disallowed clusters
-- construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.
+- construct sets of assets referenced (both directly and indirectly) in each room, and find what a room references without explicitly being marked to load it.
+
+Offending assets are moved to Common (kept loaded at all times), so the game never runs into a stub, and the tool reports every move along with its estimated RAM cost. A RAM budget on those moves stops the build when a bad reference drags too much into Common.
 
 {head.header_parse('## Prerequisites', 'h_prerequisites')}
 
@@ -292,7 +293,7 @@ if place_meeting(x, y, SpikeIce) {{
 }}
 ```
 
-Now the Player directly references `SpikeIce`. The {exs.href('ex_lint_crossref', 'analyzer')} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
+Now the Player directly references `SpikeIce`. The {exs.href('ex_promote_refs', 'analyzer')} will flag this, because the Player now requires the `SpikeIce` asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.
 
 This can be solved in a few ways.
 
@@ -1489,8 +1490,8 @@ validations based on them.
         )
     }
 
-{exs.code_begin('ex_lint_crossref', 'Lint: cross-cluster references')}
-{docs['main_ex_lint_crossref']}
+{exs.code_begin('ex_promote_refs', 'Clusters: cross-cluster references')}
+{docs['main_ex_promote_refs']}
 {
         exs.render(
             (
@@ -1500,10 +1501,9 @@ validations based on them.
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('CLS_DEPENDENCY'),
-                exs.stub('DEF_LINT_REPORT'),
-                snips['RULES_CROSSREF'],
+                snips['CLS_PROMOTION'],
                 exs.stub('VAR_DEPS'),
-                snips['MAIN_EX_LINT_CROSSREF'],
+                snips['MAIN_EX_PROMOTE_REFS'],
             )
         )
     }
@@ -1513,11 +1513,17 @@ validations based on them.
             {
                 'LINT_RULES': gen_stub_func('allowed_clusters'),
                 'CONTEXT_RULES': gen_stub_var('CONTEXT_RULES: dict[str, set[str]]'),
+                'CLS_PROMOTION': '\n'.join(
+                    (
+                        gen_stub_cls('Promotion'),
+                        gen_stub_var('promotions: dict[str, Promotion]'),
+                    )
+                ),
             }
         )
     }
 
-Normally, cleaning these up can take up to several days. I recommend giving {head.header_href('h_prerequisites', 'Prerequisites')} a read - there are useful cleanup examples, as well as some explanations on how to write `LINT_RULES` and `CONTEXT_RULES`.
+Moved assets cost RAM, so it's still worth cleaning these up, which normally can take up to several days. I recommend giving {head.header_href('h_prerequisites', 'Prerequisites')} a read - there are useful cleanup examples, as well as some explanations on how to write `LINT_RULES` and `CONTEXT_RULES`.
 
 {head.section_next('Dependency Graph').render_header()}
 
@@ -1573,8 +1579,8 @@ checks based on more advanced usage tracing.
         )
     }
 
-{exs.code_begin('ex_lint_crossref_graph', 'Lint: room cluster boundaries')}
-{docs['main_ex_lint_crossref_graph']}
+{exs.code_begin('ex_promote_rooms', 'Clusters: room boundaries')}
+{docs['main_ex_promote_rooms']}
 {
         exs.render(
             (
@@ -1584,12 +1590,26 @@ checks based on more advanced usage tracing.
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('CLS_DEPENDENCY'),
                 exs.stub('CLS_ROOM_GRAPH'),
-                exs.stub('DEF_LINT_REPORT'),
-                snips['RULES_CROSSREF_GRAPH'],
+                exs.stub('CLS_PROMOTION'),
                 exs.stub('VAR_ASSETS'),
-                exs.stub('VAR_DEPS'),
                 exs.stub('VAR_ROOM_DATA'),
-                snips['MAIN_EX_LINT_CROSSREF_GRAPH'],
+                snips['MAIN_EX_PROMOTE_ROOMS'],
+            )
+        )
+    }
+
+{exs.code_begin('ex_report_promotions', 'Clusters: moved to Common')}
+{docs['main_ex_report_promotions']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('CLS_ASSET_EXT'),
+                exs.stub('DEF_LINT_REPORT'),
+                exs.stub('CLS_PROMOTION'),
+                snips['RULES_PROMOTED'],
+                snips['DEF_ASSET_RAM'],
+                snips['MAIN_EX_REPORT_PROMOTIONS'],
             )
         )
     }
@@ -1633,7 +1653,7 @@ checks based on more advanced usage tracing.
 
 Now that the project is cleared out, it is time for some useful tools.
 
-In this section we will be working on Game Juicer. You can read more on exact strategies in {head.header_href('h_juicing', 'Juicing')}. While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), the game must satisfy both clusterization linters (see: {exs.href('ex_lint_crossref')} and {exs.href('ex_lint_crossref_graph')}) in order for the resulting build to run well.
+In this section we will be working on Game Juicer. You can read more on exact strategies in {head.header_href('h_juicing', 'Juicing')}. While this exact tool only requires the list of assets (see example: {exs.href('ex_aliases', 'clusters')}), it must run after the cluster checks (see: {exs.href('ex_promote_refs')} and {exs.href('ex_promote_rooms')}), so that assets they moved to Common are kept in the base executable instead of being dehydrated.
 
 Note: current method of compressing audio uses [ffmpeg](https://www.ffmpeg.org/), make sure it is installed and is accessible through PATH.
 
