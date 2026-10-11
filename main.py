@@ -1146,8 +1146,9 @@ def main_ex_graph(
                     # room must satisfy this guard to proceed deeper into
                     #   the nested guards
                     granted_clusters = cfg.context_rules.get(raw_ctx)
-                    if granted_clusters and not active_clusters.intersection(
-                        granted_clusters
+                    if (
+                        granted_clusters is not None
+                        and not active_clusters.intersection(granted_clusters)
                     ):
                         edge_can_execute = False
                         break
@@ -1296,7 +1297,7 @@ def main_ex_promote_rooms(
 
     for rg in progress(list(room_graph_data.values())):
         room_cluster = asset_to_cluster.get(rg.room.name)
-        if not room_cluster:
+        if room_cluster is None:
             continue
 
         room_allowed = allowed_clusters(cfg, room_cluster)
@@ -2604,11 +2605,11 @@ def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
     output_exe = cfg.juicer.dir_out / 'game.exe'
 
     custom_path = os.getenv('GM82_PATH')
-    if custom_path:
+    if custom_path is not None:
         gm_exe = Path(custom_path)
     else:
         appdata_str = os.getenv('APPDATA')
-        if not appdata_str:
+        if appdata_str is None:
             raise RuntimeError(
                 'Could not resolve APPDATA environment variable.'
             )

@@ -23,7 +23,7 @@
 
 
       <link rel="icon" href="./assets/images/favicon.png">
-      <meta name="generator" content="zensical-0.0.59">
+      <meta name="generator" content="zensical-0.0.69">
 
 
 
@@ -34,12 +34,12 @@
 
 
 
-      <link rel="stylesheet" href="./assets/stylesheets/modern/main.5da3a30f.min.css">
+      <link rel="stylesheet" href="./assets/stylesheets/modern/main.e15858d4.min.css">
 
 
 
 
-        <link rel="stylesheet" href="./assets/stylesheets/modern/palette.812a03bb.min.css">
+        <link rel="stylesheet" href="./assets/stylesheets/modern/palette.b27955a4.min.css">
 
 
 
@@ -81,14 +81,11 @@
 
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
     <div data-md-component="skip">
-
-
-        <a href="#clunkster" class="md-skip">
-          Skip to content
-        </a>
-
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
     </div>
     <div data-md-component="announce">
 
@@ -530,20 +527,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     <li class="md-nav__item md-nav__item--nested">
 
 
@@ -575,15 +558,16 @@
 
           </div>
 
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
-            <span class="md-nav__icon md-icon"></span>
+
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
 
 
   Reference
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
 
 
 
@@ -675,7 +659,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/03_analyze.scan_dep/" class="md-nav__link">
+      <a href="./reference/03_analyze.scan_cache/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.analyze.scan_cache
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/04_analyze.scan_dep/" class="md-nav__link">
 
 
 
@@ -702,7 +713,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/04_parse.csv/" class="md-nav__link">
+      <a href="./reference/05_parse.csv/" class="md-nav__link">
 
 
 
@@ -729,7 +740,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/05_parse.gml/" class="md-nav__link">
+      <a href="./reference/06_parse.gml/" class="md-nav__link">
 
 
 
@@ -756,7 +767,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/06_parse.index/" class="md-nav__link">
+      <a href="./reference/07_parse.index/" class="md-nav__link">
 
 
 
@@ -783,7 +794,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/07_parse.kv/" class="md-nav__link">
+      <a href="./reference/08_parse.kv/" class="md-nav__link">
 
 
 
@@ -810,7 +821,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/08_parse.tree/" class="md-nav__link">
+      <a href="./reference/09_parse.png/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.parse.png
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/10_parse.tree/" class="md-nav__link">
 
 
 
@@ -837,7 +875,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/09_pipeline.cache/" class="md-nav__link">
+      <a href="./reference/11_pipeline.cache/" class="md-nav__link">
 
 
 
@@ -864,7 +902,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/10_pipeline.task/" class="md-nav__link">
+      <a href="./reference/12_pipeline.run/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.pipeline.run
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/13_pipeline.task/" class="md-nav__link">
 
 
 
@@ -891,277 +956,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/11_pipeline.events.context/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.events.context
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/12_pipeline.events.dispatcher/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.events.dispatcher
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/13_pipeline.events.event/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.events.event
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/14_pipeline.events.sink/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.events.sink
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/15_pipeline.executor.base/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.executor.base
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/16_pipeline.executor.mp/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.executor.mp
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/17_pipeline.executor.thread/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.executor.thread
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/18_pipeline.ui.adapter/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.ui.adapter
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/19_pipeline.ui.base/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.ui.base
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/20_pipeline.ui.simple/" class="md-nav__link">
-
-
-
-  <span class="md-ellipsis">
-
-
-  clunkster.pipeline.ui.simple
-
-
-  </span>
-
-
-
-      </a>
-    </li>
-
-
-
-
-
-
-
-
-
-
-    <li class="md-nav__item">
-      <a href="./reference/21_text.line/" class="md-nav__link">
+      <a href="./reference/14_text.line/" class="md-nav__link">
 
 
 
@@ -1188,7 +983,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/22_text.location/" class="md-nav__link">
+      <a href="./reference/15_text.location/" class="md-nav__link">
 
 
 
@@ -1208,8 +1003,9 @@
 
 
 
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+
 
     </li>
 
@@ -1416,6 +1212,8 @@
             <div class="md-content" data-md-component="content">
 
               <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
+
 
 
 
@@ -1429,8 +1227,7 @@
 <li>Linter: <code>tree.yyd</code> validator (see <a href="examples/#example-12-lint-treeyyd-files">ex1.2</a>)</li>
 <li>Linter: unused assets detector (see <a href="examples/#example-22-lint-unused-assets">ex2.2</a> and <a href="examples/#example-32-lint-unreachable-assets">ex3.2</a>)</li>
 <li>(TODO) Linter: heavy assets detector (RAM &amp; disk size)</li>
-<li>Linter: cross-cluster reference boundary validator (see <a href="examples/#example-23-lint-cross-cluster-references">ex2.3</a>)</li>
-<li>Linter: room indirect reference validator via dependency graph (see <a href="examples/#example-33-lint-room-cluster-boundaries">ex3.3</a>)</li>
+<li>Cluster boundaries: assets referenced across clusters, directly (see <a href="examples/#example-23-clusters-cross-cluster-references">ex2.3</a>) or through the dependency graph (see <a href="examples/#example-33-clusters-room-boundaries">ex3.3</a>), are moved to Common, with a report and a RAM budget (see <a href="examples/#example-34-clusters-moved-to-common">ex3.4</a>)</li>
 <li>Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see <a href="examples/#example-41-juicer-the-juice">ex4.1</a>; <a href="#dehydration">Dehydration</a>)</li>
 </ul>
 <p>Lightly destructive tools:</p>
@@ -1468,8 +1265,9 @@
 <ul>
 <li>find orphaned assets that are not referenced by anything</li>
 <li>find assets that reference disallowed clusters</li>
-<li>construct sets of assets referenced (both directly and indirectly) in each room, and yell at you if a room references something that it hasn't explicitly been marked to load.</li>
+<li>construct sets of assets referenced (both directly and indirectly) in each room, and find what a room references without explicitly being marked to load it.</li>
 </ul>
+<p>Offending assets are moved to Common (kept loaded at all times), so the game never runs into a stub, and the tool reports every move along with its estimated RAM cost. A RAM budget on those moves stops the build when a bad reference drags too much into Common.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ol>
 <li>
@@ -1608,7 +1406,7 @@ Backgrounds:
 </span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nx">player_freeze</span><span class="p">()</span>
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Now the Player directly references <code>SpikeIce</code>. The <a href="examples/#example-23-lint-cross-cluster-references">analyzer</a> will flag this, because the Player now requires the <code>SpikeIce</code> asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.</p>
+<p>Now the Player directly references <code>SpikeIce</code>. The <a href="examples/#example-23-clusters-cross-cluster-references">analyzer</a> will flag this, because the Player now requires the <code>SpikeIce</code> asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.</p>
 <p>This can be solved in a few ways.</p>
 <p><strong>Version 1 - Moving the logic from Common to Stage-specific</strong></p>
 <p>Just invert the logic - make the spikes damage the player, instead of the player checking for spikes:</p>
@@ -2180,112 +1978,18 @@ and then <code>WeatherBlizzard</code>'s home cluster <code>CommonNorth</code> ge
 <p>Speaking of building, one more note on how the built game is structured. By default, wet assets are stored in <code>data/chunks/&lt;cluster&gt;/&lt;whatever was their
 original path relative to the project root&gt;</code>.</p>
 <h2 id="pipeline-architecture">Pipeline architecture<a class="headerlink" href="#pipeline-architecture" title="Permanent link">&para;</a></h2>
-<p>Pipeline has a number of systems and abstractions that run all throughout examples and might appear confusing. The deal behind was about solving few annoying issues:</p>
-<ol>
-<li>We should be able to run our asset processing logic in parallel, for more expensive / IO-bound operations, without loosing the ability to report on the progress (status prints, progress bars).</li>
-<li>We should be able to have different interfaces (CLI mode / TUI mode (not implemented yet but would be rad af)).</li>
-</ol>
-<p>Following outlines our solutions. Most of them are housed in <a href="https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline">pipeline folder</a>.</p>
+<p>The library is split from the pipeline on purpose: the library (<code>clunkster</code> package) does the GameMaker-specific heavy lifting and returns data, while the pipeline (<code>main.py</code>) decides how things are configured, printed and run. The library never prints, raises on linter errors or picks a UI; it has no dependencies beyond the ones its parsers need.</p>
+<p>Pipeline systems live in the <a href="https://github.com/shaperones0/clunkster/tree/main/clunkster/pipeline">pipeline folder</a>:</p>
 <ul>
-<li><code>task.py</code>: Task encapsulates information needed for processing logic, input and output files for build caching and house the <code>execute</code> method that actually does the thing.</li>
-<li><code>cache.py</code>: The aforementioned build cache system. The build cache is saved into JSON file. Tasks, whose output files are present, and input files haven't changed, are skipped.</li>
-<li>
-<p><code>executor</code>: Module that houses fancy task execution logic - they take list of tasks and run them in a special way.</p>
-<ul>
-<li><code>executor/base.py</code>: Shared util logic.</li>
-<li><code>executor/mp.py</code>: Multiprocessing executor.</li>
-<li><code>executor/thread.py</code>: Threading executor.</li>
+<li><code>task.py</code>: Task encapsulates information needed for processing logic, input and output files for build caching, and houses the <code>execute</code> method that actually does the thing.</li>
+<li><code>cache.py</code>: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.</li>
+<li><code>run.py</code>: Task execution. <code>tasks_filter_stale</code> drops tasks that are fresh in the cache, <code>tasks_run</code> executes the rest in a given <code>concurrent.futures</code> pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task, so workers don't need to communicate anything.</li>
 </ul>
-</li>
-<li>
-<p><code>events</code>: Workers need to output information (task started/finished, progress), and in order to bring that information into the main thread (UI) we use a system of events.</p>
-<ul>
-<li><code>events/event.py</code>: The actual event models.</li>
-<li><code>events/dispatcher.py</code>: Event dispatchers. In order to handle events user must register callbacks for each event type. Dispatchers only exist on the main process.</li>
-<li>
-<p><code>events/sink.py</code>: Sink are where workers send their events. Regular <code>DispatchEventSink</code> simply passes the event to underlying dispatcher. However, concurrent executors implement their own sinks:</p>
-<ul>
-<li>threading executor's sinks share a lock, which they activate before invoking underlying dispatcher.</li>
-<li>multiprocessing executor's sink doesn't send events to dispatcher, but rather to underlying queue, shared with the main thread. Main process polls this queue in a separate thread (main thread of the main process handles waiting for futures to finish their job), and from this queue things are pushed into the dispatcher (see <code>QueueEventReceiver</code>).</li>
-</ul>
-</li>
-<li>
-<p><code>events/context.py</code>: This is the unified execution context given to workers. Contains their event sink and whatever other metadata belogs there.</p>
-</li>
-</ul>
-</li>
-</ul>
-<p>The flow of things in multiprocessing case can be expressed by this diagram:</p>
-<pre class="mermaid"><code>graph TD
-    subgraph Worker Processes
-        W1[Worker 1: Task Execution]
-        W2[Worker 2: Task Execution]
-
-        S1[QueueEventSink&lt;br/&gt;Injects PID/Thread ID]
-        S2[QueueEventSink&lt;br/&gt;Injects PID/Thread ID]
-
-        W1 -- "emit(TaskFinished)" --&gt; S1
-        W2 -- "emit(TaskFinished)" --&gt; S2
-    end
-
-    Q[(multiprocessing.Queue)]
-
-    S1 --&gt;|Puts WorkerEvent| Q
-    S2 --&gt;|Puts WorkerEvent| Q
-
-    subgraph Main Process
-        R[QueueEventReceiver&lt;br/&gt;Daemon Thread]
-        D[EventDispatcher]
-        UI["UI logic&lt;br/&gt;(UiRichAsync/UiSimpleAsync)"]
-
-        Q -- "Pops Event" --&gt; R
-        R -- "dispatch(event)" --&gt; D
-        D -- "Triggers Handlers" --&gt; UI
-    end
-
-    UI -- "Renders Table &amp; Progress" --&gt; Term[Terminal Output]</code></pre>
-<p>With simple and justifiable systems out of the way, next things might seem questionable:</p>
-<ul>
-<li>
-<p><code>ui</code>: UI abstraction system.</p>
-<ul>
-<li><code>ui/base.py</code>: Abstract UI class, automatically registers its own methods as dispatcher's handlers.</li>
-<li><code>ui/simple.py</code>: Simple UI implementation, using prints.</li>
-<li><code>ui/adapter.py</code>: Given synchronous pipeline steps an easy interface over events and dispatchers via <code>ui_out</code> (print replacement) and <code>ui_progress</code> (progress bar over a sequence).</li>
-</ul>
-</li>
-</ul>
-<p>The flow of things considering UI abstraction, in sync case, can be represented like this:</p>
-<pre class="mermaid"><code>graph TD
-    subgraph Pipeline Code
-        Step["Pipeline Step Function&lt;br/&gt;@ui_auto_sink('StepName')"]
-        UI_PROG["ui_progress(assets)"]
-        UI_OUT["ui_out('Status message')"]
-
-        Step --&gt; UI_PROG
-        Step --&gt; UI_OUT
-    end
-
-    subgraph Convenience Layer
-        SA[SinkAdapter&lt;br/&gt;Global 'ADAPTER' Instance]
-    end
-
-    subgraph Mario Room
-        DS[DirectEventSink]
-        ED[EventDispatcher]
-        UI_SYNC[UI Component&lt;br/&gt;UiRich / UiSimple]
-    end
-
-    UI_PROG -- "Generates Events&lt;br/&gt;(Start, Advance, End)" --&gt; SA
-    UI_OUT -- "Generates Event&lt;br/&gt;(Status)" --&gt; SA
-
-    SA -- "emit(event)" --&gt; DS
-    DS -- "Passthrough into Dispatcher" --&gt; ED
-    ED -- "Triggers Handlers" --&gt; UI_SYNC
-    UI_SYNC -- "Renders" --&gt; Term[Terminal Output]</code></pre>
-<p>You'll encounter UI implementation with simple <code>print</code>-based output, as well as <a href="https://rich.readthedocs.io/en/latest/introduction.html">rich</a> in the examples.</p>
-<p>Full example of a synchronous pipeline step can be found here: <a href="examples/#example-04-full-example-pipeline-excerpt">ex0.4</a>.</p>
-<p>Full example of concurrents can be found here: <a href="examples/#example-42-juicer-running-the-tasks">ex4.2</a>.</p>
+<p>Reference scanning results are cached per file (see <code>analyze/scan_cache.py</code>): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks and the <a href="examples/#example-35-watch-mode">watch mode</a> fast.</p>
+<p>Linting follows the same idea (see <code>lint.py</code>): checks are <code>Rule</code>s, problems are <code>Violation</code>s collected into plain lists, and <code>format_report</code> turns them into text. Printing the report and raising on errors is up to the pipeline.</p>
+<p>Output in the examples goes through <a href="https://rich.readthedocs.io/en/latest/introduction.html">rich</a>: status messages via <code>logging</code>, progress bars via <code>progress</code>, and step headers via the <code>step</code> decorator (see <a href="examples/#example-02-setup-output">ex0.2</a>).</p>
+<p>Full example of a synchronous pipeline step can be found here: <a href="examples/#example-03-full-example-pipeline-excerpt">ex0.3</a>.</p>
+<p>Full example of running tasks concurrently can be found here: <a href="examples/#example-42-juicer-running-the-tasks">ex4.2</a>.</p>
 <h2 id="integration-into-the-game">Integration into the game<a class="headerlink" href="#integration-into-the-game" title="Permanent link">&para;</a></h2>
 <p>In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Game Juicer and its derivatives. Default flow delegated loading to when the room change is requested (in <code>room_goto</code>), and unloading to the Room Start event (when all assets from previous clusters are definitely unloaded). This results in 1-2 second stutters when changing clusters, which I'd imagine won't be an issue, especially if such room changes have transitions like black-out-black-in.</p>
 <p>Here's the static scripts that you'll have to add:</p>
@@ -2600,7 +2304,7 @@ original path relative to the project root&gt;</code>.</p>
 </footer>
 
     </div>
-    <div class="md-dialog" data-md-component="dialog">
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
       <div class="md-dialog__inner md-typeset"></div>
     </div>
 
@@ -2608,10 +2312,14 @@ original path relative to the project root&gt;</code>.</p>
 
 
 
-      <script id="__config" type="application/json">{"annotate":null,"base":".","features":["navigation.instant","navigation.instant.prefetch","navigation.tracking","navigation.indexes"],"search":"./assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
 
 
-      <script src="./assets/javascripts/bundle.6970bfe9.min.js"></script>
+
+
+      <script id="__config" type="application/json">{"annotate":null,"base":".","features":["navigation.instant","navigation.instant.prefetch","navigation.tracking","navigation.indexes"],"redirect":null,"search":"./assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+
+
+      <script src="./assets/javascripts/bundle.8b1c90bd.min.js"></script>
 
 
   </body>
