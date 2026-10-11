@@ -621,10 +621,11 @@ def _room_metadata(metadata_file: pl.Path) -> RoomMetadata:
 
 
 def _room_layers(room_folder: pl.Path) -> tuple[int, ...]:
+    # layer files are named by depth, which can be negative
     return tuple(
         int(file.stem)
         for file in room_folder.glob('*.txt')
-        if all(c.isdigit() for c in file.stem)
+        if file.stem.removeprefix('-').isdigit()
     )
 
 

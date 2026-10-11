@@ -46,11 +46,13 @@ dev = [
     { name = "griffe-inherited-docstrings" },
     { name = "griffelib" },
     { name = "markdown" },
+    { name = "numpy" },
     { name = "pillow" },
     { name = "pre-commit" },
     { name = "pyahocorasick" },
     { name = "pygments" },
     { name = "pytest" },
+    { name = "rectangle-packer" },
     { name = "rich" },
     { name = "ruff" },
     { name = "rustworkx" },
@@ -60,8 +62,10 @@ dev = [
 ]
 runtime = [
     { name = "gmcodec" },
+    { name = "numpy" },
     { name = "pillow" },
     { name = "pyahocorasick" },
+    { name = "rectangle-packer" },
     { name = "rich" },
     { name = "rustworkx" },
     { name = "watchfiles" },
@@ -77,11 +81,13 @@ dev = [
     { name = "griffe-inherited-docstrings", specifier = ">=1.1.3" },
     { name = "griffelib", specifier = ">=2.1.0" },
     { name = "markdown", specifier = ">=3.10.2" },
+    { name = "numpy", specifier = ">=2.5.4" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pre-commit", specifier = ">=4.6.2" },
     { name = "pyahocorasick", specifier = ">=2.3.1" },
     { name = "pygments", specifier = ">=2.20.0" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "rectangle-packer", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", specifier = ">=0.15.20" },
     { name = "rustworkx", specifier = ">=0.18.0" },
@@ -91,8 +97,10 @@ dev = [
 ]
 runtime = [
     { name = "gmcodec", git = "https://github.com/shaperones0/gmcodec.git" },
+    { name = "numpy", specifier = ">=2.5.4" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pyahocorasick", specifier = ">=2.3.1" },
+    { name = "rectangle-packer", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "rustworkx", specifier = ">=0.18.0" },
     { name = "watchfiles", specifier = ">=1.3.0" },
@@ -607,6 +615,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/da/92/1446574745d74df0c92e6aa4a7b0b3130706a4142b2d1a5869f2eaa423c6/pyyaml-6.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:16249ee61e95f858e83976573de0f5b2893b3677ba71c9dd36b9cf8be9ac6d65", size = 829923, upload-time = "2025-09-25T21:32:54.537Z" },
     { url = "https://files.pythonhosted.org/packages/f0/7a/1c7270340330e575b92f397352af856a8c06f230aa3e76f86b39d01b416a/pyyaml-6.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4ad1906908f2f5ae4e5a8ddfce73c320c2a1429ec52eafd27138b7f1cbe341c9", size = 174062, upload-time = "2025-09-25T21:32:55.767Z" },
     { url = "https://files.pythonhosted.org/packages/f1/12/de94a39c2ef588c7e6455cfbe7343d3b2dc9d6b6b2f40c4c6565744c873d/pyyaml-6.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b", size = 149341, upload-time = "2025-09-25T21:32:56.828Z" },
+]
+
+[[package]]
+name = "rectangle-packer"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/ec/c3118f708b31080059f5dfff5d2ade4f8d94f7de240717dfa1142ea4daf9/rectangle_packer-2.1.0.tar.gz", hash = "sha256:64d18e4e2fb0bec05b3e6cf4f133a54677c3001061186dd93d8442568e3eaa17", size = 35770, upload-time = "2026-03-12T21:46:46.537Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/93/4bde124836642259489a948ac0308c42df604a2603315a72cf86d2034902/rectangle_packer-2.1.0-cp314-cp314-macosx_10_15_x86_64.whl", hash = "sha256:75215390af195d0cea3dec643a2523c41a782c31ef33955c5909d755ba6fd22a", size = 71309, upload-time = "2026-03-12T21:46:34.958Z" },
+    { url = "https://files.pythonhosted.org/packages/22/f3/95d7f2f10b079a6b4b0dd12d71761623946d5235f8ceaad0465c53f0ac7a/rectangle_packer-2.1.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:f8cff43b198ef068c1eec366bf7d361d378e52f58fc1a333c6a9618b345d9a08", size = 66650, upload-time = "2026-03-12T21:46:36.16Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/49/54e8d4818d09f58f855aa4de2a25521ce5196257b8a333d4bc028c6242e5/rectangle_packer-2.1.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5536c5ae2de482d6c49a06b96837ab25678a93ee7bdfc8c2f9e0390e81eaa0ff", size = 360035, upload-time = "2026-03-12T21:46:37.65Z" },
+    { url = "https://files.pythonhosted.org/packages/07/74/0003a88f7f7ca0274c463a43ca18d28a663fb4f7ee0cd3d0a674a78606de/rectangle_packer-2.1.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:beb7f9e0580961064f058fc191b47e8642dba66c83004e2ad7c6c3129e1af19c", size = 363362, upload-time = "2026-03-12T21:46:39.047Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/43/4a7dc02ce687fc36f284d786aa814e8878c06522b030d2d856aaadfc89ba/rectangle_packer-2.1.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:ebf68bbdf32167f9c3d331400ed90f5a8213bb3f56d864f7a36247c335d8c6a0", size = 354149, upload-time = "2026-03-12T21:46:40.59Z" },
+    { url = "https://files.pythonhosted.org/packages/67/ce/e64f687eff3f818334d71a44b0fba8bcca24e81551f102626dd458ea5e1b/rectangle_packer-2.1.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:b3733ee0c4c2a175558126e93441233744d6c1fa32eb7f22db6fb35046485bcd", size = 363006, upload-time = "2026-03-12T21:46:42.445Z" },
+    { url = "https://files.pythonhosted.org/packages/55/5d/1db0767464be8567e23d86f5589fbfd29c7db22b8dfac6f1672b250eb7d8/rectangle_packer-2.1.0-cp314-cp314-win32.whl", hash = "sha256:e56e3d64b6537911bd46a3b3712e84cd21f77b8f917343d5fca85a9cce63d4c3", size = 59647, upload-time = "2026-03-12T21:46:44.291Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/98/b46ac7a0612c55232df46577bb2a29ae3db3e97fa239643990ab96eb7718/rectangle_packer-2.1.0-cp314-cp314-win_amd64.whl", hash = "sha256:ef26eb0b0ab42084e812a4a8094e1f7b36354b2982425925f0d82e3c6e2a3ffe", size = 66116, upload-time = "2026-03-12T21:46:45.428Z" },
 ]
 
 [[package]]

@@ -12,17 +12,22 @@ import json
 import logging
 import os
 import queue
+import re
+import secrets
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 import threading
 import time
 import warnings
+import zipfile
 from abc import ABC
 from pathlib import Path
 from pprint import pprint
 from typing import override
 
+import numpy as np
+import rpack
 import rustworkx as rx
 import watchfiles
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
@@ -32,13 +37,19 @@ from gmcodec import model as gmc_model
 from gmcodec import validate as gmc_validate
 from PIL import Image
 from rich import console as r_console
+from rich import live as r_live
 from rich import progress as r_progress
+from rich import progress_bar as r_progress_bar
 from rich import table as r_table
+from rich import text as r_text
 from rich.logging import RichHandler
 
 from clunkster import asset as my_asset
+from clunkster import atlas as my_atlas
 from clunkster import lint as my_lint
+from clunkster import model as my_model
 from clunkster import project as my_proj
+from clunkster import tiles as my_tiles
 from clunkster.analyze import scan_cache as my_scan_cache
 from clunkster.analyze import scan_dep as my_scan_dep
 from clunkster.asset import Asset
@@ -72,6 +83,9 @@ class Config:
     scan_cache: Path
     # RAM budget (MB) for assets moved to Common because of cluster violations
     common_budget_mb: float = 500
+    # terms that shouldn't be used anymore (assets, scripts, functions) ->
+    #  why, see main_ex_lint_blacklist
+    blacklist: dict[str, str] = dataclasses.field(default_factory=dict)
     # assets moved to Common because of cluster violations, derived by the
     #  cluster checks (see main_ex_promote_refs)
     promoted: frozenset[str] = frozenset()
@@ -337,8 +351,11 @@ def asset_cluster(cfg: Config, asset: my_asset.Asset) -> str:
 
 
 # <snip DEF_ASSET_WET_FNAME>
-def asset_wet_fname(asset: my_asset.Asset) -> str:
+def asset_wet_fname(cfg: Config, asset: my_asset.Asset) -> str:
     """Get asset's wet file name."""
+    if isinstance(asset, AssetExtAudio) and not cfg.juicer.encode_audio:
+        # copied as is
+        return f'{asset.name_clean}{asset.file.suffix}'
     if isinstance(asset, AssetExtSfx):
         return f'{asset.name_clean}.wav'
     if isinstance(asset, (AssetExtSfx3, AssetExtBgm)):
@@ -348,6 +365,33 @@ def asset_wet_fname(asset: my_asset.Asset) -> str:
     if isinstance(asset, my_asset.Background):
         return f'{asset.name}.gmbck'
     raise NotImplementedError('Asset type not supported')
+
+
+def asset_wet_path(cfg: Config, asset: my_asset.AssetHasDir) -> Path:
+    """Get asset's wet file path, relative to the build dir.
+
+    Normally ``<wet dir>/<cluster>/<asset type dir>/<file name>``. With
+    ``hash_names``, files go flat into the wet dir, named by salted hashes
+    of asset names, without extensions (except for audio).
+    """
+    juicer = cfg.juicer
+    fname = asset_wet_fname(cfg, asset)
+    if juicer.hash_names:
+        digest = hashlib.blake2b(
+            f'{type(asset).type_name()}/{asset.name}'.encode(),
+            key=juicer.name_salt.encode(),
+            digest_size=12,
+        ).hexdigest()
+        # loading uses exact file names, so extensions can go too, except
+        #  for audio: gm82snd checks them
+        suffix = Path(fname).suffix if isinstance(asset, AssetExtAudio) else ''
+        return juicer.rel_dir_wet / f'{digest}{suffix}'
+    return (
+        juicer.rel_dir_wet
+        / asset_cluster(cfg, asset)
+        / type(asset).type_get_dir_rel()
+        / fname
+    )
 
 
 # </snip DEF_ASSET_WET_FNAME>
@@ -474,6 +518,27 @@ class ConfJuicer:
 
     # filename of the gm82 project
     fname_gm82: str
+
+    # encode audio, otherwise original files are copied as is (faster)
+    encode_audio: bool = True
+    # store wet assets flat in the wet dir under salted hashes of their
+    #  names, so that the build doesn't spoil asset names and structure
+    hash_names: bool = False
+    # salt for hashed names
+    name_salt: str = ''
+    # pack the game exe and data folder into a zip
+    package: bool = False
+    # launch the game after building
+    launch: bool = True
+    # pack backgrounds used only by room tiles into atlases (main_ex_atlas)
+    atlas: bool = False
+    # also write atlas pages into atlas_dump in the build, for inspection
+    dump_atlas: bool = False
+    # scramble names of baked models, otherwise they name room and depth
+    scramble_models: bool = True
+    # crop transparent edges of tiles that runtime code finds by position
+    #  (they stay whole tiles, and must still cover that position)
+    crop_found_tiles: bool = False
 
 
 JUICER = ConfJuicer(
@@ -817,10 +882,23 @@ def scan_files(
 # </snip DEFS_SCAN_FILES>
 
 
+# <snip CLS_TERM_USE>
+@dataclasses.dataclass(frozen=True, slots=True)
+class TermUse:
+    """Use of a blacklisted term."""
+
+    term: str
+    location: my_location.Location
+    source_asset: Asset
+
+
+# </snip CLS_TERM_USE>
+
+
 @step('Scanning references')
 def main_ex_scan(
     cfg: Config, assets: list[Asset], scan_cache: my_scan_cache.ScanCache
-) -> list[Dependency]:
+) -> tuple[list[Dependency], list[TermUse]]:
     """Reference scanner.
 
     In order to run dependency linters, we need to scan the actual references.
@@ -841,9 +919,12 @@ def main_ex_scan(
     per file in ``ScanCache``, and only files whose stat changed are
     rescanned. Changing the set of asset names (e.g. adding an asset)
     rescans everything, in parallel. Saving the cache is left to the caller.
+
+    Blacklisted terms (see ``main_ex_lint_blacklist``) are searched for in
+    the same pass.
     """
     # <snip MAIN_EX_SCAN>
-    names = sorted(asset.name for asset in assets)
+    names = sorted({asset.name for asset in assets} | cfg.blacklist.keys())
     scan_cache.set_names(
         hashlib.md5('\n'.join(names).encode('utf-8')).hexdigest()
     )
@@ -874,25 +955,65 @@ def main_ex_scan(
         file_matches[file_path] = matches
 
     name2asset = {asset.name: asset for asset in assets}
-    dependencies = [
-        Dependency(
-            location=my_location.Location(
+    dependencies: list[Dependency] = []
+    term_uses: list[TermUse] = []
+    for asset, file_path in scans:
+        for match in file_matches[file_path]:
+            location = my_location.Location(
                 file=file_path,
                 loc_index=match.idx,
                 loc_line=match.line,
                 loc_column=match.column,
-            ),
-            source_asset=asset,
-            target_asset=name2asset[match.target],
-            contexts=match.contexts,
-        )
-        for asset, file_path in scans
-        for match in file_matches[file_path]
-    ]
+            )
+            if match.target in name2asset:
+                dependencies.append(
+                    Dependency(
+                        location=location,
+                        source_asset=asset,
+                        target_asset=name2asset[match.target],
+                        contexts=match.contexts,
+                    )
+                )
+            if match.target in cfg.blacklist:
+                term_uses.append(TermUse(match.target, location, asset))
 
     log.info('Found %d total dependency references.', len(dependencies))
     # </snip MAIN_EX_SCAN>
-    return dependencies
+    return dependencies, term_uses
+
+
+# <snip RULES_BLACKLIST>
+RULE_BLACKLIST = my_lint.Rule(
+    'B100', 'blacklisted term', my_lint.Severity.WARNING
+)
+# </snip RULES_BLACKLIST>
+
+
+@step('Lint: blacklisted terms')
+def main_ex_lint_blacklist(cfg: Config, term_uses: list[TermUse]) -> None:
+    """Report uses of blacklisted terms.
+
+    Blacklist (``blacklist.json`` in the config directory) maps terms to the
+    reason they shouldn't be used anymore: scripts and functions being phased
+    out, assets that are about to be removed, etc. Uses are only reported,
+    and are found the same way as asset references, so strings and comments
+    don't count.
+    """
+    # <snip MAIN_EX_LINT_BLACKLIST>
+    violations = [
+        my_lint.Violation(
+            RULE_BLACKLIST,
+            cfg.blacklist[use.term],
+            location=use.location,
+            asset=use.source_asset,
+            group=use.term,
+        )
+        for use in term_uses
+    ]
+    if violations:
+        log.info('Found %d use(s) of blacklisted terms.', len(violations))
+    lint_report(cfg, violations)
+    # </snip MAIN_EX_LINT_BLACKLIST>
 
 
 # <snip RULES_UNUSED>
@@ -1379,21 +1500,17 @@ RULE_PROMOTED_BUDGET = my_lint.Rule(
 
 
 # <snip DEF_ASSET_RAM>
-def next_pow2(n: int) -> int:
-    """Get the smallest power of two that is at least ``n``."""
-    return 1 << max(0, (n - 1).bit_length())
-
-
 def asset_ram_estimate(cfg: Config, asset: Asset) -> int:
     """Estimate how much RAM a loaded asset takes, in bytes.
 
     Only covers assets that get dehydrated, others always stay in the base
     executable anyway. Rough GameMaker 8.2 model:
 
-    - sprites: every frame is a texture padded to power of two sizes, 4 bytes
-      per pixel, plus a collision mask of 1 byte per pixel (one per frame if
-      masks are separate)
-    - backgrounds: a single padded texture
+    - sprites: every frame is a texture of 4 bytes per pixel, plus a
+      collision mask of 1 byte per pixel (one per frame if masks are
+      separate); textures aren't padded to powers of two, except on rare
+      hardware
+    - backgrounds: a single texture
     - external audio: file size (sound effects are loaded whole, for streamed
       music it's a generous estimate)
     """
@@ -1404,14 +1521,13 @@ def asset_ram_estimate(cfg: Config, asset: Asset) -> int:
             return 0
         width, height = my_parse_png.size(asset.get_sprite_image(root, 0))
         masks = meta.frames if meta.per_frame_colliders else 1
-        texture = next_pow2(width) * next_pow2(height) * 4
-        return meta.frames * texture + masks * width * height
+        return (meta.frames * 4 + masks) * width * height
     if isinstance(asset, my_asset.Background):
         image = asset.get_background_image(root)
         if not image.exists():
             return 0
         width, height = my_parse_png.size(image)
-        return next_pow2(width) * next_pow2(height) * 4
+        return width * height * 4
     if isinstance(asset, AssetExtAudio):
         return asset.file.stat().st_size
     return 0
@@ -1542,9 +1658,24 @@ def juice_background(
     :param out_file: File to write resulting ``.gmbck`` bytes to.
     """
     with Image.open(image) as img:
-        img = img.convert('RGBA')
-        width, height = img.size
-        pixel_data = img.tobytes('raw', 'BGRA')
+        juice_background_image(meta=meta, img=img, out_file=out_file)
+
+
+def juice_background_image(
+    *,
+    meta: my_asset.BackgroundMetadata,
+    img: Image.Image,
+    out_file: Path,
+) -> None:
+    """Juice a background image into external ``.gmbck`` file.
+
+    :param meta: Background metadata (``exists`` flag must be 1).
+    :param img: Background image.
+    :param out_file: File to write resulting ``.gmbck`` bytes to.
+    """
+    img = img.convert('RGBA')
+    width, height = img.size
+    pixel_data = img.tobytes('raw', 'BGRA')
 
     gm_meta = gmc_model.GmbckMeta.default()
     # gm_meta.version = ...
@@ -1583,6 +1714,9 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
                 'pcm_s16le',
                 '-ar',
                 '44100',
+                # output may have no extension to guess the format from
+                '-f',
+                'wav',
                 str(out_file),
             ],
             check=True,
@@ -1608,6 +1742,8 @@ def juice_audio(audio: AssetExtAudio, out_file: Path) -> None:
                 'libvorbis',
                 '-q:a',
                 '3',
+                '-f',
+                'ogg',
                 str(out_file),
             ],
             check=True,
@@ -1779,13 +1915,13 @@ class TaskEncodeSprite(my_task.TaskGeneric):
         *,
         sprite: my_asset.Sprite,
         dir_input_root: Path,
-        dir_wet_root: Path,
+        file_output: Path,
     ) -> None:
         """Initialize the task.
 
         :param sprite: Sprite to encode.
         :param dir_input_root: Input project root.
-        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        :param file_output: Wet file to write.
         """
         file_metadata = sprite.get_sprite_metadata_file(dir_input_root)
         self.sprite_meta = sprite.get_sprite_metadata(dir_input_root)
@@ -1794,11 +1930,7 @@ class TaskEncodeSprite(my_task.TaskGeneric):
             for frame in range(self.sprite_meta.frames)
         )
 
-        self.file_output_gmspr = (
-            dir_wet_root
-            / type(sprite).type_get_dir_rel()
-            / asset_wet_fname(sprite)
-        )
+        self.file_output_gmspr = file_output
 
         super().__init__(
             task_id=f'proc_spr_{sprite.name}',
@@ -1823,13 +1955,13 @@ class TaskEncodeBackground(my_task.TaskGeneric):
         *,
         background: my_asset.Background,
         dir_input_root: Path,
-        dir_wet_root: Path,
+        file_output: Path,
     ) -> None:
         """Initialize the task.
 
         :param background: Background to encode.
         :param dir_input_root: Input project root.
-        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        :param file_output: Wet file to write.
         """
         file_metadata = background.get_background_metadata_file(dir_input_root)
         self.background_meta = background.get_background_metadata(
@@ -1837,11 +1969,7 @@ class TaskEncodeBackground(my_task.TaskGeneric):
         )
         self.background_image = background.get_background_image(dir_input_root)
 
-        self.file_output_gmbck = (
-            dir_wet_root
-            / type(background).type_get_dir_rel()
-            / asset_wet_fname(background)
-        )
+        self.file_output_gmbck = file_output
 
         super().__init__(
             task_id=f'proc_bg_{background.name}',
@@ -1865,19 +1993,15 @@ class TaskCompressAudio(my_task.TaskGeneric):
         self,
         *,
         audio: AssetExtAudio,
-        dir_wet_root: Path,
+        file_output: Path,
     ) -> None:
         """Initialize the task.
 
         :param audio: Background to compress.
-        :param dir_wet_root: Wet dir (e.g. ``<output>/data/chunks/<cluster>``).
+        :param file_output: Wet file to write.
         """
         self.audio = audio
-        self.file_output = (
-            dir_wet_root
-            / type(audio).type_get_dir_rel()
-            / asset_wet_fname(audio)
-        )
+        self.file_output = file_output
 
         super().__init__(
             task_id=f'compress_{audio.name_clean}',
@@ -1958,6 +2082,1178 @@ def main_juicer_classes() -> None:
     """
 
 
+# <snip CLS_ATLAS>
+# largest atlas page, pages are cropped to what they hold
+ATLAS_PAGE_SIZE = 4096
+# pixels around each region repeating its edges, so that scaled views don't
+#  pull in neighboring regions
+ATLAS_BORDER = 1
+# overlapping regions are stored as one when that adds at most this share of
+#  unused pixels
+ATLAS_MAX_MERGE_WASTE = 0.25
+# tiles at least this large (both sides) are split into cells
+SPLIT_MIN_SIZE = 128
+# splitting cell size
+SPLIT_CELL = 16
+# splitting is kept only if it drops at least this share of the pixels
+SPLIT_MIN_GAIN = 0.15
+# white patch added to pages, single color areas are drawn with it stretched
+#  and tinted
+ATLAS_WHITE = '__white'
+ATLAS_WHITE_SIZE = 4
+# metadata of atlas page backgrounds
+ATLAS_PAGE_META = my_asset.BackgroundMetadata(
+    exists=1,
+    tileset=0,
+    tile_width=16,
+    tile_height=16,
+    tile_hoffset=0,
+    tile_voffset=0,
+    tile_hsep=0,
+    tile_vsep=0,
+)
+# baked models of a layer draw just above it: within one depth, tiles draw on
+#  top of instances, and this keeps models ordered among themselves too
+MODEL_DEPTH_STEP = 0.0001
+
+# objects that take the tile at their position at runtime (and their
+#  children), objects that work on whole tile layers, and baked models
+TILE_FINDERS = frozenset({'shap_SmartTileActive'})
+TILE_LAYER_USERS = frozenset({'shap_TileDeleter'})
+MODEL_OBJECT = 'shap_Model'
+
+
+# part of a tile's region: offset and size within the region, and the
+#  single color it's filled with (ARGB, BGR order), if it is
+AtlasPart = tuple[int, int, int, int, int | None]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AtlasEntry:
+    """Image region placed on an atlas page."""
+
+    # source background, or ATLAS_WHITE
+    bg: str
+    left: int
+    top: int
+    width: int
+    height: int
+    # region's position on the page
+    x: int
+    y: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class AtlasPage:
+    """Atlas page, added to the build as a background."""
+
+    asset: my_asset.Background
+    width: int
+    height: int
+    entries: tuple[AtlasEntry, ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ModelPlan:
+    """Model baked from tiles."""
+
+    # file name in data/model, as shap_lazy_model loads it
+    name: str
+    # background textured with
+    texture: str
+    depth: float
+    quads: tuple[my_model.Quad, ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RoomPlan:
+    """New contents of a room's tile layers."""
+
+    # depth -> tiles left in the layer (only changed layers)
+    layers: dict[int, tuple[my_tiles.Tile, ...]]
+    models: tuple[ModelPlan, ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Atlas:
+    """Packed texture atlas, and rooms using it."""
+
+    pages: tuple[AtlasPage, ...]
+    # backgrounds whose tiles moved onto pages
+    atlased: frozenset[str]
+    # room name -> plan, for changed rooms
+    rooms: dict[str, RoomPlan]
+
+
+@dataclasses.dataclass(slots=True)
+class TileProtection:
+    """Tiles of a room that runtime code works with."""
+
+    # layers whose tiles must stay exactly as they are
+    fixed_layers: set[int] = dataclasses.field(default_factory=set)
+    # layers whose tiles may change, but must stay tiles
+    tile_layers: set[int] = dataclasses.field(default_factory=set)
+    # depth -> points; tiles there must stay exactly as they are
+    points: dict[int, list[tuple[float, float]]] = dataclasses.field(
+        default_factory=dict
+    )
+
+
+def is_tile_layer_file(file: Path) -> bool:
+    """Check whether a room file is a tile layer (named by its depth)."""
+    return file.suffix == '.txt' and file.stem.removeprefix('-').isdigit()
+
+
+# </snip CLS_ATLAS>
+
+
+@step('Atlas: protected tiles')
+def main_ex_tile_protection(
+    cfg: Config, assets: list[Asset]
+) -> dict[str, TileProtection]:
+    """Find tiles that runtime code works with.
+
+    Anything that rewrites tiles has to leave alone those that the game
+    finds or changes at runtime. Since the game references these objects by
+    name, this is game-specific:
+
+    - instances of ``TILE_FINDERS`` (and their children) take the tile at
+      their position, at their depth: tiles there stay exactly as they are
+    - ``TILE_LAYER_USERS`` work on their whole layer: it stays as it is
+    - ``tile_layer_*`` calls with literal depths, in objects placed in a room
+      or the room's creation code: those layers may change, but stay tiles
+      (hiding or shifting a layer wouldn't affect a model)
+    - layers of existing ``shap_Model`` instances stay tiles too, so that
+      nothing gets drawn twice
+    """
+    # <snip MAIN_EX_TILE_PROTECTION>
+    root = cfg.project.root
+    objects = {
+        asset.name: asset
+        for asset in assets
+        if isinstance(asset, my_asset.Object)
+    }
+    metas = {
+        name: obj.get_object_metadata(root) for name, obj in objects.items()
+    }
+
+    def descends(name: str, ancestors: frozenset[str]) -> bool:
+        seen: set[str] = set()
+        while name and name not in seen:
+            if name in ancestors:
+                return True
+            seen.add(name)
+            meta = metas.get(name)
+            name = meta.parent if meta else ''
+        return False
+
+    layer_call = re.compile(
+        r'\btile_layer_(?:hide|show|shift|delete|delete_at|depth)\s*\(\s*'
+        r'(-?\d+)\s*[,)]'
+    )
+
+    def literal_depths(file: Path) -> set[int]:
+        if not file.exists():
+            return set()
+        text = file.read_text(encoding='utf-8', errors='replace')
+        return {int(m.group(1)) for m in layer_call.finditer(text)}
+
+    object_depths = {
+        name: literal_depths(obj.get_object_gml_file(root))
+        for name, obj in objects.items()
+    }
+    depth_field = re.compile(
+        r'^\s*depth\s*=\s*(-?\d+(?:\.\d+)?)', re.MULTILINE
+    )
+
+    protection: dict[str, TileProtection] = {}
+    for room in assets:
+        if not isinstance(room, my_asset.Room):
+            continue
+        folder = room.get_room_folder(root)
+        prot = TileProtection()
+        prot.tile_layers |= literal_depths(room.get_room_gml_file(root))
+        instances = folder / 'instances.txt'
+        lines = (
+            instances.read_text(encoding='utf-8').splitlines()
+            if instances.exists()
+            else []
+        )
+        for line in lines:
+            if not line:
+                continue
+            fields = line.split(',')
+            obj = fields[0]
+            prot.tile_layers |= object_depths.get(obj, set())
+            finder = descends(obj, TILE_FINDERS)
+            layer_user = descends(obj, TILE_LAYER_USERS)
+            if not (finder or layer_user or obj == MODEL_OBJECT):
+                continue
+            # depth from creation code, or the object's
+            depth = float(metas[obj].depth) if obj in metas else 0.0
+            code = folder / f'{fields[3]}.gml'
+            if code.exists():
+                found = depth_field.findall(
+                    code.read_text(encoding='utf-8', errors='replace')
+                )
+                if found:
+                    depth = float(found[-1])
+            layer = int(depth)
+            if finder:
+                prot.points.setdefault(layer, []).append((
+                    float(fields[1]),
+                    float(fields[2]),
+                ))
+            elif layer_user:
+                prot.fixed_layers.add(layer)
+            else:
+                prot.tile_layers.add(layer)
+        protection[room.name] = prot
+
+    log.info(
+        'Protected: %d layers fixed, %d kept as tiles, %d tile positions',
+        sum(len(p.fixed_layers) for p in protection.values()),
+        sum(len(p.tile_layers) for p in protection.values()),
+        sum(len(v) for p in protection.values() for v in p.points.values()),
+    )
+    # </snip MAIN_EX_TILE_PROTECTION>
+    return protection
+
+
+@step('Atlas: packing tiles')
+def main_ex_atlas(
+    cfg: Config,
+    assets: list[Asset],
+    dependencies: list[Dependency],
+    protection: dict[str, TileProtection],
+) -> Atlas:
+    """Pack tiles into texture atlases, and bake them into models.
+
+    Fewer textures and draw calls per room, by rewriting room tile layers:
+
+    1. Only backgrounds referenced from nothing but room tile layers
+       qualify: room tiles point to a region of a background, so they can
+       point to a region of an atlas page instead. Others stay as they are.
+    2. Tiles of those get their transparent edges cropped (fully transparent
+       ones are dropped). Large ones are split into cells: empty cells are
+       dropped, single color ones are drawn with a white patch, stretched and
+       tinted, and the rest merge back into as few rectangles as possible.
+       Tiles stay where they were drawn, also when scaled or mirrored;
+       tiles whose parts would land between pixels stay whole.
+    3. Regions lying within others, or overlapping them closely enough, are
+       stored once, and so are regions with identical pixels.
+    4. Regions are packed onto pages of the cluster of their background (so
+       pages load and unload with their stage), with a border repeating
+       their edges, and tiles are pointed to the pages.
+    5. Tiles of each layer are baked into models (``shap_Model``), one per
+       texture where order allows. Tiles overlapping ones that have to stay
+       tiles stay tiles too, so drawing order doesn't change.
+
+    Protected tiles (see ``main_ex_tile_protection``) are only pointed to
+    pages, never changed otherwise. With ``crop_found_tiles``, tiles found by
+    position get their transparent edges cropped too, as long as they still
+    cover that position. Original backgrounds stay in the
+    project (so asset ids don't change), but aren't loaded anymore.
+    """
+    # <snip MAIN_EX_ATLAS>
+    root = cfg.project.root
+    backgrounds = {
+        asset.name: asset
+        for asset in assets
+        if isinstance(asset, my_asset.Background)
+    }
+    rooms = [asset for asset in assets if isinstance(asset, my_asset.Room)]
+
+    # backgrounds referenced from anything but room tiles stay as they are
+    excluded: set[str] = set()
+    for dep in dependencies:
+        target = dep.target_asset
+        if isinstance(target, my_asset.Background) and not (
+            isinstance(dep.source_asset, my_asset.Room)
+            and is_tile_layer_file(dep.location.file)
+        ):
+            excluded.add(target.name)
+
+    pixels: dict[str, np.ndarray] = {}
+
+    def image(name: str) -> np.ndarray:
+        if name not in pixels:
+            file = backgrounds[name].get_background_image(root)
+            with Image.open(file) as img:
+                pixels[name] = np.asarray(img.convert('RGBA'))
+        return pixels[name]
+
+    # read layers
+    layers: dict[str, dict[int, list[my_tiles.Tile]]] = {}
+    for room in progress(rooms, 'Reading tiles'):
+        layers[room.name] = {
+            depth: my_tiles.parse_layer(
+                room.get_room_layer_file(root, depth).read_text(
+                    encoding='utf-8'
+                )
+            )
+            for depth in room.get_room_layers(root)
+        }
+
+    # pick backgrounds: tiles must stay within them
+    candidates: set[str] = set()
+    used: dict[str, list[my_atlas.Rect]] = {}
+    for room_layers in layers.values():
+        for tiles in room_layers.values():
+            for tile in tiles:
+                used.setdefault(tile.bg, []).append(tile.region())
+    for name, rects in used.items():
+        bg = backgrounds.get(name)
+        if bg is None or name in excluded:
+            continue
+        if not bg.get_background_image(root).exists():
+            continue
+        height, width = image(name).shape[:2]
+        if all(
+            left >= 0
+            and top >= 0
+            and 0 < w <= ATLAS_PAGE_SIZE - 2 * ATLAS_BORDER
+            and 0 < h <= ATLAS_PAGE_SIZE - 2 * ATLAS_BORDER
+            and left + w <= width
+            and top + h <= height
+            for left, top, w, h in rects
+        ):
+            candidates.add(name)
+        else:
+            log.warning('Not atlasing %s: tiles reach outside of it', name)
+
+    # region -> parts
+    part_cache: dict[tuple[str, my_atlas.Rect], list[AtlasPart]] = {}
+
+    def crop(
+        pix: np.ndarray, x: int, y: int, w: int, h: int
+    ) -> AtlasPart | None:
+        alpha = pix[y : y + h, x : x + w, 3]
+        cols = np.flatnonzero(alpha.any(axis=0))
+        rows = np.flatnonzero(alpha.any(axis=1))
+        if not cols.size:
+            return None
+        return (
+            x + int(cols[0]),
+            y + int(rows[0]),
+            int(cols[-1] - cols[0]) + 1,
+            int(rows[-1] - rows[0]) + 1,
+            None,
+        )
+
+    def crop_tile(tile: my_tiles.Tile) -> my_tiles.Tile | None:
+        """Crop a tile's transparent edges, ``None`` if it's all transparent.
+
+        Crop offsets are snapped outwards so that the tile stays on whole
+        pixels when scaled (e.g. multiples of 5 for scale 0.8).
+        """
+        left, top, width, height = tile.region()
+        part = crop(
+            image(tile.bg)[top : top + height, left : left + width],
+            0,
+            0,
+            width,
+            height,
+        )
+        if part is None:
+            return None
+        dx, dy, w, h, _ = part
+        snapped_dx = _snap_offset(dx, tile.xscale)
+        snapped_dy = _snap_offset(dy, tile.yscale)
+        return tile.sub(
+            snapped_dx, snapped_dy, w + dx - snapped_dx, h + dy - snapped_dy
+        )
+
+    def crop_found(
+        room_name: str,
+        depth: int,
+        tile: my_tiles.Tile,
+        found_at: list[tuple[float, float]],
+    ) -> my_tiles.Tile:
+        """Crop a tile found by position, if it still covers the position."""
+        cropped = crop_tile(tile)
+        if cropped is not None and all(it.starmap(cropped.contains, found_at)):
+            return cropped
+        log.warning(
+            '%s, depth %d: kept tile %s whole, its SmartTile at %s is on %s',
+            room_name,
+            depth,
+            tile.format(),
+            ' '.join(f'{x:g},{y:g}' for x, y in found_at),
+            'a fully transparent tile'
+            if cropped is None
+            else 'transparent pixels at its edge',
+        )
+        return tile
+
+    def parts(name: str, rect: my_atlas.Rect) -> list[AtlasPart]:
+        key = (name, rect)
+        if key in part_cache:
+            return part_cache[key]
+        left, top, width, height = rect
+        pix = image(name)[top : top + height, left : left + width]
+        whole = crop(pix, 0, 0, width, height)
+        result: list[AtlasPart] = [] if whole is None else [whole]
+        if whole is not None and min(whole[2], whole[3]) >= SPLIT_MIN_SIZE:
+            cells: dict[tuple[int, int], int | None] = {}
+            for cy in range(0, height, SPLIT_CELL):
+                for cx in range(0, width, SPLIT_CELL):
+                    cell = pix[cy : cy + SPLIT_CELL, cx : cx + SPLIT_CELL]
+                    if not cell[..., 3].any():
+                        continue
+                    first = cell[0, 0]
+                    if (cell == first).all():
+                        r, g, b, a = (int(c) for c in first)
+                        cells[cx // SPLIT_CELL, cy // SPLIT_CELL] = (
+                            a << 24 | b << 16 | g << 8 | r
+                        )
+                    else:
+                        cells[cx // SPLIT_CELL, cy // SPLIT_CELL] = None
+            split: list[AtlasPart] = []
+            for cx, cy, cw, ch, color in my_atlas.grid_rects(cells):
+                x, y = cx * SPLIT_CELL, cy * SPLIT_CELL
+                w = min(cw * SPLIT_CELL, width - x)
+                h = min(ch * SPLIT_CELL, height - y)
+                if color is not None:
+                    split.append((x, y, w, h, color))
+                    continue
+                part = crop(pix, x, y, w, h)
+                if part is not None:
+                    split.append(part)
+            kept = sum(p[2] * p[3] for p in split if p[4] is None)
+            if kept <= (1 - SPLIT_MIN_GAIN) * whole[2] * whole[3]:
+                result = split
+        part_cache[key] = result
+        return result
+
+    def on_pixels(tile: my_tiles.Tile, dx: int, dy: int) -> bool:
+        return (dx * tile.xscale).is_integer() and (
+            dy * tile.yscale
+        ).is_integer()
+
+    # 1-2: crop and split, tiles keep the background they came from
+    new_layers: dict[str, dict[int, list[tuple[my_tiles.Tile, str]]]] = {}
+    protected: dict[str, dict[int, set[int]]] = {}
+    solid_clusters: set[str] = set()
+    for room_name, room_layers in layers.items():
+        prot = protection.get(room_name, TileProtection())
+        for depth, tiles in room_layers.items():
+            points = prot.points.get(depth, [])
+            keep: set[int] = set()
+            out: list[tuple[my_tiles.Tile, str]] = []
+            for tile in tiles:
+                found_at = [pt for pt in points if tile.contains(*pt)]
+                fixed = depth in prot.fixed_layers or bool(found_at)
+                if (
+                    found_at
+                    and depth not in prot.fixed_layers
+                    and cfg.juicer.crop_found_tiles
+                    and tile.bg in candidates
+                ):
+                    tile = crop_found(room_name, depth, tile, found_at)
+                tile_parts = (
+                    None
+                    if fixed or tile.bg not in candidates
+                    else parts(tile.bg, tile.region())
+                )
+                if tile_parts is None:
+                    if fixed:
+                        keep.add(len(out))
+                    out.append((tile, tile.bg))
+                    continue
+                if not all(
+                    _on_pixel(p[0] * tile.xscale)
+                    and _on_pixel(p[1] * tile.yscale)
+                    for p in tile_parts
+                ):
+                    # parts would land between pixels, crop it whole instead
+                    #  (snapping parts could make them overlap)
+                    cropped = crop_tile(tile)
+                    if cropped is not None:
+                        out.append((cropped, tile.bg))
+                    continue
+                for x, y, w, h, color in tile_parts:
+                    piece = tile.sub(x, y, w, h)
+                    if color is not None:
+                        # white patch, stretched and tinted
+                        piece = dataclasses.replace(
+                            piece,
+                            bg=ATLAS_WHITE,
+                            left=0,
+                            top=0,
+                            width=ATLAS_WHITE_SIZE,
+                            height=ATLAS_WHITE_SIZE,
+                            xscale=w * tile.xscale / ATLAS_WHITE_SIZE,
+                            yscale=h * tile.yscale / ATLAS_WHITE_SIZE,
+                            color=tint(tile.color, color),
+                        )
+                        solid_clusters.add(
+                            asset_cluster(cfg, backgrounds[tile.bg])
+                        )
+                    out.append((piece, tile.bg))
+            new_layers.setdefault(room_name, {})[depth] = out
+            protected.setdefault(room_name, {})[depth] = keep
+
+    # 3: regions to store, per background; regions within or close to
+    #  others are stored as part of them, identical ones once
+    regions: dict[str, set[my_atlas.Rect]] = {}
+    for room_layers in new_layers.values():
+        for tiles_from in room_layers.values():
+            for tile, _ in tiles_from:
+                if tile.bg in candidates:
+                    regions.setdefault(tile.bg, set()).add(tile.region())
+    # (background, region) -> its container, and where that's stored (the
+    #  container itself, or one with identical pixels in the same cluster)
+    stored_as: dict[
+        tuple[str, my_atlas.Rect],
+        tuple[my_atlas.Rect, tuple[str, my_atlas.Rect]],
+    ] = {}
+    by_pixels: dict[tuple[str, bytes], tuple[str, my_atlas.Rect]] = {}
+    for name in sorted(regions):
+        cluster = asset_cluster(cfg, backgrounds[name])
+        merged = my_atlas.merge_regions(regions[name], ATLAS_MAX_MERGE_WASTE)
+        for rect, container in sorted(merged.items()):
+            left, top, w, h = container
+            digest = hashlib.md5(
+                image(name)[top : top + h, left : left + w].tobytes()
+                + f'{w}x{h}'.encode()
+            ).digest()
+            stored_as[name, rect] = (
+                container,
+                by_pixels.setdefault((cluster, digest), (name, container)),
+            )
+
+    # 4: pack per cluster, pages get a white patch if needed
+    by_cluster: dict[str, set[tuple[str, my_atlas.Rect]]] = {}
+    for _, (name, rect) in stored_as.values():
+        cluster = asset_cluster(cfg, backgrounds[name])
+        by_cluster.setdefault(cluster, set()).add((name, rect))
+    for cluster in solid_clusters:
+        by_cluster.setdefault(cluster, set())
+    border = ATLAS_BORDER
+    white_size = ATLAS_WHITE_SIZE + 2 * border
+    pages: list[AtlasPage] = []
+    placed: dict[tuple[str, my_atlas.Rect], tuple[str, int, int]] = {}
+    white: dict[str, tuple[str, int, int]] = {}
+    # packing is slow: results are cached by input in the build folder, and
+    #  packed in parallel otherwise
+    jobs: dict[
+        str, tuple[list[tuple[str, my_atlas.Rect]], str, AtlasPackJob]
+    ] = {}
+    for cluster, stored in sorted(by_cluster.items()):
+        keys = sorted(stored, key=lambda k: (-k[1][2] * k[1][3], k))
+        job = (
+            [(r[2] + 2 * border, r[3] + 2 * border) for _, r in keys],
+            (white_size, white_size) if cluster in solid_clusters else None,
+        )
+        jobs[cluster] = (
+            keys,
+            hashlib.md5(repr(job).encode()).hexdigest(),
+            job,
+        )
+    file_pack_cache = cfg.juicer.dir_out / 'clunkster_atlas_pack.json'
+    pack_cache: dict[str, AtlasPackedPages] = {}
+    if file_pack_cache.exists():
+        pack_cache.update(
+            json.loads(file_pack_cache.read_text(encoding='utf-8'))
+        )
+    missing = [c for c, (_, key, _) in jobs.items() if key not in pack_cache]
+    if missing:
+        log.info('Packing %d cluster(s)', len(missing))
+        with concurrent.futures.ProcessPoolExecutor() as pool:
+            for cluster, packed_pages in zip(
+                missing,
+                pool.map(_atlas_pack_job, [jobs[c][2] for c in missing]),
+                strict=True,
+            ):
+                pack_cache[jobs[cluster][1]] = packed_pages
+    file_pack_cache.parent.mkdir(parents=True, exist_ok=True)
+    write_if_changed(
+        file_pack_cache,
+        json.dumps({key: pack_cache[key] for _, key, _ in jobs.values()}),
+    )
+
+    for cluster, (keys, key, _) in jobs.items():
+        packed = pack_cache[key]
+        prefix = re.sub(r'\W', '_', cluster)
+        for idx, (page_width, page_height, members) in enumerate(packed):
+            page_name = f'__atlas_{prefix}_{idx}'
+            if page_name in backgrounds:
+                raise ValueError(f'Atlas page name {page_name} is taken')
+            entries: list[AtlasEntry] = []
+            for item, x, y in members:
+                if item is None:
+                    entry = AtlasEntry(
+                        ATLAS_WHITE,
+                        0,
+                        0,
+                        ATLAS_WHITE_SIZE,
+                        ATLAS_WHITE_SIZE,
+                        x=x + border,
+                        y=y + border,
+                    )
+                    white.setdefault(cluster, (page_name, entry.x, entry.y))
+                else:
+                    name, rect = keys[item]
+                    entry = AtlasEntry(name, *rect, x=x + border, y=y + border)
+                    placed[keys[item]] = (page_name, entry.x, entry.y)
+                entries.append(entry)
+            asset = my_asset.Background(
+                name=page_name,
+                # root assets are Common
+                tree_path=() if cluster == 'Common' else (cluster,),
+            )
+            pages.append(
+                AtlasPage(asset, page_width, page_height, tuple(entries))
+            )
+
+    def to_page(tile: my_tiles.Tile, source: str) -> my_tiles.Tile:
+        if tile.bg == ATLAS_WHITE:
+            page, x, y = white[asset_cluster(cfg, backgrounds[source])]
+            return dataclasses.replace(tile, bg=page, left=x, top=y)
+        if tile.bg not in candidates:
+            return tile
+        container, key = stored_as[tile.bg, tile.region()]
+        page, x, y = placed[key]
+        return dataclasses.replace(
+            tile,
+            bg=page,
+            left=x + tile.left - container[0],
+            top=y + tile.top - container[1],
+        )
+
+    # 5: bake
+    page_sizes = {p.asset.name: (p.width, p.height) for p in pages}
+    texture_sizes: dict[str, tuple[int, int] | None] = {}
+
+    def texture_size(name: str) -> tuple[int, int] | None:
+        if name in page_sizes:
+            return page_sizes[name]
+        if name not in texture_sizes:
+            bg = backgrounds.get(name)
+            file = bg.get_background_image(root) if bg else None
+            texture_sizes[name] = (
+                my_parse_png.size(file) if file and file.exists() else None
+            )
+        return texture_sizes[name]
+
+    plans: dict[str, RoomPlan] = {}
+    tiles_before = tiles_after = models_after = 0
+    for room in rooms:
+        prot = protection.get(room.name, TileProtection())
+        changed: dict[int, tuple[my_tiles.Tile, ...]] = {}
+        models: list[ModelPlan] = []
+        for depth, tiles_from in new_layers.get(room.name, {}).items():
+            original = layers[room.name][depth]
+            mapped = list(it.starmap(to_page, tiles_from))
+            keep = set(protected[room.name][depth])
+            if depth not in prot.tile_layers | prot.fixed_layers:
+                # tiles reaching outside of their texture stay tiles, models
+                #  would wrap around instead
+                keep |= {
+                    i
+                    for i, tile in enumerate(mapped)
+                    if not _within_texture(tile, texture_size(tile.bg))
+                }
+                keep = _overlap_closure(mapped, keep)
+                layer_models = _bake_layer(
+                    cfg,
+                    room.name,
+                    depth,
+                    [t for i, t in enumerate(mapped) if i not in keep],
+                    texture_size,
+                )
+                models.extend(layer_models)
+                models_after += len(layer_models)
+                mapped = [t for i, t in enumerate(mapped) if i in keep]
+            tiles_before += len(original)
+            tiles_after += len(mapped)
+            if mapped != original:
+                changed[depth] = tuple(mapped)
+        if changed or models:
+            plans[room.name] = RoomPlan(layers=changed, models=tuple(models))
+
+    # every tile of these points to pages now
+    atlased = frozenset(candidates)
+    log.info(
+        'Packed regions of %d background(s) into %d page(s): %s',
+        len(atlased),
+        len(pages),
+        ', '.join(f'{p.asset.name} {p.width}x{p.height}' for p in pages),
+    )
+    log.info(
+        'Tiles: %d -> %d tiles and %d models',
+        tiles_before,
+        tiles_after,
+        models_after,
+    )
+    # </snip MAIN_EX_ATLAS>
+    return Atlas(pages=tuple(pages), atlased=atlased, rooms=plans)
+
+
+# <snip DEFS_ATLAS>
+def tint(color: int, pixel: int) -> int:
+    """Combine a tile color with a pixel color (both ARGB, BGR order).
+
+    Channels multiply, like drawing the pixel with the tile color does.
+    """
+    channels = [
+        round(((color >> shift) & 0xFF) * ((pixel >> shift) & 0xFF) / 255)
+        for shift in (0, 8, 16, 24)
+    ]
+    return (
+        channels[0] | channels[1] << 8 | channels[2] << 16 | channels[3] << 24
+    )
+
+
+# pages: width, height, rectangles (index or None for the extra one, x, y)
+AtlasPackedPages = list[tuple[int, int, list[tuple[int | None, int, int]]]]
+# sizes of rectangles, and the extra one
+AtlasPackJob = tuple[list[tuple[int, int]], tuple[int, int] | None]
+
+
+def atlas_pack_pages(
+    sizes: col.Sequence[tuple[int, int]],
+    extra: tuple[int, int] | None = None,
+) -> AtlasPackedPages:
+    """Pack rectangles onto as few pages as possible, with ``rpack``.
+
+    Every page takes the longest run of the remaining rectangles (in the
+    given order, largest first works best) that fits, so pages fill up.
+
+    :param sizes: Rectangle sizes.
+    :param extra: Rectangle added to every page, if any.
+    :return: Pages: width, height and placed rectangles (index into
+      ``sizes``, or ``None`` for the extra one, x, y).
+    """
+
+    def attempt(items: list[int]) -> list[tuple[int, int]] | None:
+        rects = [sizes[i] for i in items]
+        if extra is not None:
+            rects.append(extra)
+        try:
+            return rpack.pack(
+                rects, max_width=ATLAS_PAGE_SIZE, max_height=ATLAS_PAGE_SIZE
+            )
+        except rpack.PackingImpossibleError:
+            return None
+
+    extra_size = extra if extra is not None else (0, 0)
+    pages: AtlasPackedPages = []
+    remaining = list(range(len(sizes)))
+    while remaining or (extra is not None and not pages):
+        positions = attempt(remaining)
+        count = len(remaining)
+        if positions is None:
+            # binary search the longest run that fits
+            low, high = 1, len(remaining) - 1
+            positions = attempt(remaining[:1])
+            if positions is None:
+                raise ValueError(f'{sizes[remaining[0]]} exceeds page size')
+            count = 1
+            while low <= high:
+                middle = (low + high) // 2
+                found = attempt(remaining[:middle])
+                if found is None:
+                    high = middle - 1
+                else:
+                    positions, count, low = found, middle, middle + 1
+        items: list[int | None] = list(remaining[:count])
+        if extra is not None:
+            items.append(None)
+        rects = [sizes[i] if i is not None else extra_size for i in items]
+        width = max(
+            x + r[0] for (x, _), r in zip(positions, rects, strict=True)
+        )
+        height = max(
+            y + r[1] for (_, y), r in zip(positions, rects, strict=True)
+        )
+        pages.append((
+            width,
+            height,
+            [
+                (item, x, y)
+                for item, (x, y) in zip(items, positions, strict=True)
+            ],
+        ))
+        remaining = remaining[count:]
+    return pages
+
+
+def _within_texture(tile: my_tiles.Tile, size: tuple[int, int] | None) -> bool:
+    """Check whether a tile's region lies within its texture."""
+    return size is not None and (
+        tile.left >= 0
+        and tile.top >= 0
+        and tile.left + tile.width <= size[0]
+        and tile.top + tile.height <= size[1]
+    )
+
+
+def _atlas_pack_job(job: AtlasPackJob) -> AtlasPackedPages:
+    """Run ``atlas_pack_pages`` (for process pools)."""
+    return atlas_pack_pages(job[0], extra=job[1])
+
+
+def _on_pixel(value: float) -> bool:
+    """Check whether a position is a whole pixel (allowing float error)."""
+    return abs(value - round(value)) < 1e-6
+
+
+def _snap_offset(offset: int, scale: float) -> int:
+    """Get the largest offset up to ``offset`` that's a whole pixel scaled."""
+    while offset > 0 and not _on_pixel(offset * scale):
+        offset -= 1
+    return offset
+
+
+def _overlaps(a: tuple[float, ...], b: tuple[float, ...]) -> bool:
+    return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+
+
+def _overlap_closure(tiles: list[my_tiles.Tile], keep: set[int]) -> set[int]:
+    """Extend kept tiles with tiles overlapping them, transitively.
+
+    Kept tiles stay tiles while the rest becomes models drawn above them,
+    so anything overlapping a kept tile has to stay a tile too.
+    """
+    keep = set(keep)
+    bounds = [tile.bounds() for tile in tiles]
+    new = list(keep)
+    while new:
+        added = [
+            i
+            for i in range(len(tiles))
+            if i not in keep
+            and any(_overlaps(bounds[i], bounds[k]) for k in new)
+        ]
+        keep.update(added)
+        new = added
+    return keep
+
+
+def model_name(cfg: Config, room: str, depth: int, index: int) -> str:
+    """Name a baked model (file name in data/model).
+
+    Scrambled by default, so the model folder doesn't show room names.
+    """
+    key = f'model/{room}/{depth}/{index}'
+    if cfg.juicer.scramble_models or cfg.juicer.hash_names:
+        digest = hashlib.blake2b(
+            key.encode(), key=cfg.juicer.name_salt.encode(), digest_size=8
+        ).hexdigest()
+        return f'{digest.upper()}.g3z'
+    return f'{room}__{depth}__{index}.g3z'
+
+
+def _bake_layer(
+    cfg: Config,
+    room: str,
+    depth: int,
+    tiles: list[my_tiles.Tile],
+    texture_size: col.Callable[[str], tuple[int, int] | None],
+) -> list[ModelPlan]:
+    """Bake tiles of a layer into models, one per texture where possible.
+
+    A tile joins the latest model of its texture, unless a later model (of
+    another texture) overlaps it: then drawing order would change, so it
+    starts a new model.
+    """
+    groups: list[tuple[str, list[my_tiles.Tile], list[float]]] = []
+    for tile in tiles:
+        bounds = tile.bounds()
+        target = None
+        for texture, members, group_bounds in reversed(groups):
+            if texture == tile.bg:
+                target = (members, group_bounds)
+                break
+            if _overlaps(bounds, tuple(group_bounds)):
+                break
+        if target is None:
+            groups.append((tile.bg, [], [*bounds]))
+            target = (groups[-1][1], groups[-1][2])
+        members, group_bounds = target
+        members.append(tile)
+        group_bounds[:] = [
+            min(group_bounds[0], bounds[0]),
+            min(group_bounds[1], bounds[1]),
+            max(group_bounds[2], bounds[2]),
+            max(group_bounds[3], bounds[3]),
+        ]
+
+    models: list[ModelPlan] = []
+    for idx, (texture, members, _) in enumerate(groups):
+        size = texture_size(texture)
+        assert size is not None
+        width, height = size
+        quads = tuple(
+            my_model.Quad(
+                x1=t.x,
+                y1=t.y,
+                x2=t.x + t.width * t.xscale,
+                y2=t.y + t.height * t.yscale,
+                u1=t.left / width,
+                v1=t.top / height,
+                u2=(t.left + t.width) / width,
+                v2=(t.top + t.height) / height,
+                color=t.blend,
+                alpha=t.alpha,
+            )
+            for t in members
+        )
+        models.append(
+            ModelPlan(
+                name=model_name(cfg, room, depth, idx),
+                texture=texture,
+                depth=depth - MODEL_DEPTH_STEP * (idx + 1),
+                quads=quads,
+            )
+        )
+    return models
+
+
+def write_if_changed(path: Path, text: str) -> None:
+    """Write a text file, unless it already has this content.
+
+    Keeps file stats, and therefore the build cache, intact.
+    """
+    if path.exists() and path.read_text(encoding='utf-8') == text:
+        return
+    path.write_text(text, encoding='utf-8', newline='\n')
+
+
+def atlas_compose(page: AtlasPage, images: dict[str, Path]) -> Image.Image:
+    """Compose page image from background regions.
+
+    :param page: Page to compose.
+    :param images: Image files of the backgrounds.
+    """
+    border = ATLAS_BORDER
+    out = Image.new('RGBA', (page.width, page.height))
+    sources: dict[str, Image.Image] = {}
+    for e in page.entries:
+        if e.bg == ATLAS_WHITE:
+            region = Image.new(
+                'RGBA', (e.width, e.height), (255, 255, 255, 255)
+            )
+        else:
+            if e.bg not in sources:
+                with Image.open(images[e.bg]) as img:
+                    sources[e.bg] = img.convert('RGBA')
+            region = sources[e.bg].crop((
+                e.left,
+                e.top,
+                e.left + e.width,
+                e.top + e.height,
+            ))
+        if border:
+            # repeat edge pixels outwards
+            arr = np.pad(
+                np.asarray(region),
+                ((border, border), (border, border), (0, 0)),
+                mode='edge',
+            )
+            region = Image.fromarray(arr, 'RGBA')
+        out.paste(region, (e.x - border, e.y - border))
+    return out
+
+
+def _digest(value: object) -> str:
+    return hashlib.md5(repr(value).encode()).hexdigest()[:12]
+
+
+class TaskAtlasPage(my_task.TaskGeneric):
+    """Compose an atlas page."""
+
+    def __init__(
+        self,
+        *,
+        page: AtlasPage,
+        images: dict[str, Path],
+        file_png: Path | None,
+        file_wet: Path | None,
+        file_dump: Path | None = None,
+    ) -> None:
+        """Initialize the task.
+
+        :param page: Page to compose.
+        :param images: Image files of the backgrounds on the page.
+        :param file_png: Page image to write, if any.
+        :param file_wet: Wet page file to write, if any.
+        :param file_dump: Page image to write for inspection, if any.
+        """
+        self.page = page
+        self.images = {
+            e.bg: images[e.bg] for e in page.entries if e.bg != ATLAS_WHITE
+        }
+        self.file_png = file_png
+        self.file_wet = file_wet
+        self.file_dump = file_dump
+        super().__init__(
+            # the layout is part of the id: changes to it rebuild the page
+            task_id=f'atlas_page_{page.asset.name}_{_digest(page)}',
+            inputs=tuple(sorted(set(self.images.values()))),
+            outputs=tuple(
+                f for f in (file_png, file_wet, file_dump) if f is not None
+            ),
+        )
+
+    @override
+    def execute(self) -> None:
+        img = atlas_compose(self.page, self.images)
+        if self.file_png is not None:
+            img.save(self.file_png)
+        if self.file_dump is not None:
+            img.save(self.file_dump)
+        if self.file_wet is not None:
+            juice_background_image(
+                meta=ATLAS_PAGE_META, img=img, out_file=self.file_wet
+            )
+
+
+def _instance_id(room: str, used: set[str], key: str) -> str:
+    """Pick an instance id (8 hex digits) unique within the room."""
+    salt = 0
+    while True:
+        instance_id = hashlib.md5(f'{room}|{key}|{salt}'.encode()).hexdigest()
+        instance_id = instance_id[:8].upper()
+        if instance_id not in used:
+            used.add(instance_id)
+            return instance_id
+        salt += 1
+
+
+class TaskAtlasRoom(my_task.TaskGeneric):
+    """Copy a room, applying its atlas plan.
+
+    Changed tile layers are rewritten, models written into the model
+    folder, and ``shap_Model`` instances added to draw them.
+    """
+
+    def __init__(
+        self,
+        *,
+        dir_room: Path,
+        dir_out: Path,
+        dir_models: Path,
+        plan: RoomPlan | None,
+    ) -> None:
+        """Initialize the task.
+
+        :param dir_room: Room folder.
+        :param dir_out: Output room folder.
+        :param dir_models: Folder to write models into.
+        :param plan: Room's plan, ``None`` to copy as is.
+        """
+        self.files = tuple(
+            sorted(file for file in dir_room.rglob('*') if file.is_file())
+        )
+        self.dir_room = dir_room
+        self.dir_out = dir_out
+        self.dir_models = dir_models
+        self.plan = plan
+
+        # layers left without tiles are removed, like the room editor does
+        self.empty_layers = (
+            {depth for depth, tiles in plan.layers.items() if not tiles}
+            if plan is not None
+            else set()
+        )
+        outputs = [
+            dir_out / file.relative_to(dir_room)
+            for file in self.files
+            if self._layer_depth(file) not in self.empty_layers
+        ]
+        self.instance_ids: list[str] = []
+        if plan is not None and plan.models:
+            used = {
+                line.split(',')[3]
+                for line in (dir_room / 'instances.txt')
+                .read_text(encoding='utf-8')
+                .splitlines()
+                if line
+            }
+            for model in plan.models:
+                instance_id = _instance_id(dir_room.name, used, model.name)
+                self.instance_ids.append(instance_id)
+                outputs.append(dir_out / f'{instance_id}.gml')
+            outputs.extend(dir_models / model.name for model in plan.models)
+        super().__init__(
+            # the plan is part of the id: changes to it rebuild the room
+            task_id=f'atlas_room_{dir_room.name}_{_digest(plan)}',
+            inputs=self.files,
+            outputs=tuple(outputs),
+        )
+
+    def _layer_depth(self, file: Path) -> int | None:
+        """Get depth of a tile layer file, ``None`` for other files."""
+        if file.parent == self.dir_room and is_tile_layer_file(file):
+            return int(file.stem)
+        return None
+
+    @override
+    def execute(self) -> None:
+        plan = self.plan
+        layers = plan.layers if plan is not None else {}
+        for depth in self.empty_layers:
+            # left from an earlier build
+            (self.dir_out / f'{depth}.txt').unlink(missing_ok=True)
+        for file in self.files:
+            out = self.dir_out / file.relative_to(self.dir_room)
+            depth = self._layer_depth(file)
+            if depth in self.empty_layers:
+                continue
+            if file.name == 'layers.txt' and self.empty_layers:
+                kept = [
+                    line
+                    for line in file.read_text(encoding='utf-8').splitlines()
+                    if line and int(line) not in self.empty_layers
+                ]
+                out.write_text(
+                    ''.join(f'{line}\n' for line in kept),
+                    encoding='utf-8',
+                    newline='\n',
+                )
+            elif depth is not None and depth in layers:
+                out.write_text(
+                    my_tiles.format_layer(layers[depth]),
+                    encoding='utf-8',
+                    newline='\n',
+                )
+            elif file.name == 'instances.txt' and self.instance_ids:
+                text = file.read_text(encoding='utf-8', newline='')
+                if text and not text.endswith('\n'):
+                    text += '\n'
+                text += ''.join(
+                    f'{MODEL_OBJECT},0,0,{instance_id},0,1,1,4294967295,0,1\n'
+                    for instance_id in self.instance_ids
+                )
+                out.write_text(text, encoding='utf-8', newline='')
+            else:
+                shutil.copy2(file, out)
+
+        if plan is None:
+            return
+        for instance_id, model in zip(
+            self.instance_ids, plan.models, strict=True
+        ):
+            (self.dir_out / f'{instance_id}.gml').write_text(
+                '//gm82 fields begin\n'
+                f'name="{model.name}"\n'
+                f'tex_bg={model.texture}\n'
+                f'depth={my_tiles.format_number(model.depth)}\n'
+                '//gm82 fields end\n',
+                encoding='utf-8',
+                newline='\n',
+            )
+            (self.dir_models / model.name).write_bytes(
+                my_model.model_g3z(model.quads)
+            )
+
+
+# </snip DEFS_ATLAS>
+
+
 # <snip CLS_JUICE_BUILD_TASKS>
 @dataclasses.dataclass(frozen=True, slots=True)
 class BuildTasks:
@@ -1971,7 +3267,9 @@ class BuildTasks:
 
 
 @step('Juicer: generate tasks')
-def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
+def main_juicer_gen_tasks(
+    cfg: Config, assets: list[Asset], atlas: Atlas | None = None
+) -> BuildTasks:
     """Step 3 - ~~Fly~~ Run the thing.
 
     This stage is responsible for mapping out source project, generating
@@ -2004,7 +3302,6 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
 
     build_type = 'prod' if cfg.juicer.is_prod else 'dev'
     img_dry = cfg.juicer.dir_dry / f'img_{build_type}.png'
-    dir_wet = cfg.juicer.dir_out / cfg.juicer.rel_dir_wet
     tasks_threaded: list[my_task.Task] = []
     tasks_mp: list[my_task.Task] = []
 
@@ -2065,8 +3362,12 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
                     # symlink
                     pth_symlink(pth)
                 case 'rooms':
-                    # symlink
-                    pth_symlink(pth)
+                    if atlas is None:
+                        # symlink
+                        pth_symlink(pth)
+                    else:
+                        # copy, pointing tiles to atlas pages
+                        map_rooms(pth)
                 case 'save':
                     # symlink
                     pth_symlink(pth)
@@ -2124,10 +3425,23 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
 
     def map_backgrounds() -> None:
         """Map backgrounds."""
-        # copy yyd
-        type_copy_yyd(my_asset.Background)
+        if atlas is None:
+            # copy yyd
+            type_copy_yyd(my_asset.Background)
+        else:
+            map_atlas(atlas)
 
         for bg in asset_backgrounds:
+            if atlas is not None and bg.name in atlas.atlased:
+                # not drawn anymore, kept as a stub so that ids don't change
+                copy_rebase(bg.get_background_metadata_file(cfg.project.root))
+                tasks_threaded.append(
+                    my_task.TaskCopy(
+                        (img_dry, bg.get_background_image(cfg.juicer.dir_out)),
+                        root=cfg.project.root,
+                    )
+                )
+                continue
             if asset_cluster(cfg, bg) == 'Common':
                 # copy as is
                 copy_rebase(
@@ -2149,7 +3463,89 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
                 TaskEncodeBackground(
                     background=bg,
                     dir_input_root=cfg.project.root,
-                    dir_wet_root=dir_wet / asset_cluster(cfg, bg),
+                    file_output=cfg.juicer.dir_out / asset_wet_path(cfg, bg),
+                )
+            )
+
+    def map_atlas(atlas: Atlas) -> None:
+        """Add atlas pages to the build as backgrounds."""
+        dir_src = my_asset.Background.type_get_dir(cfg.project.root)
+        dir_out = my_asset.Background.type_get_dir(cfg.juicer.dir_out)
+        dir_out.mkdir(parents=True, exist_ok=True)
+        names = [page.asset.name for page in atlas.pages]
+
+        # pages go to the end of the index, keeping ids of other backgrounds
+        index = (dir_src / 'index.yyd').read_text(encoding='utf-8')
+        if index and not index.endswith('\n'):
+            index += '\n'
+        write_if_changed(
+            dir_out / 'index.yyd', index + ''.join(f'{n}\n' for n in names)
+        )
+        tree = (dir_src / 'tree.yyd').read_text(encoding='utf-8')
+        if tree and not tree.endswith('\n'):
+            tree += '\n'
+        write_if_changed(
+            dir_out / 'tree.yyd',
+            tree
+            + '+__clunkster_atlas\n'
+            + ''.join(f'\t|{n}\n' for n in names),
+        )
+
+        meta_text = ''.join(
+            f'{field.name}={getattr(ATLAS_PAGE_META, field.name)}\n'
+            for field in dataclasses.fields(ATLAS_PAGE_META)
+        )
+        images = {
+            bg.name: bg.get_background_image(cfg.project.root)
+            for bg in asset_backgrounds
+            if bg.name in atlas.atlased
+        }
+        dir_dump = cfg.juicer.dir_out / 'atlas_dump'
+        for page in atlas.pages:
+            write_if_changed(dir_out / f'{page.asset.name}.txt', meta_text)
+            file_png: Path | None = page.asset.get_background_image(
+                cfg.juicer.dir_out
+            )
+            file_wet: Path | None = None
+            if asset_cluster(cfg, page.asset) != 'Common':
+                # dehydrated like other backgrounds
+                tasks_threaded.append(
+                    my_task.TaskCopy(
+                        (img_dry, file_png), root=cfg.project.root
+                    )
+                )
+                file_png = None
+                file_wet = cfg.juicer.dir_out / asset_wet_path(cfg, page.asset)
+            tasks_mp.append(
+                TaskAtlasPage(
+                    page=page,
+                    images=images,
+                    file_png=file_png,
+                    file_wet=file_wet,
+                    file_dump=dir_dump / f'{page.asset.name}.png'
+                    if cfg.juicer.dump_atlas
+                    else None,
+                )
+            )
+
+    def map_rooms(dir_rooms: Path) -> None:
+        """Map rooms, applying their atlas plans."""
+        assert atlas is not None
+        dir_out = cfg.juicer.dir_out / dir_rooms.relative_to(cfg.project.root)
+        if dir_out.is_symlink():
+            # left from a build without atlas, removes just the link
+            dir_out.unlink()
+        dir_models = cfg.juicer.dir_out / 'data' / 'model'
+        for pth in dir_rooms.iterdir():
+            if pth.is_file():
+                copy_rebase(pth)
+                continue
+            tasks_threaded.append(
+                TaskAtlasRoom(
+                    dir_room=pth,
+                    dir_out=dir_out / pth.name,
+                    dir_models=dir_models,
+                    plan=atlas.rooms.get(pth.name),
                 )
             )
 
@@ -2193,7 +3589,8 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
                 TaskEncodeSprite(
                     sprite=sprite,
                     dir_input_root=cfg.project.root,
-                    dir_wet_root=dir_wet / asset_cluster(cfg, sprite),
+                    file_output=cfg.juicer.dir_out
+                    / asset_wet_path(cfg, sprite),
                 )
             )
 
@@ -2206,11 +3603,16 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
                 copy_rebase(audio.file)
                 continue
             # no metadata or dry stuff
-            tasks_mp.append(
-                TaskCompressAudio(
-                    audio=audio,
-                    dir_wet_root=dir_wet / asset_cluster(cfg, audio),
+            file_output = cfg.juicer.dir_out / asset_wet_path(cfg, audio)
+            if not cfg.juicer.encode_audio:
+                tasks_threaded.append(
+                    my_task.TaskCopy(
+                        (audio.file, file_output), root=cfg.project.root
+                    )
                 )
+                continue
+            tasks_mp.append(
+                TaskCompressAudio(audio=audio, file_output=file_output)
             )
 
     def map_objects() -> None:
@@ -2244,6 +3646,17 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
     ]
     if dupes:
         raise ValueError(f'Duplicate task ids: {dupes}')
+    dupes = [
+        item
+        for item, count in collections.Counter(
+            out
+            for task in it.chain(tasks_threaded, tasks_mp)
+            for out in task.outputs
+        ).items()
+        if count > 1
+    ]
+    if dupes:
+        raise ValueError(f'Several tasks write the same files: {dupes}')
 
     build_tasks = BuildTasks(
         tasks_threaded=tuple(tasks_threaded),
@@ -2254,29 +3667,98 @@ def main_juicer_gen_tasks(cfg: Config, assets: list[Asset]) -> BuildTasks:
 
 
 # <snip DEF_RUN_TASKS_POOL>
+class WorkerView:
+    """Live view of running tasks: progress, and the latest task per worker.
+
+    Updated from finished tasks only, and rendered by rich at its own pace,
+    so it costs next to nothing.
+    """
+
+    # at most this many running tasks are listed
+    MAX_RUNNING = 5
+
+    def __init__(self, name: str, total: int) -> None:
+        """Initialize the view.
+
+        :param name: Name of the task batch.
+        :param total: Number of tasks to run.
+        """
+        self.name = name
+        self.total = total
+        self.completed = 0
+        # worker -> its latest finished task
+        self.workers: dict[str, r_text.Text] = {}
+        self.running: tuple[str, ...] = ()
+        # rich renders from its own thread
+        self._lock = threading.Lock()
+
+    def update(self, done: my_run.TaskDone) -> None:
+        """Record a finished task."""
+        with self._lock:
+            self.completed += 1
+            self.workers[done.worker] = (
+                r_text.Text(done.task.task_id)
+                if done.error is None
+                else r_text.Text(f'FAILED {done.task.task_id}', style='red')
+            )
+            self.running = tuple(task.task_id for task in done.running)
+
+    @staticmethod
+    def _worker_label(worker: str) -> str:
+        if worker.isdigit():
+            return f'process {worker}'
+        # ThreadPoolExecutor-0_3 -> thread 3
+        return f'thread {worker.rpartition("_")[2]}'
+
+    def __rich__(self) -> r_console.Group:
+        """Render the view."""
+        with self._lock:
+            header = r_table.Table.grid(expand=True, padding=(0, 1))
+            header.add_column(no_wrap=True)
+            header.add_column(ratio=1)
+            header.add_column(no_wrap=True)
+            header.add_row(
+                self.name,
+                r_progress_bar.ProgressBar(
+                    total=self.total, completed=self.completed
+                ),
+                f'{self.completed}/{self.total}',
+            )
+
+            table = r_table.Table(box=None, padding=(0, 1), expand=True)
+            table.add_column('worker', style='dim', no_wrap=True, min_width=13)
+            table.add_column(
+                'latest task', no_wrap=True, overflow='ellipsis', ratio=1
+            )
+            for worker, task_id in self.workers.items():
+                table.add_row(self._worker_label(worker), task_id)
+
+            running = self.running if self.completed < self.total else ()
+            for idx, task_id in enumerate(running[: self.MAX_RUNNING]):
+                table.add_row('running' if idx == 0 else '', task_id)
+            if len(running) > self.MAX_RUNNING:
+                table.add_row('', f'+{len(running) - self.MAX_RUNNING} more')
+            return r_console.Group(header, table)
+
+
 def run_tasks_pool(
     name: str,
     tasks: col.Sequence[my_task.Task],
     cache: my_cache.FileBuildCache,
     pool: concurrent.futures.Executor,
 ) -> list[my_run.TaskFailure]:
-    """Run stale tasks in the pool with a progress bar."""
+    """Run stale tasks in the pool, showing what the workers do."""
     stale, cached = my_run.tasks_filter_stale(tasks, cache)
     log.info('%s: %d to run, %d cached', name, len(stale), cached)
     if not stale:
         return []
-    with (
-        pool,
-        r_progress.Progress(
-            *r_progress.Progress.get_default_columns(),
-            r_progress.MofNCompleteColumn(),
-            console=CONSOLE,
-        ) as bar,
-    ):
-        bar_task = bar.add_task(name, total=len(stale))
-        return my_run.tasks_run(
-            stale, cache, pool, on_done=lambda *_: bar.advance(bar_task)
-        )
+    view = WorkerView(name, len(stale))
+    with pool, r_live.Live(view, console=CONSOLE, refresh_per_second=8):
+        failures = my_run.tasks_run(stale, cache, pool, on_done=view.update)
+    if not CONSOLE.is_terminal:
+        # outside of terminals, the final frame isn't ended with a newline
+        CONSOLE.line()
+    return failures
 
 
 # </snip DEF_RUN_TASKS_POOL>
@@ -2314,7 +3796,9 @@ def main_juicer_run(cfg: Config, tasks: BuildTasks) -> None:
 
 
 @step('Juicer: generating gml')
-def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
+def main_juicer_gen_gml(
+    cfg: Config, assets: list[Asset], atlas: Atlas | None = None
+) -> None:
     """It is time to finally integrate Clunkster into the project.
 
     For this we won't be "creating" scripts, but more like replacing ones
@@ -2353,6 +3837,11 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
         ]
     ), "One of the generated scripts wasn't found"
 
+    if atlas is not None:
+        # atlased backgrounds aren't loaded anymore, their pages are
+        assets = [asset for asset in assets if asset.name not in atlas.atlased]
+        assets += [page.asset for page in atlas.pages]
+
     # filter clusterable assets
     assets_bgm: list[AssetExtBgm] = []
     assets_sfx: list[AssetExtSfx] = []
@@ -2389,11 +3878,8 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
 
         # get wet file location
 
-        asset_name_to_file_wet[asset.name] = (
-            cfg.juicer.rel_dir_wet
-            / asset_cluster(cfg, asset)
-            / type(asset).type_get_dir_rel()
-            / asset_wet_fname(asset)
+        asset_name_to_file_wet[asset.name] = asset_wet_path(
+            cfg, asset
         ).as_posix()
 
     # common params for writing anything related to game maker
@@ -2577,7 +4063,7 @@ def main_juicer_gen_gml(cfg: Config, assets: list[Asset]) -> None:
 
 
 @step('Juicer: compiling the game')
-def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
+def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes] | None:
     r"""This is it Luigi.
 
     Game Maker's CLI for compiling is:
@@ -2595,8 +4081,8 @@ def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
     but I also added a new environment variable ``GM82_PATH`` just for that
     one guy.
 
-    Returns the launched game's process, so that the development loop can
-    close it before the next build.
+    Returns the launched game's process (if launching is on), so that the
+    development loop can close it before the next build.
     """
     # <snip MAIN_JUICER_GM_COMPILE>
     log.info('Jostling Game Maker 8.2 compiler...')
@@ -2640,6 +4126,8 @@ def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
         ) from e
 
     log.info('Build completely successfully!')
+    if not cfg.juicer.launch:
+        return None
     return subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true]
         [str(output_exe)],
         cwd=cfg.juicer.dir_out,
@@ -2647,6 +4135,44 @@ def main_juicer_gm_compile(cfg: Config) -> subprocess.Popen[bytes]:
         | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
     # </snip MAIN_JUICER_GM_COMPILE>
+
+
+@step('Juicer: packaging')
+def main_juicer_package(cfg: Config) -> Path:
+    """Pack the game into a zip.
+
+    The zip holds the compiled exe, named after the project, and the data
+    folder (wet assets, stubs and whatever else the game loads from there).
+    """
+    # <snip MAIN_JUICER_PACKAGE>
+    dir_out = cfg.juicer.dir_out
+    name = Path(cfg.juicer.fname_gm82).stem
+    file_zip = dir_out / f'{name}.zip'
+    data_files = sorted(
+        file for file in (dir_out / 'data').rglob('*') if file.is_file()
+    )
+    # already compressed formats aren't worth deflating
+    stored_suffixes = {'.ogg', '.mp3', '.png', '.jpg', '.zip'}
+
+    file_temp = file_zip.with_suffix('.tmp')
+    with zipfile.ZipFile(
+        file_temp, 'w', compression=zipfile.ZIP_DEFLATED
+    ) as archive:
+        archive.write(dir_out / 'game.exe', f'{name}.exe')
+        for file in progress(data_files, 'Packaging'):
+            archive.write(
+                file,
+                file.relative_to(dir_out).as_posix(),
+                compress_type=zipfile.ZIP_STORED
+                if file.suffix.lower() in stored_suffixes
+                else zipfile.ZIP_DEFLATED,
+            )
+    file_temp.replace(file_zip)
+    log.info(
+        'Packaged %s (%.1f MB)', file_zip, file_zip.stat().st_size / 2**20
+    )
+    # </snip MAIN_JUICER_PACKAGE>
+    return file_zip
 
 
 @dataclasses.dataclass(frozen=True, slots=True, order=True)
@@ -2746,6 +4272,8 @@ def _load_private(config_dir: Path) -> Config:
         rel_dir_wet=JUICER.rel_dir_wet,
         file_cache=config_dir.parent / 'clunkster_cache.json',
         fname_gm82=config['fname_gm82'],
+        scramble_models=config.get('scramble_model_names', True),
+        crop_found_tiles=config.get('crop_smart_tiles', False),
     )
 
     file_private_alias = config_dir / 'alias.json'
@@ -2756,6 +4284,7 @@ def _load_private(config_dir: Path) -> Config:
     lint_rules = {cluster: set(allowed) for cluster, allowed in rules.items()}
 
     file_private_context_rules = config_dir / 'context_rules.json'
+    file_blacklist = config_dir / 'blacklist.json'
     rules = json.loads(file_private_context_rules.read_text(encoding='utf-8'))
     context_rules = {guard: set(granted) for guard, granted in rules.items()}
 
@@ -2768,20 +4297,27 @@ def _load_private(config_dir: Path) -> Config:
         juicer=juicer,
         scan_cache=config_dir.parent / 'clunkster_scan_cache.json',
         common_budget_mb=config.get('common_budget_mb', 500),
+        blacklist=(
+            json.loads(file_blacklist.read_text(encoding='utf-8'))
+            if file_blacklist.exists()
+            else {}
+        ),
     )
 
 
 # <snip DEF_RUN_CHECK>
 def run_check(
     cfg: Config, scan_cache: my_scan_cache.ScanCache
-) -> tuple[Config, list[Asset]]:
+) -> tuple[Config, list[Asset], list[Dependency]]:
     """Run all checks.
 
-    :return: Config with assets moved to Common, and the assets.
+    :return: Config with assets moved to Common, the assets and their
+      dependencies.
     """
     main_ex_lint_tree(cfg)
     assets = main_ex_aliases(cfg)
-    deps = main_ex_scan(cfg, assets, scan_cache)
+    deps, term_uses = main_ex_scan(cfg, assets, scan_cache)
+    main_ex_lint_blacklist(cfg, term_uses)
     # main_ex_lint_unused(cfg, deps, assets)
 
     promotions: dict[str, Promotion] = {}
@@ -2798,18 +4334,38 @@ def run_check(
 
     main_ex_lint_unused_graph(cfg, assets, room_data)
     main_ex_report_promotions(cfg, promotions)
-    return cfg, assets
+    return cfg, assets, deps
 
 
 def run_build(
-    cfg: Config, scan_cache: my_scan_cache.ScanCache
-) -> subprocess.Popen[bytes]:
-    """Run all checks, build the game and launch it."""
-    cfg, assets = run_check(cfg, scan_cache)
-    tasks = main_juicer_gen_tasks(cfg, assets)
+    cfg: Config, scan_cache: my_scan_cache.ScanCache | None
+) -> subprocess.Popen[bytes] | None:
+    """Build the game, then launch and/or package it, per juicer config.
+
+    Without a scan cache, reference checks are skipped (quick builds), and
+    assets stay in the clusters of their folders.
+
+    :return: Launched game's process, if any.
+    """
+    deps: list[Dependency] | None = None
+    if scan_cache is None:
+        main_ex_lint_tree(cfg)
+        assets = main_ex_aliases(cfg)
+    else:
+        cfg, assets, deps = run_check(cfg, scan_cache)
+    atlas: Atlas | None = None
+    if cfg.juicer.atlas:
+        if deps is None:
+            raise ValueError('Atlas needs reference checks')
+        protection = main_ex_tile_protection(cfg, assets)
+        atlas = main_ex_atlas(cfg, assets, deps, protection)
+    tasks = main_juicer_gen_tasks(cfg, assets, atlas)
     main_juicer_run(cfg, tasks)
-    main_juicer_gen_gml(cfg, assets)
-    return main_juicer_gm_compile(cfg)
+    main_juicer_gen_gml(cfg, assets, atlas)
+    game = main_juicer_gm_compile(cfg)
+    if cfg.juicer.package:
+        main_juicer_package(cfg)
+    return game
 
 
 def project_watch_filter(root: Path) -> watchfiles.BaseFilter:
@@ -2973,14 +4529,62 @@ def main_ex_dev(cfg: Config) -> None:
     # </snip MAIN_EX_DEV>
 
 
+def _build_profile(cfg: Config, config_dir: Path, mode: str) -> Config:
+    """Adjust the juicer config for the build mode."""
+    if mode == 'quick':
+        juicer = dataclasses.replace(cfg.juicer, encode_audio=False)
+        return dataclasses.replace(cfg, juicer=juicer)
+    if mode == 'atlas':
+        # own folder: rooms are copies there, not a symlink to the source
+        juicer = dataclasses.replace(
+            cfg.juicer,
+            dir_out=config_dir.parent / '_build_atlas',
+            file_cache=config_dir.parent / 'clunkster_cache_atlas.json',
+            atlas=True,
+            dump_atlas=True,
+        )
+        return dataclasses.replace(cfg, juicer=juicer)
+    if mode != 'prod':
+        return cfg
+
+    # salt for hashed names, kept out of the config so that it doesn't end
+    #  up in the repository
+    file_salt = config_dir.parent / 'clunkster_salt.txt'
+    if not file_salt.exists():
+        file_salt.write_text(secrets.token_hex(16), encoding='utf-8')
+    juicer = dataclasses.replace(
+        cfg.juicer,
+        is_prod=True,
+        dir_out=config_dir.parent / '_build_prod',
+        file_cache=config_dir.parent / 'clunkster_cache_prod.json',
+        hash_names=True,
+        name_salt=file_salt.read_text(encoding='utf-8').strip(),
+        # package=True,     # temp
+        launch=False,
+        atlas=True,
+    )
+    return dataclasses.replace(cfg, juicer=juicer)
+
+
 def main() -> None:
     """Pipeline private entrypoint.
 
-    Usage: ``main.py <config dir> [build|check|watch|dev|test]``, defaults to
-    ``build``.
+    Usage: ``main.py <config dir> [mode]``, where mode is one of
+    ``build`` (default), ``quick``, ``prod``, ``atlas``, ``check``, ``watch``,
+    ``dev`` or ``test``:
+
+    - ``build``: check references, build and launch the game
+    - ``quick``: build and launch, skipping reference checks and audio
+      encoding
+    - ``prod``: check references, build into ``_build_prod`` with atlases,
+      baked tiles and hashed wet asset names, and pack it into a zip
+    - ``atlas``: like ``build``, but with atlases and baked tiles, into
+      ``_build_atlas``, and atlas pages written to ``atlas_dump`` there (for
+      testing them without a full prod build)
     """
-    cfg = _load_private(Path(sys.argv[1]).resolve())
+    config_dir = Path(sys.argv[1]).resolve()
     mode = sys.argv[2] if len(sys.argv) > 2 else 'build'
+    cfg = _build_profile(_load_private(config_dir), config_dir, mode)
 
     # allow testing tutorials on private data as well
     if mode == 'test':
@@ -3005,7 +4609,10 @@ def main() -> None:
         with contextlib.suppress(KeyboardInterrupt):
             main_ex_dev(cfg)
         return
-    if mode != 'build':
+    if mode == 'quick':
+        run_build(cfg, None)
+        return
+    if mode not in {'build', 'prod', 'atlas'}:
         raise ValueError(f'Unknown mode: {mode}')
 
     scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)

@@ -950,7 +950,7 @@ Pipeline systems live in the [pipeline folder](https://github.com/shaperones0/cl
 
 - `task.py`: Task encapsulates information needed for processing logic, input and output files for build caching, and houses the `execute` method that actually does the thing.
 - `cache.py`: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.
-- `run.py`: Task execution. `tasks_filter_stale` drops tasks that are fresh in the cache, `tasks_run` executes the rest in a given `concurrent.futures` pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task, so workers don't need to communicate anything.
+- `run.py`: Task execution. `tasks_filter_stale` drops tasks that are fresh in the cache, `tasks_run` executes the rest in a given `concurrent.futures` pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task with the worker that ran it and the tasks running right now (taken from the pool's futures), so workers don't need to communicate anything beyond their results. The examples use it for a live view of what each worker does.
 
 Reference scanning results are cached per file (see `analyze/scan_cache.py`): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks and the {exs.href('ex_watch', 'watch mode')} fast.
 
@@ -1447,6 +1447,7 @@ validations based on them.
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 snips['DEF_ASSET_SCANNABLES'],
                 snips['CLS_DEPENDENCY'],
+                snips['CLS_TERM_USE'],
                 snips['DEFS_SCAN_FILES'],
                 exs.stub('VAR_ASSETS'),
                 snips['MAIN_EX_SCAN'],
@@ -1460,7 +1461,24 @@ validations based on them.
                 'CLS_DEPENDENCY': gen_stub_cls('Dependency'),
                 'VAR_DEPS': gen_stub_var('dependencies: list[Dependency]'),
                 'DEF_ASSET_SCANNABLES': gen_stub_func('asset_scannables'),
+                'CLS_TERM_USE': gen_stub_cls('TermUse'),
+                'VAR_TERM_USES': gen_stub_var('term_uses: list[TermUse]'),
             }
+        )
+    }
+
+{exs.code_begin('ex_lint_blacklist', 'Lint: blacklisted terms')}
+{docs['main_ex_lint_blacklist']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('DEF_LINT_REPORT'),
+                exs.stub('CLS_TERM_USE'),
+                snips['RULES_BLACKLIST'],
+                exs.stub('VAR_TERM_USES'),
+                snips['MAIN_EX_LINT_BLACKLIST'],
+            )
         )
     }
 
@@ -1713,7 +1731,7 @@ ___
                     'TaskCompressAudio',
                     'TaskFixMaskObjects',
                 ),
-                'DEF_ASSET_WET_FNAME': gen_stub_func('asset_wet_fname'),
+                'DEF_ASSET_WET_FNAME': gen_stub_func('asset_wet_fname', 'asset_wet_path'),
                 'CLS_JUICE_BUILD_TASKS': gen_stub_cls('BuildTasks'),
                 'CLS_JUICER_CONFIG': '\n'.join(
                     (
@@ -1771,6 +1789,79 @@ ___
                 exs.stub('PROJECT'),
                 exs.stub('CLS_JUICER_CONFIG'),
                 snips['MAIN_JUICER_GM_COMPILE'],
+            )
+        )
+    }
+
+{exs.code_begin('ex_tile_protection', 'Juicer: protected tiles')}
+{docs['main_ex_tile_protection']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                snips['CLS_ATLAS'],
+                exs.stub('VAR_ASSETS'),
+                snips['MAIN_EX_TILE_PROTECTION'],
+            )
+        )
+    }
+{
+        exs.code_reg_stub_src(
+            {
+                'CLS_ATLAS': gen_stub_cls(
+                    'AtlasEntry',
+                    'AtlasPage',
+                    'ModelPlan',
+                    'RoomPlan',
+                    'Atlas',
+                    'TileProtection',
+                ),
+                'VAR_PROTECTION': gen_stub_var('protection: dict[str, TileProtection]'),
+            }
+        )
+    }
+
+{exs.code_begin('ex_atlas', 'Juicer: texture atlas')}
+{docs['main_ex_atlas']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('CLS_DEPENDENCY'),
+                exs.stub('CLS_ATLAS'),
+                exs.stub('VAR_ASSETS'),
+                exs.stub('VAR_DEPS'),
+                exs.stub('VAR_PROTECTION'),
+                snips['MAIN_EX_ATLAS'],
+            )
+        )
+    }
+
+Packing, baking, page composition and room rewriting are done by these;
+pages and rooms are written by build tasks, so they're cached:
+
+{
+        exs.render(
+            (
+                exs.stub('CLS_ATLAS'),
+                exs.stub('DEFS_JUICE'),
+                snips['DEFS_ATLAS'],
+            )
+        )
+    }
+
+{exs.code_begin('ex_juicer_package', 'Juicer: package')}
+{docs['main_juicer_package']}
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                exs.stub('CLS_JUICER_CONFIG'),
+                snips['MAIN_JUICER_PACKAGE'],
             )
         )
     }

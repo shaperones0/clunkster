@@ -31,17 +31,23 @@ def test_run(
     file_gone.unlink()
 
     cache = FileBuildCache(tmp_path / 'cache.json')
-    done: list[str] = []
+    done: list[my_run.TaskDone] = []
     with pool_cls() as pool:
         failures = my_run.tasks_run(
-            [ok, bad],
-            cache,
-            pool,
-            on_done=lambda task, _: done.append(task.task_id),
+            [ok, bad], cache, pool, on_done=done.append
         )
 
     assert (tmp_path / 'out' / 'ok.txt').read_text() == 'abc'
-    assert sorted(done) == sorted([ok.task_id, bad.task_id])
+    assert sorted(d.task.task_id for d in done) == sorted([
+        ok.task_id,
+        bad.task_id,
+    ])
+    # process pools report process ids, thread pools thread names
+    if pool_cls is concurrent.futures.ProcessPoolExecutor:
+        assert all(d.worker.isdigit() for d in done)
+    else:
+        assert all('ThreadPoolExecutor' in d.worker for d in done)
+    assert [d.task for d in done if d.error] == [bad]
     assert [f.task_id for f in failures] == [bad.task_id]
     assert 'FileNotFoundError' in failures[0].error
 
