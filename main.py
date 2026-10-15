@@ -2121,6 +2121,16 @@ MODEL_DEPTH_STEP = 0.0001
 TILE_FINDERS = frozenset({'shap_SmartTileActive'})
 TILE_LAYER_USERS = frozenset({'shap_TileDeleter'})
 MODEL_OBJECT = 'shap_Model'
+# debug object turning layers deeper than AUTO_LAYER_MIN_DEPTH into models at
+#  depth - AUTO_LAYER_OFFSET, reading the room source at runtime; builds do
+#  it ahead instead
+AUTO_LAYER_OBJECT = 'shap_DbgAutoLayer'
+AUTO_LAYER_MIN_DEPTH = 90000
+AUTO_LAYER_OFFSET = 100000
+# objects whose Draw events start and stop drawing into a throwaway surface:
+#  tile layers between them never show, so builds remove them
+LAYER_HIDE_START = 'shap_LayHide'
+LAYER_HIDE_END = 'shap_LayHideEnd'
 
 
 # part of a tile's region: offset and size within the region, and the
@@ -2172,6 +2182,9 @@ class RoomPlan:
     # depth -> tiles left in the layer (only changed layers)
     layers: dict[int, tuple[my_tiles.Tile, ...]]
     models: tuple[ModelPlan, ...]
+    # AUTO_LAYER_OBJECT instances, replaced by instances of auto_models
+    auto_layer_ids: tuple[str, ...] = ()
+    auto_models: tuple[ModelPlan, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -2197,6 +2210,27 @@ class TileProtection:
     points: dict[int, list[tuple[float, float]]] = dataclasses.field(
         default_factory=dict
     )
+    # instances of AUTO_LAYER_OBJECT
+    auto_layer_ids: list[str] = dataclasses.field(default_factory=list)
+    # LAYER_HIDE_START/END instances: depth, and whether they start hiding,
+    #  in creation order
+    hiding: list[tuple[float, bool]] = dataclasses.field(default_factory=list)
+
+    def hidden(self, layer: int) -> bool:
+        """Check whether a tile layer is drawn while hiding.
+
+        Tiles draw after instances of their depth, so what counts is the
+        last marker drawn before them: the shallowest one at or deeper than
+        the layer, the latest created among equally deep ones.
+        """
+        before = [
+            (depth, idx, start)
+            for idx, (depth, start) in enumerate(self.hiding)
+            if depth >= layer
+        ]
+        if not before:
+            return False
+        return min(before, key=lambda m: (m[0], -m[1]))[2]
 
 
 def is_tile_layer_file(file: Path) -> bool:
@@ -2225,6 +2259,10 @@ def main_ex_tile_protection(
       (hiding or shifting a layer wouldn't affect a model)
     - layers of existing ``shap_Model`` instances stay tiles too, so that
       nothing gets drawn twice
+    - ``AUTO_LAYER_OBJECT`` instances are noted: builds do their work ahead
+      (see ``main_ex_atlas``)
+    - ``LAYER_HIDE_START``/``LAYER_HIDE_END`` instances are noted: layers
+      they hide get removed
     """
     # <snip MAIN_EX_TILE_PROTECTION>
     root = cfg.project.root
@@ -2284,10 +2322,13 @@ def main_ex_tile_protection(
                 continue
             fields = line.split(',')
             obj = fields[0]
+            if obj == AUTO_LAYER_OBJECT:
+                prot.auto_layer_ids.append(fields[3])
             prot.tile_layers |= object_depths.get(obj, set())
             finder = descends(obj, TILE_FINDERS)
             layer_user = descends(obj, TILE_LAYER_USERS)
-            if not (finder or layer_user or obj == MODEL_OBJECT):
+            hiding = obj in {LAYER_HIDE_START, LAYER_HIDE_END}
+            if not (finder or layer_user or hiding or obj == MODEL_OBJECT):
                 continue
             # depth from creation code, or the object's
             depth = float(metas[obj].depth) if obj in metas else 0.0
@@ -2299,7 +2340,9 @@ def main_ex_tile_protection(
                 if found:
                     depth = float(found[-1])
             layer = int(depth)
-            if finder:
+            if hiding:
+                prot.hiding.append((depth, obj == LAYER_HIDE_START))
+            elif finder:
                 prot.points.setdefault(layer, []).append((
                     float(fields[1]),
                     float(fields[2]),
@@ -2348,6 +2391,11 @@ def main_ex_atlas(
     5. Tiles of each layer are baked into models (``shap_Model``), one per
        texture where order allows. Tiles overlapping ones that have to stay
        tiles stay tiles too, so drawing order doesn't change.
+
+    Rooms with ``AUTO_LAYER_OBJECT`` get its models made here, in place of
+    the object, which reads the room source at runtime (and only works in
+    debug). Layers hidden by ``LAYER_HIDE_START``/``LAYER_HIDE_END`` are
+    removed.
 
     Protected tiles (see ``main_ex_tile_protection``) are only pointed to
     pages, never changed otherwise. With ``crop_found_tiles``, tiles found by
@@ -2538,6 +2586,13 @@ def main_ex_atlas(
     for room_name, room_layers in layers.items():
         prot = protection.get(room_name, TileProtection())
         for depth, tiles in room_layers.items():
+            if prot.hidden(depth) and not (
+                prot.auto_layer_ids and depth > AUTO_LAYER_MIN_DEPTH
+            ):
+                # never shows, gets removed
+                new_layers.setdefault(room_name, {})[depth] = []
+                protected.setdefault(room_name, {})[depth] = set()
+                continue
             points = prot.points.get(depth, [])
             keep: set[int] = set()
             out: list[tuple[my_tiles.Tile, str]] = []
@@ -2743,9 +2798,30 @@ def main_ex_atlas(
         prot = protection.get(room.name, TileProtection())
         changed: dict[int, tuple[my_tiles.Tile, ...]] = {}
         models: list[ModelPlan] = []
+        auto_models: list[ModelPlan] = []
         for depth, tiles_from in new_layers.get(room.name, {}).items():
             original = layers[room.name][depth]
             mapped = list(it.starmap(to_page, tiles_from))
+            if prot.auto_layer_ids and depth > AUTO_LAYER_MIN_DEPTH:
+                # what AUTO_LAYER_OBJECT does at runtime: the whole layer
+                #  as models at a shallower depth
+                auto_models.extend(
+                    _bake_layer(
+                        cfg,
+                        room.name,
+                        depth,
+                        # all tiles, like the object
+                        [t for t in mapped if texture_size(t.bg) is not None],
+                        texture_size,
+                        kind='auto',
+                        model_depth=depth - AUTO_LAYER_OFFSET,
+                    )
+                )
+            if prot.hidden(depth):
+                # never shows: removed (after auto layers took its tiles)
+                tiles_before += len(original)
+                changed[depth] = ()
+                continue
             keep = set(protected[room.name][depth])
             if depth not in prot.tile_layers | prot.fixed_layers:
                 # tiles reaching outside of their texture stay tiles, models
@@ -2770,8 +2846,13 @@ def main_ex_atlas(
             tiles_after += len(mapped)
             if mapped != original:
                 changed[depth] = tuple(mapped)
-        if changed or models:
-            plans[room.name] = RoomPlan(layers=changed, models=tuple(models))
+        if changed or models or prot.auto_layer_ids:
+            plans[room.name] = RoomPlan(
+                layers=changed,
+                models=tuple(models),
+                auto_layer_ids=tuple(prot.auto_layer_ids),
+                auto_models=tuple(auto_models),
+            )
 
     # every tile of these points to pages now
     atlased = frozenset(candidates)
@@ -2932,28 +3013,39 @@ def _overlap_closure(tiles: list[my_tiles.Tile], keep: set[int]) -> set[int]:
     return keep
 
 
-def model_name(cfg: Config, room: str, depth: int, index: int) -> str:
+def model_name(
+    cfg: Config, room: str, depth: int, index: int, kind: str = ''
+) -> str:
     """Name a baked model (file name in data/model).
 
     Scrambled by default, so the model folder doesn't show room names.
     """
     key = f'model/{room}/{depth}/{index}'
+    if kind:
+        key += f'/{kind}'
     if cfg.juicer.scramble_models or cfg.juicer.hash_names:
         digest = hashlib.blake2b(
             key.encode(), key=cfg.juicer.name_salt.encode(), digest_size=8
         ).hexdigest()
         return f'{digest.upper()}.g3z'
-    return f'{room}__{depth}__{index}.g3z'
+    suffix = f'__{kind}' if kind else ''
+    return f'{room}__{depth}__{index}{suffix}.g3z'
 
 
-def _bake_layer(
+def _bake_layer(  # ruff: ignore[too-many-arguments]
     cfg: Config,
     room: str,
     depth: int,
     tiles: list[my_tiles.Tile],
     texture_size: col.Callable[[str], tuple[int, int] | None],
+    *,
+    kind: str = '',
+    model_depth: float | None = None,
 ) -> list[ModelPlan]:
     """Bake tiles of a layer into models, one per texture where possible.
+
+    Models go just above the layer (see ``MODEL_DEPTH_STEP``), or all at
+    ``model_depth``, ordered by creation then.
 
     A tile joins the latest model of its texture, unless a later model (of
     another texture) overlaps it: then drawing order would change, so it
@@ -3003,9 +3095,11 @@ def _bake_layer(
         )
         models.append(
             ModelPlan(
-                name=model_name(cfg, room, depth, idx),
+                name=model_name(cfg, room, depth, idx, kind),
                 texture=texture,
-                depth=depth - MODEL_DEPTH_STEP * (idx + 1),
+                depth=depth - MODEL_DEPTH_STEP * (idx + 1)
+                if model_depth is None
+                else model_depth,
                 quads=quads,
             )
         )
@@ -3164,8 +3258,10 @@ class TaskAtlasRoom(my_task.TaskGeneric):
             for file in self.files
             if self._layer_depth(file) not in self.empty_layers
         ]
+        # instances of plan.models, then of plan.auto_models
         self.instance_ids: list[str] = []
-        if plan is not None and plan.models:
+        self.auto_instance_ids: list[str] = []
+        if plan is not None and (plan.models or plan.auto_models):
             used = {
                 line.split(',')[3]
                 for line in (dir_room / 'instances.txt')
@@ -3173,17 +3269,49 @@ class TaskAtlasRoom(my_task.TaskGeneric):
                 .splitlines()
                 if line
             }
-            for model in plan.models:
-                instance_id = _instance_id(dir_room.name, used, model.name)
-                self.instance_ids.append(instance_id)
-                outputs.append(dir_out / f'{instance_id}.gml')
-            outputs.extend(dir_models / model.name for model in plan.models)
+            for models, ids in (
+                (plan.models, self.instance_ids),
+                (plan.auto_models, self.auto_instance_ids),
+            ):
+                for model in models:
+                    instance_id = _instance_id(dir_room.name, used, model.name)
+                    ids.append(instance_id)
+                    outputs.extend((
+                        dir_out / f'{instance_id}.gml',
+                        dir_models / model.name,
+                    ))
         super().__init__(
             # the plan is part of the id: changes to it rebuild the room
             task_id=f'atlas_room_{dir_room.name}_{_digest(plan)}',
             inputs=self.files,
             outputs=tuple(outputs),
         )
+
+    def _instances(self, text: str) -> str:
+        """Rewrite instances.txt with model instances.
+
+        Models of auto layers replace the auto layer object (created at the
+        same point, as it does at runtime), other models go last.
+        """
+        assert self.plan is not None
+        auto = set(self.plan.auto_layer_ids)
+
+        def line(instance_id: str) -> str:
+            return f'{MODEL_OBJECT},0,0,{instance_id},0,1,1,4294967295,0,1'
+
+        lines: list[str] = []
+        for existing in text.splitlines():
+            if not existing:
+                continue
+            if existing.split(',')[3] in auto:
+                lines.extend(line(i) for i in self.auto_instance_ids)
+                auto.clear()
+                continue
+            if existing.split(',')[0] == AUTO_LAYER_OBJECT:
+                continue
+            lines.append(existing)
+        lines.extend(line(i) for i in self.instance_ids)
+        return ''.join(f'{x}\n' for x in lines)
 
     def _layer_depth(self, file: Path) -> int | None:
         """Get depth of a tile layer file, ``None`` for other files."""
@@ -3220,22 +3348,21 @@ class TaskAtlasRoom(my_task.TaskGeneric):
                     encoding='utf-8',
                     newline='\n',
                 )
-            elif file.name == 'instances.txt' and self.instance_ids:
-                text = file.read_text(encoding='utf-8', newline='')
-                if text and not text.endswith('\n'):
-                    text += '\n'
-                text += ''.join(
-                    f'{MODEL_OBJECT},0,0,{instance_id},0,1,1,4294967295,0,1\n'
-                    for instance_id in self.instance_ids
+            elif file.name == 'instances.txt' and plan is not None:
+                out.write_text(
+                    self._instances(file.read_text(encoding='utf-8')),
+                    encoding='utf-8',
+                    newline='\n',
                 )
-                out.write_text(text, encoding='utf-8', newline='')
             else:
                 shutil.copy2(file, out)
 
         if plan is None:
             return
         for instance_id, model in zip(
-            self.instance_ids, plan.models, strict=True
+            self.instance_ids + self.auto_instance_ids,
+            plan.models + plan.auto_models,
+            strict=True,
         ):
             (self.dir_out / f'{instance_id}.gml').write_text(
                 '//gm82 fields begin\n'
