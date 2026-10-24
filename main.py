@@ -89,6 +89,9 @@ class Config:
     # assets moved to Common because of cluster violations, derived by the
     #  cluster checks (see main_ex_promote_refs)
     promoted: frozenset[str] = frozenset()
+    # lean builds: assets kept in the executable, derived by main_ex_lean
+    #  (None: Common assets are)
+    resident: frozenset[str] | None = None
     # top level folder -> cluster name, derived from alias
     alias_inv: dict[str, str] = dataclasses.field(init=False)
 
@@ -350,6 +353,20 @@ def asset_cluster(cfg: Config, asset: my_asset.Asset) -> str:
 # </snip DEF_ASSET_CLUSTERS>
 
 
+# <snip DEF_ASSET_RESIDENT>
+def asset_resident(cfg: Config, asset: my_asset.Asset) -> bool:
+    """Check whether an asset stays in the executable (isn't dehydrated).
+
+    Common assets do, or, in lean builds, the ones ``main_ex_lean`` picked.
+    """
+    if cfg.resident is not None:
+        return asset.name in cfg.resident
+    return asset_cluster(cfg, asset) == 'Common'
+
+
+# </snip DEF_ASSET_RESIDENT>
+
+
 # <snip DEF_ASSET_WET_FNAME>
 def asset_wet_fname(cfg: Config, asset: my_asset.Asset) -> str:
     """Get asset's wet file name."""
@@ -532,6 +549,11 @@ class ConfJuicer:
     launch: bool = True
     # pack backgrounds used only by room tiles into atlases (main_ex_atlas)
     atlas: bool = False
+    # rooms load exactly the assets they use instead of clusters
+    #  (main_ex_lean), needs hash_names (no cluster folders)
+    lean: bool = False
+    # room changes an asset stays loaded for after its last room
+    keep_rooms: int = 1
     # also write atlas pages into atlas_dump in the build, for inspection
     dump_atlas: bool = False
     # scramble names of baked models, otherwise they name room and depth
@@ -1597,6 +1619,124 @@ def main_ex_report_promotions(
     # Congrats on defeating the tutorial boss.
     # </md>
     # </snip MAIN_EX_REPORT_PROMOTIONS>
+
+
+@step('Lean: assets per room')
+def main_ex_lean(
+    cfg: Config,
+    assets: list[Asset],
+    room_data: dict[str, RoomGraph],
+    atlas: Atlas | None,
+) -> tuple[Config, dict[str, set[str]]]:
+    """Find exactly which assets each room needs (lean builds).
+
+    Instead of whole clusters, every room loads what it actually reaches
+    (from the dependency graphs), Common assets included:
+
+    - assets reached from global roots (``EXTRA_ROOTS``) in every room,
+      unguarded, can't ever be unloaded: they stay in the executable, as do
+      assets of persistent Common objects, which may follow the player
+      anywhere
+    - assets of other persistent objects are needed in every room of their
+      cluster, since they can outlive the room they were made in
+    - with atlases, rooms need the pages their tiles were pointed to
+
+    :return: Config with ``resident`` set, and needed assets per room.
+    """
+    # <snip MAIN_EX_LEAN>
+    root = cfg.project.root
+    loaded_types = (my_asset.Sprite, my_asset.Background, AssetExtAudio)
+    loadable = {a.name for a in assets if isinstance(a, loaded_types)}
+    persistent = [
+        a.name
+        for a in assets
+        if isinstance(a, my_asset.Object)
+        and a.get_object_metadata(root).persistent
+        and a.name not in cfg.extra_roots
+    ]
+    roots = set(cfg.extra_roots) | {
+        name
+        for name in persistent
+        if asset_cluster(cfg, next(a for a in assets if a.name == name))
+        == 'Common'
+    }
+
+    def reach(rg: RoomGraph, names: col.Iterable[str]) -> set[str]:
+        found: set[str] = set()
+        for name in names:
+            if name in rg.name2index:
+                idx = rg.name2index[name]
+                found |= {rg.graph[i] for i in rx.descendants(rg.graph, idx)}
+                found.add(name)
+        return found & loadable
+
+    # resident: what roots reach in every room
+    resident = set(loadable)
+    for rg in room_data.values():
+        resident &= reach(rg, roots)
+
+    # persistent stage objects: whole cluster
+    cluster_of = {a.name: asset_cluster(cfg, a) for a in assets}
+    by_cluster: dict[str, set[str]] = {}
+    for name in persistent:
+        if name in roots:
+            continue
+        rg = next(
+            (rg for rg in room_data.values() if name in rg.name2index), None
+        )
+        if rg is not None:
+            by_cluster.setdefault(cluster_of[name], set()).update(
+                reach(rg, [name])
+            )
+
+    atlased = atlas.atlased if atlas is not None else frozenset()
+    page_names = (
+        {p.asset.name for p in atlas.pages} if atlas is not None else set()
+    )
+    needs: dict[str, set[str]] = {}
+    for room_name, rg in room_data.items():
+        need = rg.reachable_names & loadable
+        need |= by_cluster.get(cluster_of[room_name], set())
+        need -= resident | atlased
+        plan = atlas.rooms.get(room_name) if atlas is not None else None
+        if plan is not None:
+            need |= {
+                tile.bg
+                for tiles in plan.layers.values()
+                for tile in tiles
+                if tile.bg in page_names
+            }
+            need |= {
+                model.texture
+                for model in plan.models + plan.auto_models
+                if model.texture in page_names
+            }
+        needs[room_name] = need
+
+    cfg = dataclasses.replace(cfg, resident=frozenset(resident))
+    by_name = {a.name: a for a in assets}
+
+    def megabytes(names: col.Iterable[str]) -> float:
+        return (
+            sum(
+                asset_ram_estimate(cfg, by_name[n])
+                for n in names
+                if n in by_name
+            )
+            / 2**20
+        )
+
+    sizes = sorted(megabytes(need) for need in needs.values())
+    log.info(
+        'Resident: %d assets (~%.1f MB); per room: median ~%.1f MB, max '
+        '~%.1f MB',
+        len(resident),
+        megabytes(resident),
+        sizes[len(sizes) // 2] if sizes else 0,
+        sizes[-1] if sizes else 0,
+    )
+    # </snip MAIN_EX_LEAN>
+    return cfg, needs
 
 
 # <snip DEFS_JUICE>
@@ -3569,7 +3709,7 @@ def main_juicer_gen_tasks(
                     )
                 )
                 continue
-            if asset_cluster(cfg, bg) == 'Common':
+            if asset_resident(cfg, bg):
                 # copy as is
                 copy_rebase(
                     bg.get_background_metadata_file(cfg.project.root),
@@ -3634,7 +3774,7 @@ def main_juicer_gen_tasks(
                 cfg.juicer.dir_out
             )
             file_wet: Path | None = None
-            if asset_cluster(cfg, page.asset) != 'Common':
+            if not asset_resident(cfg, page.asset):
                 # dehydrated like other backgrounds
                 tasks_threaded.append(
                     my_task.TaskCopy(
@@ -3682,7 +3822,7 @@ def main_juicer_gen_tasks(
         type_copy_yyd(my_asset.Sprite)
 
         for sprite in asset_sprites:
-            if asset_cluster(cfg, sprite) == 'Common':
+            if asset_resident(cfg, sprite):
                 # copy as is
                 tasks_threaded.append(
                     my_task.TaskCopyTree(
@@ -3725,7 +3865,7 @@ def main_juicer_gen_tasks(
         """Map music."""
         # no yyd files
         for audio in asset_audio:
-            if asset_cluster(cfg, audio) == 'Common':
+            if asset_resident(cfg, audio):
                 # copy as is
                 copy_rebase(audio.file)
                 continue
@@ -3924,7 +4064,10 @@ def main_juicer_run(cfg: Config, tasks: BuildTasks) -> None:
 
 @step('Juicer: generating gml')
 def main_juicer_gen_gml(
-    cfg: Config, assets: list[Asset], atlas: Atlas | None = None
+    cfg: Config,
+    assets: list[Asset],
+    atlas: Atlas | None = None,
+    needs: dict[str, set[str]] | None = None,
 ) -> None:
     """It is time to finally integrate Clunkster into the project.
 
@@ -3932,6 +4075,12 @@ def main_juicer_gen_gml(
     that exist in the project. The list of scripts to be added into
     the project is
     [right down the road](index.md#integration-into-the-game).
+
+    The game gets a table of every dehydrated asset (kind, resource, wet
+    file), and a list of assets each room needs: every dehydrated asset of
+    the room's clusters, or, in lean builds, exactly what the room uses
+    (``needs``, see ``main_ex_lean``). Rooms with identical lists share
+    one.
 
     This code contains traces of my own project configuration (sound registry,
     etc.), which might not be fully applicable for your project. You
@@ -3941,245 +4090,144 @@ def main_juicer_gen_gml(
     log.info('Generating Clunkster scripts...')
 
     dir_scripts = my_asset.Script.type_get_dir(cfg.juicer.dir_out)
-
     scr_gen_type = dir_scripts / 'clunkster_gen_type.gml'
-    scr_gen_init_audio = dir_scripts / 'clunkster_gen_init_audio.gml'
-    scr_gen_get_room_clusters = (
-        dir_scripts / 'clunkster_gen_get_room_clusters.gml'
-    )
-    scr_gen_hydrate_cluster = dir_scripts / 'clunkster_gen_hydrate_cluster.gml'
-    scr_gen_dehydrate_cluster = (
-        dir_scripts / 'clunkster_gen_dehydrate_cluster.gml'
-    )
+    scr_gen_init = dir_scripts / 'clunkster_gen_init.gml'
     scr_gen_validate_ctx = dir_scripts / 'clunkster_gen_validate_ctx.gml'
-
-    assert all(
-        scr.exists()
-        for scr in [
-            scr_gen_type,
-            scr_gen_init_audio,
-            scr_gen_get_room_clusters,
-            scr_gen_hydrate_cluster,
-            scr_gen_dehydrate_cluster,
-        ]
-    ), "One of the generated scripts wasn't found"
+    for scr in (scr_gen_type, scr_gen_init, scr_gen_validate_ctx):
+        if not scr.exists():
+            raise FileNotFoundError(f'Generated script {scr.name} is missing')
 
     if atlas is not None:
         # atlased backgrounds aren't loaded anymore, their pages are
         assets = [asset for asset in assets if asset.name not in atlas.atlased]
         assets += [page.asset for page in atlas.pages]
 
-    # filter clusterable assets
-    assets_bgm: list[AssetExtBgm] = []
-    assets_sfx: list[AssetExtSfx] = []
-    assets_sfx3: list[AssetExtSfx3] = []
-    assets_spr: list[my_asset.Sprite] = []
-    assets_bg: list[my_asset.Background] = []
-    assets_rooms: list[my_asset.Room] = []  # needed for scripts
+    # dehydrated assets, numbered
+    loaded_types = (my_asset.Sprite, my_asset.Background, AssetExtAudio)
+    dehydrated = [
+        asset
+        for asset in assets
+        if isinstance(asset, loaded_types) and not asset_resident(cfg, asset)
+    ]
+    slot = {asset.name: idx for idx, asset in enumerate(dehydrated)}
+    rooms = [asset for asset in assets if isinstance(asset, my_asset.Room)]
 
-    asset_name_to_file_wet: dict[str, str] = {}
-    dehydrated_clusters: set[str] = set()
-    for asset in assets:
-        if asset_cluster(cfg, asset) == 'Common':
-            # skip common assets
-            continue
-
-        dehydrated_clusters.add(asset_cluster(cfg, asset))
-
-        # populate specific array
-        if isinstance(asset, AssetExtBgm):
-            assets_bgm.append(asset)
-        elif isinstance(asset, AssetExtSfx):
-            assets_sfx.append(asset)
-        elif isinstance(asset, AssetExtSfx3):
-            assets_sfx3.append(asset)
-        elif isinstance(asset, my_asset.Sprite):
-            assets_spr.append(asset)
-        elif isinstance(asset, my_asset.Background):
-            assets_bg.append(asset)
-        elif isinstance(asset, my_asset.Room):
-            assets_rooms.append(asset)
-            continue
+    # assets needed per room
+    room_slots: dict[str, list[int]] = {}
+    for room in rooms:
+        if needs is not None:
+            names = needs.get(room.name, set())
         else:
-            continue
-
-        # get wet file location
-
-        asset_name_to_file_wet[asset.name] = asset_wet_path(
-            cfg, asset
-        ).as_posix()
+            allowed = allowed_clusters(cfg, asset_cluster(cfg, room))
+            names = {
+                asset.name
+                for asset in dehydrated
+                if asset_cluster(cfg, asset) in allowed
+            }
+        room_slots[room.name] = sorted(slot[n] for n in names if n in slot)
 
     # common params for writing anything related to game maker
     text_params = {'encoding': 'utf-8', 'newline': '\n'}
-
-    # write the clunkster_gen_type
 
     # technically, Game Juicer is in prod configuration, as far as the
     #  game is concerned, even if we use dev stubs instead of prod stubs
     scr_gen_type.write_text('return "prod"', **text_params)
 
-    # write the clunkster_gen_get_room_clusters
-    gml_deps = [
-        '///clunkster_gen_get_room_clusters(target_room)',
+    build_type = 'prod' if cfg.juicer.is_prod else 'dev'
+    lines = [
+        '///clunkster_gen_init()',
         '// AUTOGENERATED BY CLUNKSTER JUICER',
-        'switch (argument0) {',
+        f'global.__clunk_keep={cfg.juicer.keep_rooms}',
+        f'global.__clunk_stub_spr="data/dry/spr_{build_type}.gmspr"',
+        f'global.__clunk_stub_bg="data/dry/bg_{build_type}.gmbck"',
+        'var _s0,_s1,_s3;',
+        f'_s0="data/dry/snd_{build_type}.wav"',
+        f'_s1="data/dry/mus_{build_type}.ogg"',
+        f'_s3="data/dry/snd3_{build_type}.ogg"',
     ]
-
-    cluster_to_rooms: dict[str, list[str]] = {}
-    for room in assets_rooms:
-        room_cluster = asset_cluster(cfg, room)
-        cluster_to_rooms.setdefault(room_cluster, []).append(room.name)
-
-        needed_clusters = allowed_clusters(cfg, room_cluster)
-        needed_clusters.discard('Common')
-
-        gml_deps.extend(
-            it.chain(
-                (f'case {room.name}:',),
-                (
-                    f'    ds_map_add(global.__clunk_req_clusters,"{cl}",1)'
-                    for cl in sorted(needed_clusters)
-                ),
-                ('    break',),
+    for idx, asset in enumerate(dehydrated):
+        file = asset_wet_path(cfg, asset).as_posix()
+        prefix = f'global.__clunk_kind[{idx}]='
+        if isinstance(asset, my_asset.Sprite):
+            lines.append(f'{prefix}0 global.__clunk_res[{idx}]={asset.name}')
+        elif isinstance(asset, my_asset.Background):
+            lines.append(f'{prefix}1 global.__clunk_res[{idx}]={asset.name}')
+        else:
+            # sound kind, streamed, preload
+            if isinstance(asset, AssetExtBgm):
+                kind, streamed, preload = 1, 1, 1
+            elif isinstance(asset, AssetExtSfx):
+                kind, streamed, preload = 0, 0, 1
+            else:
+                kind, streamed, preload = 3, 1, 2
+            lines.append(
+                f'{prefix}2 global.__clunk_res[{idx}]={asset.name}'
+                f' global.__clunk_skind[{idx}]={kind}'
+                f' global.__clunk_stream[{idx}]={streamed}'
+                f' global.__clunk_pre[{idx}]={preload}'
+                f' global.__clunk_stub[{idx}]=_s{kind}'
             )
-        )
+        lines.append(f'global.__clunk_file[{idx}]="{file}"')
+    lines.append(f'global.__clunk_count={len(dehydrated)}')
 
-    gml_deps.append('}')
-    scr_gen_get_room_clusters.write_text('\n'.join(gml_deps), **text_params)
+    # room lists, parsed from strings to keep the script short
+    lists: dict[tuple[int, ...], int] = {}
+    for slots in room_slots.values():
+        if slots:
+            lists.setdefault(tuple(slots), len(lists))
+    lines.append('var _ls,_l,_k,_s,_p;')
+    lines.extend(
+        f'_ls[{k}]="{",".join(map(str, slots))}"' for slots, k in lists.items()
+    )
+    lines.extend((
+        f'for (_k=0;_k<{len(lists)};_k+=1) {{',
+        '    _l[_k]=ds_list_create()',
+        '    _s=_ls[_k]+","',
+        '    while _s!="" {',
+        '        _p=string_pos(",",_s)',
+        '        ds_list_add(_l[_k],real(string_copy(_s,1,_p-1)))',
+        '        _s=string_delete(_s,1,_p)',
+        '    }',
+        '}',
+    ))
+    lines.extend(
+        f'ds_map_add(global.__clunk_rooms,{room},_l[{lists[tuple(slots)]}])'
+        for room, slots in room_slots.items()
+        if slots
+    )
+    scr_gen_init.write_text('\n'.join(lines), **text_params)
 
-    # write clunkster_gen_validate_ctx
-
+    # context guards must pass in rooms of their clusters (fatal), and should
+    #  fail in rooms where the dependency graphs assumed they do, since
+    #  assets behind them aren't loaded there (a warning, shims pass anywhere)
     gml_validate = [
         '///clunkster_gen_validate_ctx()',
         '// AUTOGENERATED BY CLUNKSTER JUICER',
-        'var _violations;_violations=""',
+        'var _violations,_warnings;_violations="" _warnings=""',
     ]
-
-    for context_guard, granted_clusters in cfg.context_rules.items():
-        for clusters in granted_clusters:
-            gml_validate.extend(
-                f'if not {context_guard}({room}) _violations+="Failed ctx '
-                f'check on {room} and {context_guard}"+lf'
-                for room in cluster_to_rooms.get(clusters, ())
-            )
-    gml_validate.append('if _violations!="" show_error(_violations,1)')
-
+    for guard, granted in cfg.context_rules.items():
+        for room in rooms:
+            cluster = asset_cluster(cfg, room)
+            if cluster in granted:
+                gml_validate.append(
+                    f'if not {guard}({room.name}) _violations+="Failed ctx '
+                    f'check on {room.name} and {guard}"+lf'
+                )
+            elif not allowed_clusters(cfg, cluster) & granted:
+                gml_validate.append(
+                    f'if {guard}({room.name}) _warnings+="{guard} passes on '
+                    f'{room.name}, assets behind it are not loaded there"+lf'
+                )
+    gml_validate.extend((
+        'if _violations!="" show_error(_violations,1)',
+        'if _warnings!="" show_error(_warnings,0)',
+    ))
     scr_gen_validate_ctx.write_text('\n'.join(gml_validate), **text_params)
 
-    # write the clunkster_gen_init_audio, prepare the code for music/sound
-
-    build_type = 'prod' if cfg.juicer.is_prod else 'dev'
-    stub_sfx = f'data/dry/snd_{build_type}.wav'
-    stub_sfx3 = f'data/dry/snd3_{build_type}.ogg'
-    stub_bgm = f'data/dry/mus_{build_type}.ogg'
-    stub_bg = f'data/dry/bg_{build_type}.gmbck'
-    stub_spr = f'data/dry/spr_{build_type}.gmspr'
-
-    gml_gen_init_audio = [
-        '///clunkster_gen_init_audio()',
-        '// AUTOGENERATED BY CLUNKSTER JUICER',
-        f'var _p_sfx;_p_sfx="{stub_sfx}"',
-        f'var _p_sfx3;_p_sfx3="{stub_sfx3}"',
-        f'var _p_bgm;_p_bgm="{stub_bgm}"',
-    ]
-
-    cluster_load_code: dict[str, list[str]] = {}
-    cluster_unload_code: dict[str, list[str]] = {}
-
-    for asset in assets_bgm + assets_sfx + assets_sfx3:
-        clean_name = asset.name[1:-1]
-
-        if isinstance(asset, AssetExtBgm):
-            stub_var = '_p_bgm'
-            kind = 1
-            streamed = 1
-            preload = 1
-        elif isinstance(asset, AssetExtSfx):
-            stub_var = '_p_sfx'
-            kind = 0
-            streamed = 0
-            preload = 1
-        else:
-            stub_var = '_p_sfx3'
-            kind = 3
-            preload = 2
-            streamed = 1
-
-        # populate init code
-        gml_gen_init_audio.append(
-            f'sound_add_ext({stub_var},{kind},{streamed},"{clean_name}")'
-        )
-
-        # populate load code
-        pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(cfg, asset)
-        cluster_load_code.setdefault(cluster, []).append(
-            f'    sound_replace({asset.name},"{pth_wet}",{kind},{preload}) '
-            f'sndreg_apply({asset.name})'
-        )
-        # populate unload code
-        cluster_unload_code.setdefault(cluster, []).append(
-            f'    sound_replace({asset.name},{stub_var},{kind},{preload})'
-        )
-
-    scr_gen_init_audio.write_text('\n'.join(gml_gen_init_audio), **text_params)
-
-    # prepare the code for sprites/backgrounds
-
-    for asset in assets_spr:
-        # no need for any init code
-        pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(cfg, asset)
-        cluster_load_code.setdefault(cluster, []).append(
-            f'    sprite_replace_sprite({asset.name},"{pth_wet}")'
-        )
-        cluster_unload_code.setdefault(cluster, []).append(
-            f'    sprite_replace_sprite({asset.name},_p_spr)'
-        )
-
-    for asset in assets_bg:
-        # no need for any init code
-        pth_wet = asset_name_to_file_wet[asset.name]
-        cluster = asset_cluster(cfg, asset)
-        cluster_load_code.setdefault(cluster, []).append(
-            f'    background_replace_background({asset.name},"{pth_wet}")'
-        )
-        cluster_unload_code.setdefault(cluster, []).append(
-            f'    background_replace_background({asset.name},_p_bg)'
-        )
-
-    gml_hydrate = [
-        '///clunkster_gen_hydrate_cluster(cluster_name)',
-        '// AUTOGENERATED BY CLUNKSTER JUICER',
-        'switch (argument0) {',
-    ]
-    gml_dehydrate = [
-        '///clunkster_gen_dehydrate_cluster(cluster_name)',
-        '// AUTOGENERATED BY CLUNKSTER JUICER',
-        f'var _p_sfx;_p_sfx="{stub_sfx}"',
-        f'var _p_sfx3;_p_sfx3="{stub_sfx3}"',
-        f'var _p_bgm;_p_bgm="{stub_bgm}"',
-        f'var _p_spr;_p_spr="{stub_spr}"',
-        f'var _p_bg;_p_bg="{stub_bg}"',
-        'switch (argument0) {',
-    ]
-
-    for cluster in sorted(dehydrated_clusters):
-        gml_hydrate.append(f'case "{cluster}":')
-        gml_dehydrate.append(f'case "{cluster}":')
-
-        gml_hydrate.extend(cluster_load_code.get(cluster, []))
-        gml_dehydrate.extend(cluster_unload_code.get(cluster, []))
-
-        gml_hydrate.append('    break')
-        gml_dehydrate.append('    break')
-
-    gml_hydrate.append('}')
-    gml_dehydrate.append('}')
-
-    scr_gen_hydrate_cluster.write_text('\n'.join(gml_hydrate), **text_params)
-    scr_gen_dehydrate_cluster.write_text(
-        '\n'.join(gml_dehydrate), **text_params
+    log.info(
+        '%d dehydrated assets, %d room lists',
+        len(dehydrated),
+        len(lists),
     )
 
     # <md>
@@ -4401,6 +4449,7 @@ def _load_private(config_dir: Path) -> Config:
         fname_gm82=config['fname_gm82'],
         scramble_models=config.get('scramble_model_names', True),
         crop_found_tiles=config.get('crop_smart_tiles', False),
+        keep_rooms=config.get('keep_rooms', 1),
     )
 
     file_private_alias = config_dir / 'alias.json'
@@ -4435,11 +4484,11 @@ def _load_private(config_dir: Path) -> Config:
 # <snip DEF_RUN_CHECK>
 def run_check(
     cfg: Config, scan_cache: my_scan_cache.ScanCache
-) -> tuple[Config, list[Asset], list[Dependency]]:
+) -> tuple[Config, list[Asset], list[Dependency], dict[str, RoomGraph]]:
     """Run all checks.
 
-    :return: Config with assets moved to Common, the assets and their
-      dependencies.
+    :return: Config with assets moved to Common, the assets, their
+      dependencies and room graphs.
     """
     main_ex_lint_tree(cfg)
     assets = main_ex_aliases(cfg)
@@ -4461,7 +4510,7 @@ def run_check(
 
     main_ex_lint_unused_graph(cfg, assets, room_data)
     main_ex_report_promotions(cfg, promotions)
-    return cfg, assets, deps
+    return cfg, assets, deps, room_data
 
 
 def run_build(
@@ -4475,20 +4524,26 @@ def run_build(
     :return: Launched game's process, if any.
     """
     deps: list[Dependency] | None = None
+    room_data: dict[str, RoomGraph] = {}
     if scan_cache is None:
         main_ex_lint_tree(cfg)
         assets = main_ex_aliases(cfg)
     else:
-        cfg, assets, deps = run_check(cfg, scan_cache)
+        cfg, assets, deps, room_data = run_check(cfg, scan_cache)
     atlas: Atlas | None = None
     if cfg.juicer.atlas:
         if deps is None:
             raise ValueError('Atlas needs reference checks')
         protection = main_ex_tile_protection(cfg, assets)
         atlas = main_ex_atlas(cfg, assets, deps, protection)
+    needs: dict[str, set[str]] | None = None
+    if cfg.juicer.lean:
+        if deps is None or not cfg.juicer.hash_names:
+            raise ValueError('Lean builds need reference checks and prod')
+        cfg, needs = main_ex_lean(cfg, assets, room_data, atlas)
     tasks = main_juicer_gen_tasks(cfg, assets, atlas)
     main_juicer_run(cfg, tasks)
-    main_juicer_gen_gml(cfg, assets, atlas)
+    main_juicer_gen_gml(cfg, assets, atlas, needs)
     game = main_juicer_gm_compile(cfg)
     if cfg.juicer.package:
         main_juicer_package(cfg)
@@ -4656,8 +4711,17 @@ def main_ex_dev(cfg: Config) -> None:
     # </snip MAIN_EX_DEV>
 
 
-def _build_profile(cfg: Config, config_dir: Path, mode: str) -> Config:
-    """Adjust the juicer config for the build mode."""
+def _build_profile(
+    cfg: Config, config_dir: Path, mode: str, flags: col.Collection[str] = ()
+) -> Config:
+    """Adjust the juicer config for the build mode and flags."""
+    unknown = set(flags) - {'--lean', '--atlas'}
+    if unknown or (flags and mode != 'prod'):
+        raise ValueError(
+            f'Unknown flags {sorted(unknown)}'
+            if unknown
+            else '--lean and --atlas are for prod builds'
+        )
     if mode == 'quick':
         juicer = dataclasses.replace(cfg.juicer, encode_audio=False)
         return dataclasses.replace(cfg, juicer=juicer)
@@ -4688,7 +4752,8 @@ def _build_profile(cfg: Config, config_dir: Path, mode: str) -> Config:
         name_salt=file_salt.read_text(encoding='utf-8').strip(),
         # package=True,     # temp
         launch=False,
-        atlas=True,
+        atlas='--atlas' in flags,
+        lean='--lean' in flags,
     )
     return dataclasses.replace(cfg, juicer=juicer)
 
@@ -4703,15 +4768,19 @@ def main() -> None:
     - ``build``: check references, build and launch the game
     - ``quick``: build and launch, skipping reference checks and audio
       encoding
-    - ``prod``: check references, build into ``_build_prod`` with atlases,
-      baked tiles and hashed wet asset names, and pack it into a zip
+    - ``prod [--atlas] [--lean]``: check references, build into
+      ``_build_prod`` with hashed wet asset names, and pack it into a zip;
+      ``--atlas`` adds atlases and baked tiles, ``--lean`` makes rooms load
+      exactly the assets they use
     - ``atlas``: like ``build``, but with atlases and baked tiles, into
       ``_build_atlas``, and atlas pages written to ``atlas_dump`` there (for
       testing them without a full prod build)
     """
     config_dir = Path(sys.argv[1]).resolve()
     mode = sys.argv[2] if len(sys.argv) > 2 else 'build'
-    cfg = _build_profile(_load_private(config_dir), config_dir, mode)
+    cfg = _build_profile(
+        _load_private(config_dir), config_dir, mode, sys.argv[3:]
+    )
 
     # allow testing tutorials on private data as well
     if mode == 'test':
