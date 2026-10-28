@@ -527,6 +527,12 @@
 
 
 
+
+
+
+
+
+
     <li class="md-nav__item md-nav__item--nested">
 
 
@@ -605,7 +611,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/01_lint/" class="md-nav__link">
+      <a href="./reference/01_atlas/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.atlas
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/02_lint/" class="md-nav__link">
 
 
 
@@ -632,7 +665,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/02_project/" class="md-nav__link">
+      <a href="./reference/03_model/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.model
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/04_project/" class="md-nav__link">
 
 
 
@@ -659,7 +719,34 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/03_analyze.scan_cache/" class="md-nav__link">
+      <a href="./reference/05_tiles/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.tiles
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="./reference/06_analyze.scan_cache/" class="md-nav__link">
 
 
 
@@ -686,7 +773,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/04_analyze.scan_dep/" class="md-nav__link">
+      <a href="./reference/07_analyze.scan_dep/" class="md-nav__link">
 
 
 
@@ -713,7 +800,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/05_parse.csv/" class="md-nav__link">
+      <a href="./reference/08_parse.csv/" class="md-nav__link">
 
 
 
@@ -740,7 +827,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/06_parse.gml/" class="md-nav__link">
+      <a href="./reference/09_parse.gml/" class="md-nav__link">
 
 
 
@@ -767,7 +854,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/07_parse.index/" class="md-nav__link">
+      <a href="./reference/10_parse.index/" class="md-nav__link">
 
 
 
@@ -794,7 +881,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/08_parse.kv/" class="md-nav__link">
+      <a href="./reference/11_parse.kv/" class="md-nav__link">
 
 
 
@@ -821,7 +908,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/09_parse.png/" class="md-nav__link">
+      <a href="./reference/12_parse.png/" class="md-nav__link">
 
 
 
@@ -848,7 +935,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/10_parse.tree/" class="md-nav__link">
+      <a href="./reference/13_parse.tree/" class="md-nav__link">
 
 
 
@@ -875,7 +962,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/11_pipeline.cache/" class="md-nav__link">
+      <a href="./reference/14_pipeline.cache/" class="md-nav__link">
 
 
 
@@ -902,7 +989,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/12_pipeline.run/" class="md-nav__link">
+      <a href="./reference/15_pipeline.run/" class="md-nav__link">
 
 
 
@@ -929,7 +1016,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/13_pipeline.task/" class="md-nav__link">
+      <a href="./reference/16_pipeline.task/" class="md-nav__link">
 
 
 
@@ -956,7 +1043,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/14_text.line/" class="md-nav__link">
+      <a href="./reference/17_text.line/" class="md-nav__link">
 
 
 
@@ -983,7 +1070,7 @@
 
 
     <li class="md-nav__item">
-      <a href="./reference/15_text.location/" class="md-nav__link">
+      <a href="./reference/18_text.location/" class="md-nav__link">
 
 
 
@@ -1225,9 +1312,9 @@
 <p>Non-destructive tools:</p>
 <ul>
 <li>Linter: <code>tree.yyd</code> validator (see <a href="examples/#example-12-lint-treeyyd-files">ex1.2</a>)</li>
-<li>Linter: unused assets detector (see <a href="examples/#example-22-lint-unused-assets">ex2.2</a> and <a href="examples/#example-32-lint-unreachable-assets">ex3.2</a>)</li>
+<li>Linter: unused assets detector (see <a href="examples/#example-23-lint-unused-assets">ex2.3</a> and <a href="examples/#example-32-lint-unreachable-assets">ex3.2</a>)</li>
 <li>(TODO) Linter: heavy assets detector (RAM &amp; disk size)</li>
-<li>Cluster boundaries: assets referenced across clusters, directly (see <a href="examples/#example-23-clusters-cross-cluster-references">ex2.3</a>) or through the dependency graph (see <a href="examples/#example-33-clusters-room-boundaries">ex3.3</a>), are moved to Common, with a report and a RAM budget (see <a href="examples/#example-34-clusters-moved-to-common">ex3.4</a>)</li>
+<li>Cluster boundaries: assets referenced across clusters, directly (see <a href="examples/#example-24-clusters-cross-cluster-references">ex2.4</a>) or through the dependency graph (see <a href="examples/#example-33-clusters-room-boundaries">ex3.3</a>), are moved to Common, with a report and a RAM budget (see <a href="examples/#example-34-clusters-moved-to-common">ex3.4</a>)</li>
 <li>Game Juicer (Prod Build): convert assets into external versions and generate code for their loading (see <a href="examples/#example-41-juicer-the-juice">ex4.1</a>; <a href="#dehydration">Dehydration</a>)</li>
 </ul>
 <p>Lightly destructive tools:</p>
@@ -1406,7 +1493,7 @@ Backgrounds:
 </span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nx">player_freeze</span><span class="p">()</span>
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Now the Player directly references <code>SpikeIce</code>. The <a href="examples/#example-23-clusters-cross-cluster-references">analyzer</a> will flag this, because the Player now requires the <code>SpikeIce</code> asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.</p>
+<p>Now the Player directly references <code>SpikeIce</code>. The <a href="examples/#example-24-clusters-cross-cluster-references">analyzer</a> will flag this, because the Player now requires the <code>SpikeIce</code> asset (and, therefore, all of it's referenced assets down the line, such as its sprite) to be loaded globally.</p>
 <p>This can be solved in a few ways.</p>
 <p><strong>Version 1 - Moving the logic from Common to Stage-specific</strong></p>
 <p>Just invert the logic - make the spikes damage the player, instead of the player checking for spikes:</p>
@@ -1494,8 +1581,7 @@ Backgrounds:
 <p>A few things to digest from here:</p>
 <ol>
 <li><code>ControllerSpellsNorth</code> is now an object from <code>CommonNorth</code> as well - therefore it is totally allowed to reference any other asset from <code>CommonNorth</code>. After all, when the <code>CommonNorth</code> cluster is loaded, everything from it becomes available.</li>
-<li>
-<p>The new function <code>room_is_ice</code> - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this script guards behind itself (the <code>IceStage</code> in our case):
+<li>The new function <code>room_is_ice</code> - is not just an ordinary "location check script". It can be used as a "Context Guard" in Clunkster's analyzer. We can assign it a target cluster that this script guards behind itself (the <code>IceStage</code> in our case):
 <div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">CONTEXT_RULES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>    <span class="c1"># guard for ice stage -specific things</span>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>    <span class="s1">'room_is_ice'</span><span class="p">:</span> <span class="p">{</span>
@@ -1513,10 +1599,11 @@ Backgrounds:
 </span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    <span class="p">}</span>
 </span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="p">}</span>
 </span></code></pre></div>
-Now everything protected by this guard can freely reference any <code>IceStage</code> asset.</p>
-</li>
-<li>
-<p>Since anything from the <code>CommonNorth</code> cluster should, logically, be available anywhere in <code>IceStage</code>, we must also define this behavior in a different config:
+Now everything protected by this guard can freely reference any <code>IceStage</code> asset.</li>
+</ol>
+<p>Rooms of lean clusters (<code>lean_clusters</code> in the config) load exactly the assets they reach instead of whole clusters, so they can borrow from many stages without loading all of them (see <a href="examples/#example-47-juicer-lean-builds">ex4.7</a>). Lint rules of such clusters list every stage they borrow from, which would make any guard of those stages pass everywhere, so in their rooms a guard only passes if it grants their own cluster, or the room by name (<code>'room_is_ice': {'IceStage', 'rIceCameo'}</code>).</p>
+<ol>
+<li>Since anything from the <code>CommonNorth</code> cluster should, logically, be available anywhere in <code>IceStage</code>, we must also define this behavior in a different config:
 <div class="language-python highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">LINT_RULES</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
 </span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="c1"># common assets cannot borrow from Stage specific folders</span>
 </span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>    <span class="s1">'Common'</span><span class="p">:</span> <span class="p">{</span><span class="s1">'Common'</span><span class="p">},</span>
@@ -1538,8 +1625,7 @@ Now everything protected by this guard can freely reference any <code>IceStage</
 </span><span id="__span-16-19"><a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a>    <span class="c1">#  the cluster itself</span>
 </span><span id="__span-16-20"><a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="p">}</span>
 </span></code></pre></div>
-Now everything in <code>CommonNorth</code> can be freely accessed by <code>IceStage</code>.</p>
-</li>
+Now everything in <code>CommonNorth</code> can be freely accessed by <code>IceStage</code>.</li>
 </ol>
 <blockquote>
 <p>Tip: The attentive ones among you have likely noticed that this same trick can be applied to a World object, making it viable again. As a matter of fact, having multiple persistent controller objects is quite bad - you'll see in a bit.</p>
@@ -1928,7 +2014,7 @@ and then <code>WeatherBlizzard</code>'s home cluster <code>CommonNorth</code> ge
 <p>since for some games Juicing is the only way to run, builds must be fast:</p>
 <ul>
 <li>processing tasks must support caching</li>
-<li>asset dirs without processing can be symlinked</li>
+<li>asset dirs without processing can be linked (junctions on Windows, no admin rights needed)</li>
 <li>heavy tasks (audio compression, image encoding) should be multiprocessed</li>
 <li>copy tasks (numerous but IO-bound) can be put into threading</li>
 </ul>
@@ -1953,7 +2039,7 @@ and then <code>WeatherBlizzard</code>'s home cluster <code>CommonNorth</code> ge
 <p>otherwise</p>
 <ul>
 <li>check if this folder is allowed to exist in the project</li>
-<li>symlink</li>
+<li>link</li>
 </ul>
 </li>
 </ul>
@@ -1983,7 +2069,7 @@ original path relative to the project root&gt;</code>.</p>
 <ul>
 <li><code>task.py</code>: Task encapsulates information needed for processing logic, input and output files for build caching, and houses the <code>execute</code> method that actually does the thing.</li>
 <li><code>cache.py</code>: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.</li>
-<li><code>run.py</code>: Task execution. <code>tasks_filter_stale</code> drops tasks that are fresh in the cache, <code>tasks_run</code> executes the rest in a given <code>concurrent.futures</code> pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task, so workers don't need to communicate anything.</li>
+<li><code>run.py</code>: Task execution. <code>tasks_filter_stale</code> drops tasks that are fresh in the cache, <code>tasks_run</code> executes the rest in a given <code>concurrent.futures</code> pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task with the worker that ran it and the tasks running right now (taken from the pool's futures), so workers don't need to communicate anything beyond their results. The examples use it for a live view of what each worker does.</li>
 </ul>
 <p>Reference scanning results are cached per file (see <code>analyze/scan_cache.py</code>): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks and the <a href="examples/#example-35-watch-mode">watch mode</a> fast.</p>
 <p>Linting follows the same idea (see <code>lint.py</code>): checks are <code>Rule</code>s, problems are <code>Violation</code>s collected into plain lists, and <code>format_report</code> turns them into text. Printing the report and raising on errors is up to the pipeline.</p>
@@ -1991,12 +2077,16 @@ original path relative to the project root&gt;</code>.</p>
 <p>Full example of a synchronous pipeline step can be found here: <a href="examples/#example-03-full-example-pipeline-excerpt">ex0.3</a>.</p>
 <p>Full example of running tasks concurrently can be found here: <a href="examples/#example-42-juicer-running-the-tasks">ex4.2</a>.</p>
 <h2 id="integration-into-the-game">Integration into the game<a class="headerlink" href="#integration-into-the-game" title="Permanent link">&para;</a></h2>
-<p>In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Game Juicer and its derivatives. Default flow delegated loading to when the room change is requested (in <code>room_goto</code>), and unloading to the Room Start event (when all assets from previous clusters are definitely unloaded). This results in 1-2 second stutters when changing clusters, which I'd imagine won't be an issue, especially if such room changes have transitions like black-out-black-in.</p>
+<p>In order to integrate Clunkster into your project you'll have to create a couple of GML scripts. Some of them will be autogenerated in Game Juicer and its derivatives. The game gets a table of every dehydrated asset and, for every room, a list of the assets it needs. Loading is done when the room change is requested (in <code>room_goto</code>): assets of the target room that aren't loaded yet get loaded. Unloading is done in the Room Start event: assets no room needed for more than <code>keep_rooms</code> room changes (1 by default, so going back to the previous room is free) get replaced by stubs. This results in stutters when changing to rooms with a lot of new assets, which I'd imagine won't be an issue, especially if such room changes have transitions like black-out-black-in.</p>
+<p>What a room needs depends on the build: every dehydrated asset of the room's clusters, or, in lean builds (<a href="examples/#example-47-juicer-lean-builds">ex4.7</a>), exactly what the room uses.</p>
 <p>Here's the static scripts that you'll have to add:</p>
 <ul>
-<li><code>clunkster_init()</code>: Initialized Clunkster's variables.</li>
-<li><code>clunkster_room_start()</code>: Clunkster's Room Start event, cleans up all unneeded assets.</li>
+<li><code>clunkster_init()</code>: Initializes Clunkster's variables and asset tables.</li>
+<li><code>clunkster_room_start()</code>: Clunkster's Room Start event, unloads assets that are no longer needed.</li>
 <li><code>clunkster_room_goto(target_room)</code>: A <code>room_goto</code> replacement that ensures all assets are loaded for target room.</li>
+<li><code>clunkster_hydrate(asset)</code>: Loads an asset from the table.</li>
+<li><code>clunkster_dehydrate(asset)</code>: Unloads an asset from the table (replaces it with a dry stub to reduce RAM).</li>
+<li><code>clunkster_init_audio()</code>: Initializes audio stubs.</li>
 <li><code>clunkster_registry_begin()</code>: Toggles registry mode on.</li>
 <li><code>clunkster_is_reg()</code>: Returns registry mode status.</li>
 <li><code>clunkster_registry_end()</code>: Toggles registry mode off.</li>
@@ -2004,146 +2094,178 @@ original path relative to the project root&gt;</code>.</p>
 <p>And the following scripts will be autogenerated. You should still add them - their contents are populated in the GML generation step: <a href="examples/#example-43-juicer-generate-the-gml-files">ex4.3</a>. In raw project those are usually empty.</p>
 <ul>
 <li><code>clunkster_gen_type()</code>: Returns <code>"dev"</code> or <code>"prod"</code> in a built project. Returns <code>""</code> in the raw source project.</li>
-<li><code>clunkster_gen_init_audio()</code>: Initializes audio stubs.</li>
-<li><code>clunkster_gen_get_room_clusters(target_room)</code>: Populates the required cluster map.</li>
-<li><code>clunkster_gen_hydrate_cluster(cluster_name)</code>: Loads assets.</li>
-<li><code>clunkster_gen_dehydrate_cluster(cluster_name)</code>: Unloads assets (replaces them with dry stubs to reduce RAM).</li>
-<li><code>clunkster_gen_validate_ctx()</code>: Validation script that runs on Game Start and checks that <a href="#building-dependency-flow">context guards</a> correctly guard their rooms.</li>
+<li><code>clunkster_gen_init()</code>: Fills the asset tables and room lists.</li>
+<li><code>clunkster_gen_validate_ctx()</code>: Validation script that runs on Game Start and checks that <a href="#building-dependency-flow">context guards</a> correctly guard their rooms. A guard failing in a room of its clusters is an error, a guard passing in a room where the dependency graphs assumed it doesn't (so assets behind it aren't loaded there) is a warning.</li>
 </ul>
 <p>Following describes the base implementation of those scripts, as well as notes on what kinds of changes should be made to the project in order for these to work.</p>
 <ol>
 <li>
 <p><code>clunkster_init()</code> - Initializes Clunkster logic</p>
 <div class="language-js highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1">///clunkster_init()</span>
-</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a><span class="c1">//Initialize Clunkster globals</span>
+</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a><span class="c1">//Initialize clunkster globals and asset tables</span>
 </span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
 </span><span id="__span-38-4"><a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span><span class="o">=</span><span class="mf">0</span>
-</span><span id="__span-38-5"><a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="o">=</span><span class="nx">ds_map_create</span><span class="p">()</span>
-</span><span id="__span-38-6"><a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="o">=</span><span class="nx">ds_map_create</span><span class="p">()</span>
-</span><span id="__span-38-7"><a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a>
-</span><span id="__span-38-8"><a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a><span class="nx">clunkster_gen_validate_ctx</span><span class="p">()</span>
+</span><span id="__span-38-5"><a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a><span class="c1">//room -&gt; ds_list of assets (indices into the tables) the room needs</span>
+</span><span id="__span-38-6"><a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_rooms</span><span class="o">=</span><span class="nx">ds_map_create</span><span class="p">()</span>
+</span><span id="__span-38-7"><a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a><span class="c1">//room changes so far, and how many an asset stays loaded for after its last room</span>
+</span><span id="__span-38-8"><a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_tick</span><span class="o">=</span><span class="mf">0</span>
+</span><span id="__span-38-9"><a id="__codelineno-38-9" name="__codelineno-38-9" href="#__codelineno-38-9"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_keep</span><span class="o">=</span><span class="mf">1</span>
+</span><span id="__span-38-10"><a id="__codelineno-38-10" name="__codelineno-38-10" href="#__codelineno-38-10"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_count</span><span class="o">=</span><span class="mf">0</span>
+</span><span id="__span-38-11"><a id="__codelineno-38-11" name="__codelineno-38-11" href="#__codelineno-38-11"></a><span class="nx">clunkster_gen_init</span><span class="p">()</span>
+</span><span id="__span-38-12"><a id="__codelineno-38-12" name="__codelineno-38-12" href="#__codelineno-38-12"></a>
+</span><span id="__span-38-13"><a id="__codelineno-38-13" name="__codelineno-38-13" href="#__codelineno-38-13"></a><span class="c1">//room change each asset was last needed at, -1 while it's not loaded</span>
+</span><span id="__span-38-14"><a id="__codelineno-38-14" name="__codelineno-38-14" href="#__codelineno-38-14"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_i</span><span class="p">;</span>
+</span><span id="__span-38-15"><a id="__codelineno-38-15" name="__codelineno-38-15" href="#__codelineno-38-15"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="nx">_i</span><span class="o">=</span><span class="mf">0</span><span class="p">;</span><span class="nx">_i</span><span class="o">&lt;</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_count</span><span class="p">;</span><span class="nx">_i</span><span class="o">+=</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_i</span><span class="p">]</span><span class="o">=-</span><span class="mf">1</span>
+</span><span id="__span-38-16"><a id="__codelineno-38-16" name="__codelineno-38-16" href="#__codelineno-38-16"></a>
+</span><span id="__span-38-17"><a id="__codelineno-38-17" name="__codelineno-38-17" href="#__codelineno-38-17"></a><span class="nx">clunkster_gen_validate_ctx</span><span class="p">()</span>
 </span></code></pre></div>
 <p>See example of proper Game Start logic below.</p>
 </li>
 <li>
-<p><code>clunkster_room_start()</code> - System's Room Start event, responsible for cleaning up unloaded assets.</p>
+<p><code>clunkster_room_start()</code> - System's Room Start event, responsible for unloading assets.</p>
 <div class="language-js highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1">///clunkster_room_start()</span>
 </span><span id="__span-39-2"><a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a><span class="c1">//Clunkster's Room Start event</span>
-</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a><span class="c1">//Cleanup cluster no longer needed for this room</span>
+</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a><span class="c1">//Unload assets that no room needed for more than global.__clunk_keep room changes</span>
 </span><span id="__span-39-4"><a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>
-</span><span id="__span-39-5"><a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_key</span><span class="p">,</span><span class="nx">_next</span><span class="p">;</span>
-</span><span id="__span-39-6"><a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a><span class="nx">_key</span><span class="o">=</span><span class="nx">ds_map_find_first</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="p">)</span>
-</span><span id="__span-39-7"><a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a>
-</span><span id="__span-39-8"><a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="k">while</span><span class="w"> </span><span class="nx">is_string</span><span class="p">(</span><span class="nx">_key</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-39-9"><a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a><span class="w">    </span><span class="nx">_next</span><span class="o">=</span><span class="nx">ds_map_find_next</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">)</span>
-</span><span id="__span-39-10"><a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">not</span><span class="w"> </span><span class="nx">ds_map_exists</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-39-11"><a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a><span class="w">        </span><span class="c1">//this cluster is no longer needed</span>
-</span><span id="__span-39-12"><a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a><span class="w">        </span><span class="nx">clunkster_gen_dehydrate_cluster</span><span class="p">(</span><span class="nx">_key</span><span class="p">)</span>
-</span><span id="__span-39-13"><a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="w">        </span><span class="nx">ds_map_delete</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">)</span>
-</span><span id="__span-39-14"><a id="__codelineno-39-14" name="__codelineno-39-14" href="#__codelineno-39-14"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-39-15"><a id="__codelineno-39-15" name="__codelineno-39-15" href="#__codelineno-39-15"></a><span class="w">    </span><span class="nx">_key</span><span class="o">=</span><span class="nx">_next</span>
-</span><span id="__span-39-16"><a id="__codelineno-39-16" name="__codelineno-39-16" href="#__codelineno-39-16"></a><span class="p">}</span>
+</span><span id="__span-39-5"><a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_i</span><span class="p">;</span>
+</span><span id="__span-39-6"><a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="nx">_i</span><span class="o">=</span><span class="mf">0</span><span class="p">;</span><span class="nx">_i</span><span class="o">&lt;</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_count</span><span class="p">;</span><span class="nx">_i</span><span class="o">+=</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-39-7"><a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_i</span><span class="p">]</span><span class="o">&gt;=</span><span class="mf">0</span><span class="w"> </span><span class="nx">and</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_i</span><span class="p">]</span><span class="o">&lt;</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_tick</span><span class="o">-</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_keep</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-39-8"><a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="w">        </span><span class="nx">clunkster_dehydrate</span><span class="p">(</span><span class="nx">_i</span><span class="p">)</span>
+</span><span id="__span-39-9"><a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a><span class="w">        </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_i</span><span class="p">]</span><span class="o">=-</span><span class="mf">1</span>
+</span><span id="__span-39-10"><a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-39-11"><a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>Put it in World's Room Start at the top.</p>
 </li>
 <li>
 <p><code>clunkster_room_goto(target_room)</code> - Interceptor of <code>room_goto</code> calls, which is responsible for loading any asset required by target room.</p>
 <div class="language-js highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1">///clunkster_room_goto(room)</span>
-</span><span id="__span-40-2"><a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a><span class="c1">//Intercept room_goto and load necessary clusters</span>
+</span><span id="__span-40-2"><a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a><span class="c1">//Intercept room_goto and load assets the room needs</span>
 </span><span id="__span-40-3"><a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>
-</span><span id="__span-40-4"><a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="nx">ds_map_clear</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="p">)</span>
-</span><span id="__span-40-5"><a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="nx">clunkster_gen_get_room_clusters</span><span class="p">(</span><span class="nx">argument0</span><span class="p">)</span>
-</span><span id="__span-40-6"><a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a>
-</span><span id="__span-40-7"><a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_key</span><span class="p">;</span>
-</span><span id="__span-40-8"><a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="nx">_key</span><span class="o">=</span><span class="nx">ds_map_find_first</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="p">)</span>
-</span><span id="__span-40-9"><a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a><span class="nx">repeat</span><span class="w"> </span><span class="nx">ds_map_size</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-40-10"><a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="nx">ds_map_exists</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-40-11"><a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="w">        </span><span class="c1">//must be loaded</span>
-</span><span id="__span-40-12"><a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="w">        </span><span class="nx">clunkster_gen_hydrate_cluster</span><span class="p">(</span><span class="nx">_key</span><span class="p">)</span>
-</span><span id="__span-40-13"><a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="w">        </span><span class="nx">ds_map_add</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_active_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">,</span><span class="mf">1</span><span class="p">)</span>
-</span><span id="__span-40-14"><a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-40-15"><a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="w">    </span><span class="nx">_key</span><span class="o">=</span><span class="nx">ds_map_find_next</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_req_clusters</span><span class="p">,</span><span class="nx">_key</span><span class="p">)</span>
-</span><span id="__span-40-16"><a id="__codelineno-40-16" name="__codelineno-40-16" href="#__codelineno-40-16"></a><span class="p">}</span>
-</span><span id="__span-40-17"><a id="__codelineno-40-17" name="__codelineno-40-17" href="#__codelineno-40-17"></a>
-</span><span id="__span-40-18"><a id="__codelineno-40-18" name="__codelineno-40-18" href="#__codelineno-40-18"></a><span class="nx">room_goto</span><span class="p">(</span><span class="nx">argument0</span><span class="p">)</span>
+</span><span id="__span-40-4"><a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_l</span><span class="p">,</span><span class="nx">_i</span><span class="p">,</span><span class="nx">_a</span><span class="p">;</span>
+</span><span id="__span-40-5"><a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_tick</span><span class="o">+=</span><span class="mf">1</span>
+</span><span id="__span-40-6"><a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a><span class="k">if</span><span class="w"> </span><span class="nx">ds_map_exists</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_rooms</span><span class="p">,</span><span class="nx">argument0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-40-7"><a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a><span class="w">    </span><span class="nx">_l</span><span class="o">=</span><span class="nx">ds_map_find_value</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_rooms</span><span class="p">,</span><span class="nx">argument0</span><span class="p">)</span>
+</span><span id="__span-40-8"><a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="nx">_i</span><span class="o">=</span><span class="mf">0</span><span class="p">;</span><span class="nx">_i</span><span class="o">&lt;</span><span class="nx">ds_list_size</span><span class="p">(</span><span class="nx">_l</span><span class="p">);</span><span class="nx">_i</span><span class="o">+=</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-40-9"><a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a><span class="w">        </span><span class="nx">_a</span><span class="o">=</span><span class="nx">ds_list_find_value</span><span class="p">(</span><span class="nx">_l</span><span class="p">,</span><span class="nx">_i</span><span class="p">)</span>
+</span><span id="__span-40-10"><a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_a</span><span class="p">]</span><span class="o">&lt;</span><span class="mf">0</span><span class="w"> </span><span class="nx">clunkster_hydrate</span><span class="p">(</span><span class="nx">_a</span><span class="p">)</span>
+</span><span id="__span-40-11"><a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="w">        </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_last</span><span class="p">[</span><span class="nx">_a</span><span class="p">]</span><span class="o">=</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_tick</span>
+</span><span id="__span-40-12"><a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-40-13"><a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="p">}</span>
+</span><span id="__span-40-14"><a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a>
+</span><span id="__span-40-15"><a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="nx">room_goto</span><span class="p">(</span><span class="nx">argument0</span><span class="p">)</span>
 </span></code></pre></div>
 <p>You'll have to replace every <code>room_goto</code> call with this function, and never use any other methods of room change.</p>
+</li>
+<li>
+<p><code>clunkster_hydrate(asset)</code> - Load an asset from its wet file.</p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-41-1"><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1">///clunkster_hydrate(asset)</span>
+</span><span id="__span-41-2"><a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a><span class="c1">//Load an asset (index into clunkster tables) from its wet file</span>
+</span><span id="__span-41-3"><a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>
+</span><span id="__span-41-4"><a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_r</span><span class="p">,</span><span class="nx">_f</span><span class="p">;</span>
+</span><span id="__span-41-5"><a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a><span class="nx">_r</span><span class="o">=</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_res</span><span class="p">[</span><span class="nx">argument0</span><span class="p">]</span>
+</span><span id="__span-41-6"><a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a><span class="nx">_f</span><span class="o">=</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_file</span><span class="p">[</span><span class="nx">argument0</span><span class="p">]</span>
+</span><span id="__span-41-7"><a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a><span class="k">switch</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_kind</span><span class="p">[</span><span class="nx">argument0</span><span class="p">]</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-41-8"><a id="__codelineno-41-8" name="__codelineno-41-8" href="#__codelineno-41-8"></a><span class="k">case</span><span class="w"> </span><span class="mf">0</span><span class="o">:</span>
+</span><span id="__span-41-9"><a id="__codelineno-41-9" name="__codelineno-41-9" href="#__codelineno-41-9"></a><span class="w">    </span><span class="nx">sprite_replace_sprite</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nx">_f</span><span class="p">)</span>
+</span><span id="__span-41-10"><a id="__codelineno-41-10" name="__codelineno-41-10" href="#__codelineno-41-10"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-41-11"><a id="__codelineno-41-11" name="__codelineno-41-11" href="#__codelineno-41-11"></a><span class="k">case</span><span class="w"> </span><span class="mf">1</span><span class="o">:</span>
+</span><span id="__span-41-12"><a id="__codelineno-41-12" name="__codelineno-41-12" href="#__codelineno-41-12"></a><span class="w">    </span><span class="nx">background_replace_background</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nx">_f</span><span class="p">)</span>
+</span><span id="__span-41-13"><a id="__codelineno-41-13" name="__codelineno-41-13" href="#__codelineno-41-13"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-41-14"><a id="__codelineno-41-14" name="__codelineno-41-14" href="#__codelineno-41-14"></a><span class="k">case</span><span class="w"> </span><span class="mf">2</span><span class="o">:</span>
+</span><span id="__span-41-15"><a id="__codelineno-41-15" name="__codelineno-41-15" href="#__codelineno-41-15"></a><span class="w">    </span><span class="nx">sound_replace</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nx">_f</span><span class="p">,</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_skind</span><span class="p">[</span><span class="nx">argument0</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_pre</span><span class="p">[</span><span class="nx">argument0</span><span class="p">])</span>
+</span><span id="__span-41-16"><a id="__codelineno-41-16" name="__codelineno-41-16" href="#__codelineno-41-16"></a><span class="w">    </span><span class="nx">sndreg_apply</span><span class="p">(</span><span class="nx">_r</span><span class="p">)</span>
+</span><span id="__span-41-17"><a id="__codelineno-41-17" name="__codelineno-41-17" href="#__codelineno-41-17"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-41-18"><a id="__codelineno-41-18" name="__codelineno-41-18" href="#__codelineno-41-18"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>sndreg_apply</code> applies the sound registry, see below.</p>
+</li>
+<li>
+<p><code>clunkster_dehydrate(asset)</code> - Unload an asset, replacing it with its stub.</p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-42-1"><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="c1">///clunkster_dehydrate(asset)</span>
+</span><span id="__span-42-2"><a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a><span class="c1">//Unload an asset (index into clunkster tables), replacing it with its stub</span>
+</span><span id="__span-42-3"><a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>
+</span><span id="__span-42-4"><a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_r</span><span class="p">;</span>
+</span><span id="__span-42-5"><a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a><span class="nx">_r</span><span class="o">=</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_res</span><span class="p">[</span><span class="nx">argument0</span><span class="p">]</span>
+</span><span id="__span-42-6"><a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a><span class="k">switch</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_kind</span><span class="p">[</span><span class="nx">argument0</span><span class="p">]</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-42-7"><a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a><span class="k">case</span><span class="w"> </span><span class="mf">0</span><span class="o">:</span>
+</span><span id="__span-42-8"><a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a><span class="w">    </span><span class="nx">sprite_replace_sprite</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_stub_spr</span><span class="p">)</span>
+</span><span id="__span-42-9"><a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-42-10"><a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a><span class="k">case</span><span class="w"> </span><span class="mf">1</span><span class="o">:</span>
+</span><span id="__span-42-11"><a id="__codelineno-42-11" name="__codelineno-42-11" href="#__codelineno-42-11"></a><span class="w">    </span><span class="nx">background_replace_background</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_stub_bg</span><span class="p">)</span>
+</span><span id="__span-42-12"><a id="__codelineno-42-12" name="__codelineno-42-12" href="#__codelineno-42-12"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-42-13"><a id="__codelineno-42-13" name="__codelineno-42-13" href="#__codelineno-42-13"></a><span class="k">case</span><span class="w"> </span><span class="mf">2</span><span class="o">:</span>
+</span><span id="__span-42-14"><a id="__codelineno-42-14" name="__codelineno-42-14" href="#__codelineno-42-14"></a><span class="w">    </span><span class="nx">sound_replace</span><span class="p">(</span><span class="nx">_r</span><span class="p">,</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_stub</span><span class="p">[</span><span class="nx">argument0</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_skind</span><span class="p">[</span><span class="nx">argument0</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_pre</span><span class="p">[</span><span class="nx">argument0</span><span class="p">])</span>
+</span><span id="__span-42-15"><a id="__codelineno-42-15" name="__codelineno-42-15" href="#__codelineno-42-15"></a><span class="w">    </span><span class="k">break</span>
+</span><span id="__span-42-16"><a id="__codelineno-42-16" name="__codelineno-42-16" href="#__codelineno-42-16"></a><span class="p">}</span>
+</span></code></pre></div>
+</li>
+<li>
+<p><code>clunkster_init_audio()</code> - Add dehydrated audio as stubs.</p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-43-1"><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="c1">///clunkster_init_audio()</span>
+</span><span id="__span-43-2"><a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a><span class="c1">//Add dehydrated audio as stubs, so it can be played and loaded by name</span>
+</span><span id="__span-43-3"><a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a><span class="c1">//Call after the sound registry is populated</span>
+</span><span id="__span-43-4"><a id="__codelineno-43-4" name="__codelineno-43-4" href="#__codelineno-43-4"></a>
+</span><span id="__span-43-5"><a id="__codelineno-43-5" name="__codelineno-43-5" href="#__codelineno-43-5"></a><span class="kd">var</span><span class="w"> </span><span class="nx">_i</span><span class="p">;</span>
+</span><span id="__span-43-6"><a id="__codelineno-43-6" name="__codelineno-43-6" href="#__codelineno-43-6"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="nx">_i</span><span class="o">=</span><span class="mf">0</span><span class="p">;</span><span class="nx">_i</span><span class="o">&lt;</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_count</span><span class="p">;</span><span class="nx">_i</span><span class="o">+=</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-43-7"><a id="__codelineno-43-7" name="__codelineno-43-7" href="#__codelineno-43-7"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_kind</span><span class="p">[</span><span class="nx">_i</span><span class="p">]</span><span class="o">==</span><span class="mf">2</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-43-8"><a id="__codelineno-43-8" name="__codelineno-43-8" href="#__codelineno-43-8"></a><span class="w">        </span><span class="nx">sound_add_ext</span><span class="p">(</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_stub</span><span class="p">[</span><span class="nx">_i</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_skind</span><span class="p">[</span><span class="nx">_i</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_stream</span><span class="p">[</span><span class="nx">_i</span><span class="p">],</span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_res</span><span class="p">[</span><span class="nx">_i</span><span class="p">])</span>
+</span><span id="__span-43-9"><a id="__codelineno-43-9" name="__codelineno-43-9" href="#__codelineno-43-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-43-10"><a id="__codelineno-43-10" name="__codelineno-43-10" href="#__codelineno-43-10"></a><span class="p">}</span>
+</span></code></pre></div>
 <p>Next are registry-related functions.</p>
 </li>
 <li>
 <p><code>clunkster_registry_begin()</code> - Switch registry mode ON.</p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-41-1"><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1">///clunkster_registry_begin()</span>
-</span><span id="__span-41-2"><a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a>
-</span><span id="__span-41-3"><a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span><span class="o">=</span><span class="mf">1</span>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-44-1"><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="c1">///clunkster_registry_begin()</span>
+</span><span id="__span-44-2"><a id="__codelineno-44-2" name="__codelineno-44-2" href="#__codelineno-44-2"></a>
+</span><span id="__span-44-3"><a id="__codelineno-44-3" name="__codelineno-44-3" href="#__codelineno-44-3"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span><span class="o">=</span><span class="mf">1</span>
 </span></code></pre></div>
 </li>
 <li>
 <p><code>clunkster_registry_end()</code> - Switch registry mode OFF.</p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-42-1"><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="c1">///clunkster_registry_end()</span>
-</span><span id="__span-42-2"><a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a>
-</span><span id="__span-42-3"><a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span><span class="o">=</span><span class="mf">0</span>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-45-1"><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="c1">///clunkster_registry_end()</span>
+</span><span id="__span-45-2"><a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a>
+</span><span id="__span-45-3"><a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span><span class="o">=</span><span class="mf">0</span>
 </span></code></pre></div>
 </li>
 <li>
 <p><code>clunkster_is_reg()</code> - Check whether in registry mode.</p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-43-1"><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="c1">///clunkster_is_reg()</span>
-</span><span id="__span-43-2"><a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a><span class="c1">//Check whether in registry mode</span>
-</span><span id="__span-43-3"><a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a>
-</span><span id="__span-43-4"><a id="__codelineno-43-4" name="__codelineno-43-4" href="#__codelineno-43-4"></a><span class="k">return</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-46-1"><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a><span class="c1">///clunkster_is_reg()</span>
+</span><span id="__span-46-2"><a id="__codelineno-46-2" name="__codelineno-46-2" href="#__codelineno-46-2"></a><span class="c1">//Check whether in registry mode</span>
+</span><span id="__span-46-3"><a id="__codelineno-46-3" name="__codelineno-46-3" href="#__codelineno-46-3"></a>
+</span><span id="__span-46-4"><a id="__codelineno-46-4" name="__codelineno-46-4" href="#__codelineno-46-4"></a><span class="k">return</span><span class="w"> </span><span class="nb">global</span><span class="p">.</span><span class="nx">__clunk_reg_mode</span>
 </span></code></pre></div>
 <p>And finally, the autogenerated scripts. In raw project they remain mostly empty.</p>
 </li>
 <li>
 <p><code>clunkster_gen_type()</code></p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-44-1"><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="c1">///clunkster_gen_type()</span>
-</span><span id="__span-44-2"><a id="__codelineno-44-2" name="__codelineno-44-2" href="#__codelineno-44-2"></a><span class="c1">//Returns the type of project.</span>
-</span><span id="__span-44-3"><a id="__codelineno-44-3" name="__codelineno-44-3" href="#__codelineno-44-3"></a><span class="c1">//Expect "dev" for builds with no dynamic asset loading</span>
-</span><span id="__span-44-4"><a id="__codelineno-44-4" name="__codelineno-44-4" href="#__codelineno-44-4"></a><span class="c1">//Expect "prod" for builds with dynamic asset loading</span>
-</span><span id="__span-44-5"><a id="__codelineno-44-5" name="__codelineno-44-5" href="#__codelineno-44-5"></a><span class="c1">//Expect "" for raw projects</span>
-</span><span id="__span-44-6"><a id="__codelineno-44-6" name="__codelineno-44-6" href="#__codelineno-44-6"></a>
-</span><span id="__span-44-7"><a id="__codelineno-44-7" name="__codelineno-44-7" href="#__codelineno-44-7"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
-</span><span id="__span-44-8"><a id="__codelineno-44-8" name="__codelineno-44-8" href="#__codelineno-44-8"></a>
-</span><span id="__span-44-9"><a id="__codelineno-44-9" name="__codelineno-44-9" href="#__codelineno-44-9"></a><span class="k">return</span><span class="w"> </span><span class="s2">""</span>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-47-1"><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="c1">///clunkster_gen_type()</span>
+</span><span id="__span-47-2"><a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a><span class="c1">//Returns the type of project.</span>
+</span><span id="__span-47-3"><a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a><span class="c1">//Expect "dev" for builds with no dynamic asset loading</span>
+</span><span id="__span-47-4"><a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a><span class="c1">//Expect "prod" for builds with dynamic asset loading</span>
+</span><span id="__span-47-5"><a id="__codelineno-47-5" name="__codelineno-47-5" href="#__codelineno-47-5"></a><span class="c1">//Expect "" for raw projects</span>
+</span><span id="__span-47-6"><a id="__codelineno-47-6" name="__codelineno-47-6" href="#__codelineno-47-6"></a>
+</span><span id="__span-47-7"><a id="__codelineno-47-7" name="__codelineno-47-7" href="#__codelineno-47-7"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
+</span><span id="__span-47-8"><a id="__codelineno-47-8" name="__codelineno-47-8" href="#__codelineno-47-8"></a>
+</span><span id="__span-47-9"><a id="__codelineno-47-9" name="__codelineno-47-9" href="#__codelineno-47-9"></a><span class="k">return</span><span class="w"> </span><span class="s2">""</span>
 </span></code></pre></div>
 </li>
 <li>
-<p><code>clunkster_gen_init_audio()</code></p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-45-1"><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="c1">///clunkster_gen_init_audio()</span>
-</span><span id="__span-45-2"><a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="c1">//Initialize audio sources with stubs</span>
-</span><span id="__span-45-3"><a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a><span class="c1">//sound_add_ext("null.wav",kind,streamed,"snd_actual")</span>
-</span><span id="__span-45-4"><a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a>
-</span><span id="__span-45-5"><a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
-</span></code></pre></div>
-</li>
-<li>
-<p><code>clunkster_gen_get_room_clusters(target_room)</code></p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-46-1"><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a><span class="c1">///clunkster_gen_get_room_clusters(target_room)</span>
-</span><span id="__span-46-2"><a id="__codelineno-46-2" name="__codelineno-46-2" href="#__codelineno-46-2"></a><span class="c1">//Get clusters that must be loaded for given room</span>
-</span><span id="__span-46-3"><a id="__codelineno-46-3" name="__codelineno-46-3" href="#__codelineno-46-3"></a><span class="c1">//Populates global.__clunk_req_clusters</span>
-</span><span id="__span-46-4"><a id="__codelineno-46-4" name="__codelineno-46-4" href="#__codelineno-46-4"></a>
-</span><span id="__span-46-5"><a id="__codelineno-46-5" name="__codelineno-46-5" href="#__codelineno-46-5"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
-</span></code></pre></div>
-</li>
-<li>
-<p><code>clunkster_gen_hydrate_cluster(cluster_name)</code></p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-47-1"><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="c1">///clunkster_gen_hydrate_cluster(cluster_name)</span>
-</span><span id="__span-47-2"><a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a><span class="c1">//Loads data from specified cluster in one block</span>
-</span><span id="__span-47-3"><a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a>
-</span><span id="__span-47-4"><a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
-</span></code></pre></div>
-</li>
-<li>
-<p><code>clunkster_gen_dehydrate_cluster(cluster_name)</code></p>
-<div class="language-js highlight"><pre><span></span><code><span id="__span-48-1"><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="c1">///clunkster_gen_dehydrate_cluster(cluster_name)</span>
-</span><span id="__span-48-2"><a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a><span class="c1">//Unloads data from specified cluster in one block</span>
-</span><span id="__span-48-3"><a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a>
-</span><span id="__span-48-4"><a id="__codelineno-48-4" name="__codelineno-48-4" href="#__codelineno-48-4"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
+<p><code>clunkster_gen_init()</code></p>
+<div class="language-js highlight"><pre><span></span><code><span id="__span-48-1"><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="c1">///clunkster_gen_init()</span>
+</span><span id="__span-48-2"><a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a><span class="c1">//Fill asset tables of the build: per asset global.__clunk_kind (0 sprite,</span>
+</span><span id="__span-48-3"><a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a><span class="c1">// 1 background, 2 sound), global.__clunk_res, global.__clunk_file (and for</span>
+</span><span id="__span-48-4"><a id="__codelineno-48-4" name="__codelineno-48-4" href="#__codelineno-48-4"></a><span class="c1">// sounds global.__clunk_skind/stream/pre/stub), plus global.__clunk_count,</span>
+</span><span id="__span-48-5"><a id="__codelineno-48-5" name="__codelineno-48-5" href="#__codelineno-48-5"></a><span class="c1">// global.__clunk_keep, stubs and global.__clunk_rooms</span>
+</span><span id="__span-48-6"><a id="__codelineno-48-6" name="__codelineno-48-6" href="#__codelineno-48-6"></a>
+</span><span id="__span-48-7"><a id="__codelineno-48-7" name="__codelineno-48-7" href="#__codelineno-48-7"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
 </span></code></pre></div>
 </li>
 <li>
 <p><code>clunkster_gen_validate_ctx()</code></p>
 <div class="language-js highlight"><pre><span></span><code><span id="__span-49-1"><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a><span class="c1">///clunkster_gen_validate_ctx()</span>
-</span><span id="__span-49-2"><a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a><span class="c1">//Validates context guards</span>
+</span><span id="__span-49-2"><a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a><span class="c1">//Validate room context guards</span>
 </span><span id="__span-49-3"><a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a>
 </span><span id="__span-49-4"><a id="__codelineno-49-4" name="__codelineno-49-4" href="#__codelineno-49-4"></a><span class="c1">//This script is autogenerated by Clunkster.</span>
 </span></code></pre></div>
@@ -2258,7 +2380,7 @@ original path relative to the project root&gt;</code>.</p>
 </span><span id="__span-55-7"><a id="__codelineno-55-7" name="__codelineno-55-7" href="#__codelineno-55-7"></a><span class="p">}</span>
 </span><span id="__span-55-8"><a id="__codelineno-55-8" name="__codelineno-55-8" href="#__codelineno-55-8"></a><span class="k">else</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-55-9"><a id="__codelineno-55-9" name="__codelineno-55-9" href="#__codelineno-55-9"></a><span class="w">    </span><span class="c1">//we are in 'dev' or 'prod' build, generate stubs</span>
-</span><span id="__span-55-10"><a id="__codelineno-55-10" name="__codelineno-55-10" href="#__codelineno-55-10"></a><span class="w">    </span><span class="nx">clunkster_gen_init_audio</span><span class="p">()</span>
+</span><span id="__span-55-10"><a id="__codelineno-55-10" name="__codelineno-55-10" href="#__codelineno-55-10"></a><span class="w">    </span><span class="nx">clunkster_init_audio</span><span class="p">()</span>
 </span><span id="__span-55-11"><a id="__codelineno-55-11" name="__codelineno-55-11" href="#__codelineno-55-11"></a><span class="p">}</span>
 </span></code></pre></div>
 

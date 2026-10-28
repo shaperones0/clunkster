@@ -18,7 +18,7 @@
         <link rel="prev" href="../">
 
 
-        <link rel="next" href="../01_lint/">
+        <link rel="next" href="../01_atlas/">
 
 
 
@@ -281,6 +281,12 @@
 
       </a>
     </li>
+
+
+
+
+
+
 
 
 
@@ -1503,7 +1509,34 @@
 
 
     <li class="md-nav__item">
-      <a href="../01_lint/" class="md-nav__link">
+      <a href="../01_atlas/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.atlas
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="../02_lint/" class="md-nav__link">
 
 
 
@@ -1530,7 +1563,34 @@
 
 
     <li class="md-nav__item">
-      <a href="../02_project/" class="md-nav__link">
+      <a href="../03_model/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.model
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="../04_project/" class="md-nav__link">
 
 
 
@@ -1557,7 +1617,34 @@
 
 
     <li class="md-nav__item">
-      <a href="../03_analyze.scan_cache/" class="md-nav__link">
+      <a href="../05_tiles/" class="md-nav__link">
+
+
+
+  <span class="md-ellipsis">
+
+
+  clunkster.tiles
+
+
+  </span>
+
+
+
+      </a>
+    </li>
+
+
+
+
+
+
+
+
+
+
+    <li class="md-nav__item">
+      <a href="../06_analyze.scan_cache/" class="md-nav__link">
 
 
 
@@ -1584,7 +1671,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../04_analyze.scan_dep/" class="md-nav__link">
+      <a href="../07_analyze.scan_dep/" class="md-nav__link">
 
 
 
@@ -1611,7 +1698,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../05_parse.csv/" class="md-nav__link">
+      <a href="../08_parse.csv/" class="md-nav__link">
 
 
 
@@ -1638,7 +1725,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../06_parse.gml/" class="md-nav__link">
+      <a href="../09_parse.gml/" class="md-nav__link">
 
 
 
@@ -1665,7 +1752,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../07_parse.index/" class="md-nav__link">
+      <a href="../10_parse.index/" class="md-nav__link">
 
 
 
@@ -1692,7 +1779,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../08_parse.kv/" class="md-nav__link">
+      <a href="../11_parse.kv/" class="md-nav__link">
 
 
 
@@ -1719,7 +1806,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../09_parse.png/" class="md-nav__link">
+      <a href="../12_parse.png/" class="md-nav__link">
 
 
 
@@ -1746,7 +1833,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../10_parse.tree/" class="md-nav__link">
+      <a href="../13_parse.tree/" class="md-nav__link">
 
 
 
@@ -1773,7 +1860,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../11_pipeline.cache/" class="md-nav__link">
+      <a href="../14_pipeline.cache/" class="md-nav__link">
 
 
 
@@ -1800,7 +1887,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../12_pipeline.run/" class="md-nav__link">
+      <a href="../15_pipeline.run/" class="md-nav__link">
 
 
 
@@ -1827,7 +1914,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../13_pipeline.task/" class="md-nav__link">
+      <a href="../16_pipeline.task/" class="md-nav__link">
 
 
 
@@ -1854,7 +1941,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../14_text.line/" class="md-nav__link">
+      <a href="../17_text.line/" class="md-nav__link">
 
 
 
@@ -1881,7 +1968,7 @@
 
 
     <li class="md-nav__item">
-      <a href="../15_text.location/" class="md-nav__link">
+      <a href="../18_text.location/" class="md-nav__link">
 
 
 
@@ -3914,7 +4001,7 @@ its directory.</p>
 </span><span id="__span-26-23"><a id="__codelineno-26-23" name="__codelineno-26-23" href="#__codelineno-26-23"></a>        <span class="n">tree_lines</span> <span class="o">=</span> <span class="n">_read_lines</span><span class="p">(</span><span class="n">tree_file</span><span class="p">)</span>
 </span><span id="__span-26-24"><a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a>        <span class="k">return</span> <span class="p">(</span>
 </span><span id="__span-26-25"><a id="__codelineno-26-25" name="__codelineno-26-25" href="#__codelineno-26-25"></a>            <span class="bp">cls</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">asset_name</span><span class="p">,</span> <span class="n">tree_path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
-</span><span id="__span-26-26"><a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>            <span class="k">for</span> <span class="n">asset_name</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="n"><a href="..\10_parse.tree#clunkster.parse.tree.parse">my_parse_tree.parse</a></span><span class="p">(</span><span class="n">tree_lines</span><span class="p">)</span>
+</span><span id="__span-26-26"><a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>            <span class="k">for</span> <span class="n">asset_name</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="n"><a href="..\13_parse.tree#clunkster.parse.tree.parse">my_parse_tree.parse</a></span><span class="p">(</span><span class="n">tree_lines</span><span class="p">)</span>
 </span><span id="__span-26-27"><a id="__codelineno-26-27" name="__codelineno-26-27" href="#__codelineno-26-27"></a>        <span class="p">)</span>
 </span><span id="__span-26-28"><a id="__codelineno-26-28" name="__codelineno-26-28" href="#__codelineno-26-28"></a>
 </span><span id="__span-26-29"><a id="__codelineno-26-29" name="__codelineno-26-29" href="#__codelineno-26-29"></a>    <span class="nd">@override</span>
@@ -3926,7 +4013,7 @@ its directory.</p>
 </span><span id="__span-26-35"><a id="__codelineno-26-35" name="__codelineno-26-35" href="#__codelineno-26-35"></a><span class="sd">        """</span>
 </span><span id="__span-26-36"><a id="__codelineno-26-36" name="__codelineno-26-36" href="#__codelineno-26-36"></a>        <span class="n">index_file</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">type_get_index_file</span><span class="p">(</span><span class="n">project_root</span><span class="p">)</span>
 </span><span id="__span-26-37"><a id="__codelineno-26-37" name="__codelineno-26-37" href="#__codelineno-26-37"></a>        <span class="n">index_lines</span> <span class="o">=</span> <span class="n">_read_lines</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
-</span><span id="__span-26-38"><a id="__codelineno-26-38" name="__codelineno-26-38" href="#__codelineno-26-38"></a>        <span class="k">return</span> <span class="n"><a href="..\07_parse.index#clunkster.parse.index.parse_skimmed">my_parse_index.parse_skimmed</a></span><span class="p">(</span><span class="n">index_lines</span><span class="p">)</span>
+</span><span id="__span-26-38"><a id="__codelineno-26-38" name="__codelineno-26-38" href="#__codelineno-26-38"></a>        <span class="k">return</span> <span class="n"><a href="..\10_parse.index#clunkster.parse.index.parse_skimmed">my_parse_index.parse_skimmed</a></span><span class="p">(</span><span class="n">index_lines</span><span class="p">)</span>
 </span></code></pre></div>
 </details>
 <hr />
@@ -3990,7 +4077,7 @@ its directory.</p>
 </span><span id="__span-32-9"><a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a>    <span class="n">tree_lines</span> <span class="o">=</span> <span class="n">_read_lines</span><span class="p">(</span><span class="n">tree_file</span><span class="p">)</span>
 </span><span id="__span-32-10"><a id="__codelineno-32-10" name="__codelineno-32-10" href="#__codelineno-32-10"></a>    <span class="k">return</span> <span class="p">(</span>
 </span><span id="__span-32-11"><a id="__codelineno-32-11" name="__codelineno-32-11" href="#__codelineno-32-11"></a>        <span class="bp">cls</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">asset_name</span><span class="p">,</span> <span class="n">tree_path</span><span class="o">=</span><span class="n">path</span><span class="p">)</span>
-</span><span id="__span-32-12"><a id="__codelineno-32-12" name="__codelineno-32-12" href="#__codelineno-32-12"></a>        <span class="k">for</span> <span class="n">asset_name</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="n"><a href="..\10_parse.tree#clunkster.parse.tree.parse">my_parse_tree.parse</a></span><span class="p">(</span><span class="n">tree_lines</span><span class="p">)</span>
+</span><span id="__span-32-12"><a id="__codelineno-32-12" name="__codelineno-32-12" href="#__codelineno-32-12"></a>        <span class="k">for</span> <span class="n">asset_name</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="n"><a href="..\13_parse.tree#clunkster.parse.tree.parse">my_parse_tree.parse</a></span><span class="p">(</span><span class="n">tree_lines</span><span class="p">)</span>
 </span><span id="__span-32-13"><a id="__codelineno-32-13" name="__codelineno-32-13" href="#__codelineno-32-13"></a>    <span class="p">)</span>
 </span></code></pre></div>
 </details>
@@ -4017,7 +4104,7 @@ its directory.</p>
 </span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="sd">    """</span>
 </span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>    <span class="n">index_file</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">type_get_index_file</span><span class="p">(</span><span class="n">project_root</span><span class="p">)</span>
 </span><span id="__span-34-9"><a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a>    <span class="n">index_lines</span> <span class="o">=</span> <span class="n">_read_lines</span><span class="p">(</span><span class="n">index_file</span><span class="p">)</span>
-</span><span id="__span-34-10"><a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>    <span class="k">return</span> <span class="n"><a href="..\07_parse.index#clunkster.parse.index.parse_skimmed">my_parse_index.parse_skimmed</a></span><span class="p">(</span><span class="n">index_lines</span><span class="p">)</span>
+</span><span id="__span-34-10"><a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>    <span class="k">return</span> <span class="n"><a href="..\10_parse.index#clunkster.parse.index.parse_skimmed">my_parse_index.parse_skimmed</a></span><span class="p">(</span><span class="n">index_lines</span><span class="p">)</span>
 </span></code></pre></div>
 </details>
 <hr />
