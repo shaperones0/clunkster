@@ -73,7 +73,8 @@ class Config:
     alias: dict[str, list[str]]
     # cluster -> clusters it may reference (see LINT_RULES)
     lint_rules: dict[str, set[str]]
-    # guard script -> clusters it grants (see CONTEXT_RULES)
+    # guard script -> clusters (and rooms of lean clusters) it grants (see
+    #  CONTEXT_RULES)
     context_rules: dict[str, set[str]]
     # persistent objects present in every room (see EXTRA_ROOTS)
     extra_roots: set[str]
@@ -86,6 +87,9 @@ class Config:
     # terms that shouldn't be used anymore (assets, scripts, functions) ->
     #  why, see main_ex_lint_blacklist
     blacklist: dict[str, str] = dataclasses.field(default_factory=dict)
+    # clusters whose rooms load exactly the assets they reach instead of
+    #  whole clusters (see main_ex_lean)
+    lean_clusters: frozenset[str] = frozenset()
     # assets moved to Common because of cluster violations, derived by the
     #  cluster checks (see main_ex_promote_refs)
     promoted: frozenset[str] = frozenset()
@@ -476,9 +480,31 @@ CONTEXT_RULES: dict[str, set[str]] = {
     'room_is_stageA': {'StageA'},
     'room_is_stageB': {'StageB'},
     'room_is_final': {'StageX', 'StageY', 'StageZ'},
+    # rooms of lean clusters are granted by name, see guard_passes
+    'room_is_stageC': {'StageC', 'rLeanRoomWithStageC'},
     # ...
 }
 # </snip CONTEXT_RULES>
+
+
+# <snip DEF_GUARD_PASSES>
+def guard_passes(cfg: Config, room: my_asset.Room, guard: str) -> bool:
+    """Check whether code behind a context guard runs in a room.
+
+    A guard passes in rooms it grants by name, rooms of clusters it grants,
+    and rooms whose clusters may reference one it grants. Lean clusters may
+    reference a lot, so in their rooms only the first two count.
+    """
+    granted = cfg.context_rules[guard]
+    cluster = asset_cluster(cfg, room)
+    if room.name in granted or cluster in granted:
+        return True
+    if cluster in cfg.lean_clusters:
+        return False
+    return bool(allowed_clusters(cfg, cluster) & granted)
+
+
+# </snip DEF_GUARD_PASSES>
 
 # <snip EXTRA_ROOTS>
 EXTRA_ROOTS: set[str] = {
@@ -1232,7 +1258,7 @@ def main_ex_graph(
     First, our context guards depend on the current room being processed.
     This means, that rooms have slightly different graphs from each other. The
     cleanest (but far not optimal) way of doing this is to create different
-    graphs for different sets of clusters.
+    graphs for different sets of guards that pass (see ``guard_passes``).
 
     Second, persistent objects. We can't cleanly trace where those objects
     travel through the game, so we have to make a few compromises. We'll allow
@@ -1265,7 +1291,7 @@ def main_ex_graph(
     }
 
     def build_graph(
-        active_clusters: set[str],
+        passing: frozenset[str],
     ) -> tuple[rx.PyDiGraph, dict[str, int]]:
         g = rx.PyDiGraph()
 
@@ -1279,61 +1305,64 @@ def main_ex_graph(
             source_idx = asset_name2index[source_name]
             target_idx = asset_name2index[target_name]
 
-            # context guards (nested guards intersect)
-            if contexts:
-                edge_can_execute = True
-
-                for raw_ctx in contexts:
-                    # get granted clusters for guard
-
-                    # room must satisfy this guard to proceed deeper into
-                    #   the nested guards
-                    granted_clusters = cfg.context_rules.get(raw_ctx)
-                    if (
-                        granted_clusters is not None
-                        and not active_clusters.intersection(granted_clusters)
-                    ):
-                        edge_can_execute = False
-                        break
-
-                if not edge_can_execute:
-                    continue
+            # context guards (nested guards intersect): room must satisfy
+            #  every one of them to proceed deeper into the nested guards
+            if any(
+                ctx in cfg.context_rules and ctx not in passing
+                for ctx in contexts
+            ):
+                continue
 
             g.add_edge(source_idx, target_idx, None)
 
         return g, asset_name2index
 
-    # group rooms by their allowed clusters
-    cluster_groups: dict[frozenset[str], list[my_asset.Room]] = {}
+    # rooms are granted by name only in lean clusters, others load whole
+    #  clusters
+    for guard, granted in cfg.context_rules.items():
+        for asset_room in assets:
+            if (
+                isinstance(asset_room, my_asset.Room)
+                and asset_room.name in granted
+                and asset_cluster(cfg, asset_room) not in cfg.lean_clusters
+            ):
+                raise ValueError(
+                    f'{guard} grants room {asset_room.name}, which is not in '
+                    'a lean cluster'
+                )
+
+    # group rooms by guards that pass in them
+    guard_groups: dict[frozenset[str], list[my_asset.Room]] = {}
 
     for asset_room in assets:
         if not isinstance(asset_room, my_asset.Room):
             continue
-        room_cluster = asset_cluster(cfg, asset_room)
-        room_allowed = allowed_clusters(cfg, room_cluster)
-        cluster_groups.setdefault(frozenset(room_allowed), []).append(
-            asset_room
+        passing = frozenset(
+            guard
+            for guard in cfg.context_rules
+            if guard_passes(cfg, asset_room, guard)
         )
+        guard_groups.setdefault(passing, []).append(asset_room)
 
-    log.debug('Clusterset to rooms:')
-    for cluster_set, rooms in cluster_groups.items():
-        log.debug(' '.join(sorted(cluster_set)))
+    log.debug('Passing guards to rooms:')
+    for passing, rooms in guard_groups.items():
+        log.debug(' '.join(sorted(passing)))
         for room in rooms:
             log.debug('  %s', room.name)
 
     room_graph_data: dict[str, RoomGraph] = {}
 
-    # process clustersets
+    # process guard sets
     log.debug('Building graphs:')
-    for cluster_set, rooms in cluster_groups.items():
-        graph, name_to_index = build_graph(set(cluster_set))
+    for passing, rooms in guard_groups.items():
+        graph, name_to_index = build_graph(passing)
 
         # resolve persistent root indices
         persistent_idx = [
             name_to_index[p] for p in cfg.extra_roots if p in name_to_index
         ]
 
-        log.debug('- %s', ' '.join(sorted(cluster_set)))
+        log.debug('- %s', ' '.join(sorted(passing)))
         for room in progress(rooms):
             room_name = room.name
             if room_name not in name_to_index:
@@ -1440,7 +1469,8 @@ def main_ex_promote_rooms(
 
     for rg in progress(list(room_graph_data.values())):
         room_cluster = asset_to_cluster.get(rg.room.name)
-        if room_cluster is None:
+        # rooms of lean clusters load whatever they reach
+        if room_cluster is None or room_cluster in cfg.lean_clusters:
             continue
 
         room_allowed = allowed_clusters(cfg, room_cluster)
@@ -1628,23 +1658,28 @@ def main_ex_lean(
     room_data: dict[str, RoomGraph],
     atlas: Atlas | None,
 ) -> tuple[Config, dict[str, set[str]]]:
-    """Find exactly which assets each room needs (lean builds).
+    """Find exactly which assets lean rooms need.
 
-    Instead of whole clusters, every room loads what it actually reaches
-    (from the dependency graphs), Common assets included:
+    Instead of whole clusters, rooms of lean clusters (or, in lean builds,
+    every room) load what they actually reach (from the dependency graphs):
 
-    - assets reached from global roots (``EXTRA_ROOTS``) in every room,
-      unguarded, can't ever be unloaded: they stay in the executable, as do
-      assets of persistent Common objects, which may follow the player
-      anywhere
+    - in lean builds, Common assets are loaded like any other; assets
+      reached from global roots (``EXTRA_ROOTS``) in every room, unguarded,
+      can't ever be unloaded: they stay in the executable, as do assets of
+      persistent Common objects, which may follow the player anywhere
+    - otherwise Common stays in the executable, as usual
     - assets of other persistent objects are needed in every room of their
       cluster, since they can outlive the room they were made in
     - with atlases, rooms need the pages their tiles were pointed to
 
-    :return: Config with ``resident`` set, and needed assets per room.
+    :return: Config with ``resident`` set (lean builds), and needed assets
+      per lean room.
     """
     # <snip MAIN_EX_LEAN>
     root = cfg.project.root
+    lean_all = cfg.juicer.lean
+    by_name = {a.name: a for a in assets}
+    cluster_of = {a.name: asset_cluster(cfg, a) for a in assets}
     loaded_types = (my_asset.Sprite, my_asset.Background, AssetExtAudio)
     loadable = {a.name for a in assets if isinstance(a, loaded_types)}
     persistent = [
@@ -1655,10 +1690,7 @@ def main_ex_lean(
         and a.name not in cfg.extra_roots
     ]
     roots = set(cfg.extra_roots) | {
-        name
-        for name in persistent
-        if asset_cluster(cfg, next(a for a in assets if a.name == name))
-        == 'Common'
+        name for name in persistent if cluster_of[name] == 'Common'
     }
 
     def reach(rg: RoomGraph, names: col.Iterable[str]) -> set[str]:
@@ -1670,34 +1702,45 @@ def main_ex_lean(
                 found.add(name)
         return found & loadable
 
-    # resident: what roots reach in every room
-    resident = set(loadable)
-    for rg in room_data.values():
-        resident &= reach(rg, roots)
+    if lean_all:
+        # resident: what roots reach in every room
+        resident = set(loadable)
+        for rg in room_data.values():
+            resident &= reach(rg, roots)
+        cfg = dataclasses.replace(cfg, resident=frozenset(resident))
+    lean_rooms = {
+        name: rg
+        for name, rg in room_data.items()
+        if lean_all or cluster_of[name] in cfg.lean_clusters
+    }
+    lean_clusters = {cluster_of[name] for name in lean_rooms}
 
-    # persistent stage objects: whole cluster
-    cluster_of = {a.name: asset_cluster(cfg, a) for a in assets}
+    # persistent stage objects: whole cluster (reached as in their rooms)
     by_cluster: dict[str, set[str]] = {}
     for name in persistent:
-        if name in roots:
+        cluster = cluster_of[name]
+        if name in roots or cluster not in lean_clusters:
             continue
         rg = next(
-            (rg for rg in room_data.values() if name in rg.name2index), None
+            (rg for n, rg in lean_rooms.items() if cluster_of[n] == cluster),
+            None,
         )
         if rg is not None:
-            by_cluster.setdefault(cluster_of[name], set()).update(
-                reach(rg, [name])
-            )
+            by_cluster.setdefault(cluster, set()).update(reach(rg, [name]))
+            if not lean_all:
+                log.info('Persistent %s is loaded in all of %s', name, cluster)
 
     atlased = atlas.atlased if atlas is not None else frozenset()
     page_names = (
         {p.asset.name for p in atlas.pages} if atlas is not None else set()
     )
     needs: dict[str, set[str]] = {}
-    for room_name, rg in room_data.items():
+    for room_name, rg in lean_rooms.items():
         need = rg.reachable_names & loadable
         need |= by_cluster.get(cluster_of[room_name], set())
-        need -= resident | atlased
+        need = {
+            n for n in need - atlased if not asset_resident(cfg, by_name[n])
+        }
         plan = atlas.rooms.get(room_name) if atlas is not None else None
         if plan is not None:
             need |= {
@@ -1713,9 +1756,6 @@ def main_ex_lean(
             }
         needs[room_name] = need
 
-    cfg = dataclasses.replace(cfg, resident=frozenset(resident))
-    by_name = {a.name: a for a in assets}
-
     def megabytes(names: col.Iterable[str]) -> float:
         return (
             sum(
@@ -1727,11 +1767,15 @@ def main_ex_lean(
         )
 
     sizes = sorted(megabytes(need) for need in needs.values())
+    if cfg.resident is not None:
+        log.info(
+            'Resident: %d assets (~%.1f MB)',
+            len(cfg.resident),
+            megabytes(cfg.resident),
+        )
     log.info(
-        'Resident: %d assets (~%.1f MB); per room: median ~%.1f MB, max '
-        '~%.1f MB',
-        len(resident),
-        megabytes(resident),
+        'Lean rooms: %d; per room: median ~%.1f MB, max ~%.1f MB',
+        len(needs),
         sizes[len(sizes) // 2] if sizes else 0,
         sizes[-1] if sizes else 0,
     )
@@ -4078,7 +4122,7 @@ def main_juicer_gen_gml(
 
     The game gets a table of every dehydrated asset (kind, resource, wet
     file), and a list of assets each room needs: every dehydrated asset of
-    the room's clusters, or, in lean builds, exactly what the room uses
+    the room's clusters, or, for lean rooms, exactly what the room uses
     (``needs``, see ``main_ex_lean``). Rooms with identical lists share
     one.
 
@@ -4115,8 +4159,8 @@ def main_juicer_gen_gml(
     # assets needed per room
     room_slots: dict[str, list[int]] = {}
     for room in rooms:
-        if needs is not None:
-            names = needs.get(room.name, set())
+        if needs is not None and room.name in needs:
+            names = needs[room.name]
         else:
             allowed = allowed_clusters(cfg, asset_cluster(cfg, room))
             names = {
@@ -4197,9 +4241,9 @@ def main_juicer_gen_gml(
     )
     scr_gen_init.write_text('\n'.join(lines), **text_params)
 
-    # context guards must pass in rooms of their clusters (fatal), and should
-    #  fail in rooms where the dependency graphs assumed they do, since
-    #  assets behind them aren't loaded there (a warning, shims pass anywhere)
+    # context guards must pass in rooms they grant (fatal), and should fail
+    #  in rooms where the dependency graphs assumed they do, since assets
+    #  behind them aren't loaded there (a warning, shims pass anywhere)
     gml_validate = [
         '///clunkster_gen_validate_ctx()',
         '// AUTOGENERATED BY CLUNKSTER JUICER',
@@ -4207,20 +4251,19 @@ def main_juicer_gen_gml(
     ]
     for guard, granted in cfg.context_rules.items():
         for room in rooms:
-            cluster = asset_cluster(cfg, room)
-            if cluster in granted:
+            if room.name in granted or asset_cluster(cfg, room) in granted:
                 gml_validate.append(
                     f'if not {guard}({room.name}) _violations+="Failed ctx '
                     f'check on {room.name} and {guard}"+lf'
                 )
-            elif not allowed_clusters(cfg, cluster) & granted:
+            elif not guard_passes(cfg, room, guard):
                 gml_validate.append(
                     f'if {guard}({room.name}) _warnings+="{guard} passes on '
                     f'{room.name}, assets behind it are not loaded there"+lf'
                 )
     gml_validate.extend((
         'if _violations!="" show_error(_violations,1)',
-        'if _warnings!="" show_error(_warnings,0)',
+        'if _warnings!="" shap_log(_warnings)',
     ))
     scr_gen_validate_ctx.write_text('\n'.join(gml_validate), **text_params)
 
@@ -4473,6 +4516,7 @@ def _load_private(config_dir: Path) -> Config:
         juicer=juicer,
         scan_cache=config_dir.parent / 'clunkster_scan_cache.json',
         common_budget_mb=config.get('common_budget_mb', 500),
+        lean_clusters=frozenset(config.get('lean_clusters', ())),
         blacklist=(
             json.loads(file_blacklist.read_text(encoding='utf-8'))
             if file_blacklist.exists()
@@ -4514,12 +4558,16 @@ def run_check(
 
 
 def run_build(
-    cfg: Config, scan_cache: my_scan_cache.ScanCache | None
+    cfg: Config,
+    scan_cache: my_scan_cache.ScanCache | None,
+    *,
+    check: bool = True,
 ) -> subprocess.Popen[bytes] | None:
     """Build the game, then launch and/or package it, per juicer config.
 
     Without a scan cache, reference checks are skipped (quick builds), and
-    assets stay in the clusters of their folders.
+    assets stay in the clusters of their folders. Without ``check``, only
+    scans and graphs are done, for lean clusters.
 
     :return: Launched game's process, if any.
     """
@@ -4528,6 +4576,11 @@ def run_build(
     if scan_cache is None:
         main_ex_lint_tree(cfg)
         assets = main_ex_aliases(cfg)
+    elif not check:
+        main_ex_lint_tree(cfg)
+        assets = main_ex_aliases(cfg)
+        deps, _ = main_ex_scan(cfg, assets, scan_cache)
+        room_data = main_ex_graph(cfg, assets, deps)
     else:
         cfg, assets, deps, room_data = run_check(cfg, scan_cache)
     atlas: Atlas | None = None
@@ -4537,9 +4590,11 @@ def run_build(
         protection = main_ex_tile_protection(cfg, assets)
         atlas = main_ex_atlas(cfg, assets, deps, protection)
     needs: dict[str, set[str]] | None = None
-    if cfg.juicer.lean:
-        if deps is None or not cfg.juicer.hash_names:
-            raise ValueError('Lean builds need reference checks and prod')
+    if cfg.juicer.lean and not cfg.juicer.hash_names:
+        raise ValueError('Lean builds are prod only')
+    if cfg.juicer.lean or cfg.lean_clusters:
+        if deps is None:
+            raise ValueError('Lean rooms need reference scans')
         cfg, needs = main_ex_lean(cfg, assets, room_data, atlas)
     tasks = main_juicer_gen_tasks(cfg, assets, atlas)
     main_juicer_run(cfg, tasks)
@@ -4766,8 +4821,8 @@ def main() -> None:
     ``dev`` or ``test``:
 
     - ``build``: check references, build and launch the game
-    - ``quick``: build and launch, skipping reference checks and audio
-      encoding
+    - ``quick``: build and launch, skipping reference checks (except for
+      scans, with lean clusters) and audio encoding
     - ``prod [--atlas] [--lean]``: check references, build into
       ``_build_prod`` with hashed wet asset names, and pack it into a zip;
       ``--atlas`` adds atlases and baked tiles, ``--lean`` makes rooms load
@@ -4805,15 +4860,15 @@ def main() -> None:
         with contextlib.suppress(KeyboardInterrupt):
             main_ex_dev(cfg)
         return
-    if mode == 'quick':
+    if mode not in {'build', 'quick', 'prod', 'atlas'}:
+        raise ValueError(f'Unknown mode: {mode}')
+    if mode == 'quick' and not cfg.lean_clusters:
         run_build(cfg, None)
         return
-    if mode not in {'build', 'prod', 'atlas'}:
-        raise ValueError(f'Unknown mode: {mode}')
 
     scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
     try:
-        run_build(cfg, scan_cache)
+        run_build(cfg, scan_cache, check=mode != 'quick')
     finally:
         scan_cache.save()
 

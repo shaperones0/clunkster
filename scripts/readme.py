@@ -430,6 +430,8 @@ CONTEXT_RULES: dict[str, set[str]] = {{
 ```
 Now everything protected by this guard can freely reference any `IceStage` asset.
 
+Rooms of lean clusters (`lean_clusters` in the config) load exactly the assets they reach instead of whole clusters, so they can borrow from many stages without loading all of them (see {exs.href('ex_lean')}). Lint rules of such clusters list every stage they borrow from, which would make any guard of those stages pass everywhere, so in their rooms a guard only passes if it grants their own cluster, or the room by name (`'room_is_ice': {{'IceStage', 'rIceCameo'}}`).
+
 3. Since anything from the `CommonNorth` cluster should, logically, be available anywhere in `IceStage`, we must also define this behavior in a different config:
 ```python
 LINT_RULES: dict[str, set[str]] = {{
@@ -1594,8 +1596,10 @@ checks based on more advanced usage tracing.
                 exs.stub('PROJECT'),
                 exs.stub('LINT_RULES'),
                 snips['EXTRA_ROOTS'],
+                exs.stub('CONTEXT_RULES'),
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
+                snips['DEF_GUARD_PASSES'],
                 exs.stub('CLS_DEPENDENCY'),
                 snips['CLS_ROOM_GRAPH'],
                 exs.stub('VAR_ASSETS'),
@@ -1611,6 +1615,7 @@ checks based on more advanced usage tracing.
                 'VAR_ROOM_DATA': gen_stub_var('room_graph_data: dict[str, RoomGraph]'),
                 'EXTRA_ROOTS': gen_stub_var('EXTRA_ROOTS: set[str]'),
                 'CLS_ROOM_GRAPH': gen_stub_cls('RoomGraph'),
+                'DEF_GUARD_PASSES': gen_stub_func('guard_passes'),
             }
         )
     }
@@ -1815,6 +1820,7 @@ ___
                 exs.stub('CLS_ASSET_EXT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
                 exs.stub('DEF_ASSET_RESIDENT'),
+                exs.stub('DEF_GUARD_PASSES'),
                 exs.stub('DEF_ASSET_WET_FNAME'),
                 exs.stub('CLS_JUICER_CONFIG'),
                 exs.stub('VAR_ASSETS'),
@@ -1903,6 +1909,7 @@ pages and rooms are written by build tasks, so they're cached:
                 exs.stub('PROJECT'),
                 exs.stub('OUTPUT'),
                 exs.stub('DEF_ASSET_CLUSTERS'),
+                exs.stub('DEF_ASSET_RESIDENT'),
                 exs.stub('CLS_ROOM_GRAPH'),
                 exs.stub('CLS_ATLAS'),
                 exs.stub('VAR_ASSETS'),
