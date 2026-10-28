@@ -910,7 +910,7 @@ if background_width[0]>0 && background_height[0]>0 {{
 - since for some games Juicing is the only way to run, builds must be fast:
 
     - processing tasks must support caching
-    - asset dirs without processing can be symlinked
+    - asset dirs without processing can be linked (junctions on Windows, no admin rights needed)
     - heavy tasks (audio compression, image encoding) should be multiprocessed
     - copy tasks (numerous but IO-bound) can be put into threading
 
@@ -929,7 +929,7 @@ With that said, the project building strategy becomes:
         - otherwise
 
             - check if this folder is allowed to exist in the project
-            - symlink
+            - link
 
     - if element is a file
 

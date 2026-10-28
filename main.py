@@ -26,6 +26,9 @@ from pathlib import Path
 from pprint import pprint
 from typing import override
 
+if sys.platform == 'win32':
+    import _winapi
+
 import numpy as np
 import rpack
 import rustworkx as rx
@@ -2083,7 +2086,7 @@ def main_juicer_processing() -> None:
     in the processing stage.
 
     Room's stretch backgrounds, however, are a bit too expensive to be put into
-    processing stage. Rooms are good candidates for simply symlinking their
+    processing stage. Rooms are good candidates for simply linking their
     folders (gazillion tiny files), and sacrificing that for some lousy
     stretching backgrounds is not the play. Plus, those are usually very rare,
     and it makes more sense to just pre-bake correct scale manually.
@@ -3596,7 +3599,7 @@ def main_juicer_gen_tasks(
        just so.
 
     Therefore, I've made logic of task generation very explicit. Also, this
-    step does some of the cheaper tasks, like creating build dir and symlinks.
+    step does some of the cheaper tasks, like creating build dir and links.
     """
     # <snip MAIN_JUICER_GEN_TASKS>
     # filter assets by their juiceable type
@@ -3620,11 +3623,19 @@ def main_juicer_gen_tasks(
     tasks_mp: list[my_task.Task] = []
 
     # them functions
-    def pth_symlink(pth: Path) -> None:
-        """Create a symlink from input project root to build output."""
+    def pth_link(pth: Path) -> None:
+        """Link a folder from input project root into build output.
+
+        On Windows links are junctions: unlike symlinks, they don't need admin
+        rights or developer mode.
+        """
         # this ain't IO bound operation so do it in-place
         output_dir = cfg.juicer.dir_out / pth.relative_to(cfg.project.root)
-        if not output_dir.is_symlink():
+        if output_dir.is_symlink() or output_dir.is_junction():
+            return
+        if sys.platform == 'win32':
+            _winapi.CreateJunction(os.fspath(pth), os.fspath(output_dir))
+        else:
             output_dir.symlink_to(pth, target_is_directory=True)
 
     def copy_rebase(*files: Path) -> None:
@@ -3667,24 +3678,24 @@ def main_juicer_gen_tasks(
                     # multicase handle
                     map_data(pth)
                 case 'fonts':
-                    # symlink
-                    pth_symlink(pth)
+                    # link
+                    pth_link(pth)
                 case 'objects':
                     # process fix masks
                     map_objects()
                 case 'paths':
-                    # symlink
-                    pth_symlink(pth)
+                    # link
+                    pth_link(pth)
                 case 'rooms':
                     if atlas is None:
-                        # symlink
-                        pth_symlink(pth)
+                        # link
+                        pth_link(pth)
                     else:
                         # copy, pointing tiles to atlas pages
                         map_rooms(pth)
                 case 'save':
-                    # symlink
-                    pth_symlink(pth)
+                    # link
+                    pth_link(pth)
                 case 'scripts':
                     # copy (we'll have to dynamically change a few scripts)
                     #  using copytree on the whole tree might be faster than
@@ -3697,14 +3708,14 @@ def main_juicer_gen_tasks(
                         )
                     )
                 case 'settings':
-                    # symlink
-                    pth_symlink(pth)
+                    # link
+                    pth_link(pth)
                 case 'sprites':
                     # process sprites
                     map_sprites()
                 case 'triggers':
-                    # symlink
-                    pth_symlink(pth)
+                    # link
+                    pth_link(pth)
                 case _:
                     raise NotImplementedError('Unknown folder in project root')
 
@@ -3846,7 +3857,7 @@ def main_juicer_gen_tasks(
         """Map rooms, applying their atlas plans."""
         assert atlas is not None
         dir_out = cfg.juicer.dir_out / dir_rooms.relative_to(cfg.project.root)
-        if dir_out.is_symlink():
+        if dir_out.is_symlink() or dir_out.is_junction():
             # left from a build without atlas, removes just the link
             dir_out.unlink()
         dir_models = cfg.juicer.dir_out / 'data' / 'model'
@@ -3944,7 +3955,7 @@ def main_juicer_gen_tasks(
             for obj in asset_objects
         )
 
-    # ensure output dir exists before creating symlinks
+    # ensure output dir exists before creating links
     cfg.juicer.dir_out.mkdir(parents=True, exist_ok=True)
 
     # run mapper
@@ -4618,7 +4629,7 @@ def project_watch_filter(root: Path) -> watchfiles.BaseFilter:
         @override
         def __call__(self, change: watchfiles.Change, path: str) -> bool:
             # GameMaker's cache isn't part of the project, and the game
-            #  writes saves into save folder (symlinked into the build)
+            #  writes saves into save folder (linked into the build)
             top = Path(path).relative_to(root).parts[:1]
             return super().__call__(change, path) and top not in {
                 ('cache',),
@@ -4787,7 +4798,7 @@ def _build_profile(
         juicer = dataclasses.replace(cfg.juicer, encode_audio=False)
         return dataclasses.replace(cfg, juicer=juicer)
     if mode == 'atlas':
-        # own folder: rooms are copies there, not a symlink to the source
+        # own folder: rooms are copies there, not a link to the source
         juicer = dataclasses.replace(
             cfg.juicer,
             dir_out=config_dir.parent / '_build_atlas',
