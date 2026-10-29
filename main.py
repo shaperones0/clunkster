@@ -593,6 +593,29 @@ class ConfJuicer:
     # crop transparent edges of tiles that runtime code finds by position
     #  (they stay whole tiles, and must still cover that position)
     crop_found_tiles: bool = False
+    # objects the atlas has to know about, by name (game-specific, see
+    #  main_ex_tile_protection and main_ex_atlas); objects (and their
+    #  children) that take the tile at their position at runtime, and objects
+    #  that work on their whole tile layer
+    tile_finders: frozenset[str] = frozenset()
+    tile_layer_users: frozenset[str] = frozenset()
+    # object that draws a model from data/model (instance fields name, tex_bg
+    #  and depth): tile layers get baked into models of it, None: tiles stay
+    #  tiles
+    model_object: str | None = None
+    # debug object turning layers deeper than AUTO_LAYER_MIN_DEPTH into
+    #  models at runtime, builds do it ahead (needs model_object)
+    auto_layer_object: str | None = None
+    # objects whose Draw events start and stop hiding tile layers: layers
+    #  between them get removed
+    layer_hide: tuple[str, str] | None = None
+    # script the generated startup check logs warnings with
+    gml_log: str = 'show_debug_message'
+
+    def __post_init__(self) -> None:
+        """Check that settings fit together."""
+        if self.auto_layer_object is not None and self.model_object is None:
+            raise ValueError('auto_layer_object needs model_object')
 
 
 JUICER = ConfJuicer(
@@ -2306,21 +2329,10 @@ ATLAS_PAGE_META = my_asset.BackgroundMetadata(
 #  top of instances, and this keeps models ordered among themselves too
 MODEL_DEPTH_STEP = 0.0001
 
-# objects that take the tile at their position at runtime (and their
-#  children), objects that work on whole tile layers, and baked models
-TILE_FINDERS = frozenset({'shap_SmartTileActive'})
-TILE_LAYER_USERS = frozenset({'shap_TileDeleter'})
-MODEL_OBJECT = 'shap_Model'
-# debug object turning layers deeper than AUTO_LAYER_MIN_DEPTH into models at
-#  depth - AUTO_LAYER_OFFSET, reading the room source at runtime; builds do
-#  it ahead instead
-AUTO_LAYER_OBJECT = 'shap_DbgAutoLayer'
+# what ConfJuicer.auto_layer_object does: layers deeper than
+#  AUTO_LAYER_MIN_DEPTH become models at depth - AUTO_LAYER_OFFSET
 AUTO_LAYER_MIN_DEPTH = 90000
 AUTO_LAYER_OFFSET = 100000
-# objects whose Draw events start and stop drawing into a throwaway surface:
-#  tile layers between them never show, so builds remove them
-LAYER_HIDE_START = 'shap_LayHide'
-LAYER_HIDE_END = 'shap_LayHideEnd'
 
 
 # part of a tile's region: offset and size within the region, and the
@@ -2357,7 +2369,7 @@ class AtlasPage:
 class ModelPlan:
     """Model baked from tiles."""
 
-    # file name in data/model, as shap_lazy_model loads it
+    # file name in data/model, as the model object loads it
     name: str
     # background textured with
     texture: str
@@ -2372,7 +2384,7 @@ class RoomPlan:
     # depth -> tiles left in the layer (only changed layers)
     layers: dict[int, tuple[my_tiles.Tile, ...]]
     models: tuple[ModelPlan, ...]
-    # AUTO_LAYER_OBJECT instances, replaced by instances of auto_models
+    # auto layer object instances, replaced by instances of auto_models
     auto_layer_ids: tuple[str, ...] = ()
     auto_models: tuple[ModelPlan, ...] = ()
 
@@ -2400,9 +2412,9 @@ class TileProtection:
     points: dict[int, list[tuple[float, float]]] = dataclasses.field(
         default_factory=dict
     )
-    # instances of AUTO_LAYER_OBJECT
+    # instances of the auto layer object
     auto_layer_ids: list[str] = dataclasses.field(default_factory=list)
-    # LAYER_HIDE_START/END instances: depth, and whether they start hiding,
+    # layer hiding instances: depth, and whether they start hiding,
     #  in creation order
     hiding: list[tuple[float, bool]] = dataclasses.field(default_factory=list)
 
@@ -2439,23 +2451,24 @@ def main_ex_tile_protection(
 
     Anything that rewrites tiles has to leave alone those that the game
     finds or changes at runtime. Since the game references these objects by
-    name, this is game-specific:
+    name, they're juicer settings (``ConfJuicer``):
 
-    - instances of ``TILE_FINDERS`` (and their children) take the tile at
+    - instances of ``tile_finders`` (and their children) take the tile at
       their position, at their depth: tiles there stay exactly as they are
-    - ``TILE_LAYER_USERS`` work on their whole layer: it stays as it is
+    - ``tile_layer_users`` work on their whole layer: it stays as it is
     - ``tile_layer_*`` calls with literal depths, in objects placed in a room
       or the room's creation code: those layers may change, but stay tiles
       (hiding or shifting a layer wouldn't affect a model)
-    - layers of existing ``shap_Model`` instances stay tiles too, so that
+    - layers of existing ``model_object`` instances stay tiles too, so that
       nothing gets drawn twice
-    - ``AUTO_LAYER_OBJECT`` instances are noted: builds do their work ahead
+    - ``auto_layer_object`` instances are noted: builds do their work ahead
       (see ``main_ex_atlas``)
-    - ``LAYER_HIDE_START``/``LAYER_HIDE_END`` instances are noted: layers
-      they hide get removed
+    - ``layer_hide`` instances are noted: layers they hide get removed
     """
     # <snip MAIN_EX_TILE_PROTECTION>
     root = cfg.project.root
+    juicer = cfg.juicer
+    hide_start, hide_end = juicer.layer_hide or (None, None)
     objects = {
         asset.name: asset
         for asset in assets
@@ -2512,13 +2525,15 @@ def main_ex_tile_protection(
                 continue
             fields = line.split(',')
             obj = fields[0]
-            if obj == AUTO_LAYER_OBJECT:
+            if obj == juicer.auto_layer_object:
                 prot.auto_layer_ids.append(fields[3])
             prot.tile_layers |= object_depths.get(obj, set())
-            finder = descends(obj, TILE_FINDERS)
-            layer_user = descends(obj, TILE_LAYER_USERS)
-            hiding = obj in {LAYER_HIDE_START, LAYER_HIDE_END}
-            if not (finder or layer_user or hiding or obj == MODEL_OBJECT):
+            finder = descends(obj, juicer.tile_finders)
+            layer_user = descends(obj, juicer.tile_layer_users)
+            hiding = obj in {hide_start, hide_end}
+            if not (
+                finder or layer_user or hiding or obj == juicer.model_object
+            ):
                 continue
             # depth from creation code, or the object's
             depth = float(metas[obj].depth) if obj in metas else 0.0
@@ -2531,7 +2546,7 @@ def main_ex_tile_protection(
                     depth = float(found[-1])
             layer = int(depth)
             if hiding:
-                prot.hiding.append((depth, obj == LAYER_HIDE_START))
+                prot.hiding.append((depth, obj == hide_start))
             elif finder:
                 prot.points.setdefault(layer, []).append((
                     float(fields[1]),
@@ -2578,14 +2593,14 @@ def main_ex_atlas(
     4. Regions are packed onto pages of the cluster of their background (so
        pages load and unload with their stage), with a border repeating
        their edges, and tiles are pointed to the pages.
-    5. Tiles of each layer are baked into models (``shap_Model``), one per
-       texture where order allows. Tiles overlapping ones that have to stay
-       tiles stay tiles too, so drawing order doesn't change.
+    5. With a ``model_object`` (it's game-specific), tiles of each layer are
+       baked into models drawn by it, one per texture where order allows.
+       Tiles overlapping ones that have to stay tiles stay tiles too, so
+       drawing order doesn't change.
 
-    Rooms with ``AUTO_LAYER_OBJECT`` get its models made here, in place of
-    the object, which reads the room source at runtime (and only works in
-    debug). Layers hidden by ``LAYER_HIDE_START``/``LAYER_HIDE_END`` are
-    removed.
+    Rooms with the ``auto_layer_object`` get its models made here, in place
+    of the object, which reads the room source at runtime (and only works in
+    debug). Layers hidden by ``layer_hide`` objects are removed.
 
     Protected tiles (see ``main_ex_tile_protection``) are only pointed to
     pages, never changed otherwise. With ``crop_found_tiles``, tiles found by
@@ -2713,7 +2728,7 @@ def main_ex_atlas(
         if cropped is not None and all(it.starmap(cropped.contains, found_at)):
             return cropped
         log.warning(
-            '%s, depth %d: kept tile %s whole, its SmartTile at %s is on %s',
+            '%s, depth %d: kept tile %s whole, its finder at %s is on %s',
             room_name,
             depth,
             tile.format(),
@@ -2967,7 +2982,8 @@ def main_ex_atlas(
             top=y + tile.top - container[1],
         )
 
-    # 5: bake
+    # 5: bake (with a model object)
+    bake = cfg.juicer.model_object is not None
     page_sizes = {p.asset.name: (p.width, p.height) for p in pages}
     texture_sizes: dict[str, tuple[int, int] | None] = {}
 
@@ -2993,7 +3009,7 @@ def main_ex_atlas(
             original = layers[room.name][depth]
             mapped = list(it.starmap(to_page, tiles_from))
             if prot.auto_layer_ids and depth > AUTO_LAYER_MIN_DEPTH:
-                # what AUTO_LAYER_OBJECT does at runtime: the whole layer
+                # what the auto layer object does at runtime: the whole layer
                 #  as models at a shallower depth
                 auto_models.extend(
                     _bake_layer(
@@ -3013,7 +3029,7 @@ def main_ex_atlas(
                 changed[depth] = ()
                 continue
             keep = set(protected[room.name][depth])
-            if depth not in prot.tile_layers | prot.fixed_layers:
+            if bake and depth not in prot.tile_layers | prot.fixed_layers:
                 # tiles reaching outside of their texture stay tiles, models
                 #  would wrap around instead
                 keep |= {
@@ -3411,16 +3427,18 @@ class TaskAtlasRoom(my_task.TaskGeneric):
     """Copy a room, applying its atlas plan.
 
     Changed tile layers are rewritten, models written into the model
-    folder, and ``shap_Model`` instances added to draw them.
+    folder, and instances of the model object added to draw them.
     """
 
-    def __init__(
+    def __init__(  # ruff: ignore[too-many-arguments]
         self,
         *,
         dir_room: Path,
         dir_out: Path,
         dir_models: Path,
         plan: RoomPlan | None,
+        model_object: str | None,
+        auto_layer_object: str | None,
     ) -> None:
         """Initialize the task.
 
@@ -3428,6 +3446,9 @@ class TaskAtlasRoom(my_task.TaskGeneric):
         :param dir_out: Output room folder.
         :param dir_models: Folder to write models into.
         :param plan: Room's plan, ``None`` to copy as is.
+        :param model_object: Object drawing models (needed with models).
+        :param auto_layer_object: Object whose instances models of auto
+          layers replace.
         """
         self.files = tuple(
             sorted(file for file in dir_room.rglob('*') if file.is_file())
@@ -3436,6 +3457,8 @@ class TaskAtlasRoom(my_task.TaskGeneric):
         self.dir_out = dir_out
         self.dir_models = dir_models
         self.plan = plan
+        self.model_object = model_object
+        self.auto_layer_object = auto_layer_object
 
         # layers left without tiles are removed, like the room editor does
         self.empty_layers = (
@@ -3485,9 +3508,13 @@ class TaskAtlasRoom(my_task.TaskGeneric):
         """
         assert self.plan is not None
         auto = set(self.plan.auto_layer_ids)
+        model_object = self.model_object
+        assert model_object is not None or not (
+            self.instance_ids or self.auto_instance_ids
+        )
 
         def line(instance_id: str) -> str:
-            return f'{MODEL_OBJECT},0,0,{instance_id},0,1,1,4294967295,0,1'
+            return f'{model_object},0,0,{instance_id},0,1,1,4294967295,0,1'
 
         lines: list[str] = []
         for existing in text.splitlines():
@@ -3497,7 +3524,7 @@ class TaskAtlasRoom(my_task.TaskGeneric):
                 lines.extend(line(i) for i in self.auto_instance_ids)
                 auto.clear()
                 continue
-            if existing.split(',')[0] == AUTO_LAYER_OBJECT:
+            if existing.split(',')[0] == self.auto_layer_object:
                 continue
             lines.append(existing)
         lines.extend(line(i) for i in self.instance_ids)
@@ -3871,6 +3898,8 @@ def main_juicer_gen_tasks(
                     dir_out=dir_out / pth.name,
                     dir_models=dir_models,
                     plan=atlas.rooms.get(pth.name),
+                    model_object=cfg.juicer.model_object,
+                    auto_layer_object=cfg.juicer.auto_layer_object,
                 )
             )
 
@@ -4279,7 +4308,7 @@ def main_juicer_gen_gml(
                 )
     gml_validate.extend((
         'if _violations!="" show_error(_violations,1)',
-        'if _warnings!="" shap_log(_warnings)',
+        f'if _warnings!="" {cfg.juicer.gml_log}(_warnings)',
     ))
     scr_gen_validate_ctx.write_text('\n'.join(gml_validate), **text_params)
 
@@ -4509,6 +4538,14 @@ def _load_private(config_dir: Path) -> Config:
         scramble_models=config.get('scramble_model_names', True),
         crop_found_tiles=config.get('crop_smart_tiles', False),
         keep_rooms=config.get('keep_rooms', 1),
+        tile_finders=frozenset(config.get('tile_finders', ())),
+        tile_layer_users=frozenset(config.get('tile_layer_users', ())),
+        model_object=config.get('model_object'),
+        auto_layer_object=config.get('auto_layer_object'),
+        layer_hide=tuple(config['layer_hide'])
+        if 'layer_hide' in config
+        else None,
+        gml_log=config.get('gml_log', 'show_debug_message'),
     )
 
     file_private_alias = config_dir / 'alias.json'
@@ -4528,7 +4565,7 @@ def _load_private(config_dir: Path) -> Config:
         alias=alias,
         lint_rules=lint_rules,
         context_rules=context_rules,
-        extra_roots=EXTRA_ROOTS,
+        extra_roots=set(config.get('extra_roots', EXTRA_ROOTS)),
         juicer=juicer,
         scan_cache=config_dir.parent / 'clunkster_scan_cache.json',
         common_budget_mb=config.get('common_budget_mb', 500),

@@ -38,6 +38,10 @@ docgen: ## Generate docs Markdown files
 docbuild: docgen ## Build docs
 	@uv run env PYTHONPATH=. zensical build --strict
 
+.PHONY: docpdf
+docpdf: docbuild ## Build docs and print them into docs.pdf
+	@uv run python -m scripts.pdf docs docs.pdf
+
 .PHONY: docserve
 docserve: docgen ## Generate docs Markdown files and serve
 	@uv run env PYTHONPATH=. zensical serve

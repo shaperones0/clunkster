@@ -1,5 +1,8 @@
 docs_md/*.md
 docs_md/**/*.md
+# built docs site, deployed from CI
+/docs/
+docs.pdf
 temp*.py
 temp*.txt
 input/

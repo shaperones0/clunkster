@@ -78,3 +78,7 @@ custom_checkbox = true
 
 # custom extensions
 [project.markdown_extensions.zen_code_links]
+
+# version selector, versions are deployed by mike (see deploy-docs.yml)
+[project.extra.version]
+provider = "mike"

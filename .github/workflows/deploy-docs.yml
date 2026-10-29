@@ -1,39 +1,89 @@
 name: Deploy documentation
 
+# master deploys the "dev" version of the docs, published releases deploy
+#  their own version (and "stable", unless it's a pre-release) and get the
+#  docs as a PDF attached; versions live in the gh-pages branch (via mike)
 on:
   push:
     branches:
       - master
+  release:
+    types:
+      - published
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
+# deploys commit to gh-pages, so they go one at a time
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: docs
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      # the docs build loads the code links extension from the repository
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload documentation
-        uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          # mike commits on top of gh-pages
+          fetch-depth: 0
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Generate docs Markdown
+        run: uv run python -m scripts.readme
+
+      - name: Build docs
+        run: uv run zensical build --strict
+
+      - name: Print docs into a PDF
+        if: github.event_name == 'release'
+        run: |
+          uv run playwright install --with-deps chromium
+          uv run python -m scripts.pdf docs "clunkster-docs-${{ github.event.release.tag_name }}.pdf"
+
+      - name: Configure git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898296+github-actions[bot]@users.noreply.github.com'
+          git fetch origin gh-pages:gh-pages || true
+
+      - name: Deploy dev docs
+        if: github.event_name == 'push'
+        run: |
+          uv run mike deploy --push dev
+          # until the first release, dev is what the site opens with
+          if ! uv run mike list stable > /dev/null 2>&1; then
+            uv run mike set-default --push dev
+          fi
+
+      - name: Deploy release docs
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          version="${TAG#v}"
+          if [ "$PRERELEASE" = 'true' ]; then
+            uv run mike deploy --push "$version"
+          else
+            uv run mike deploy --push --update-aliases "$version" stable
+            uv run mike set-default --push stable
+          fi
+
+      - name: Attach the PDF to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" "clunkster-docs-$TAG.pdf" --clobber
