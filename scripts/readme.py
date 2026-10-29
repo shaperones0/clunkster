@@ -954,7 +954,7 @@ Pipeline systems live in the [pipeline folder](https://github.com/shaperones0/cl
 - `cache.py`: The build cache, saved into a JSON file. Tasks whose output files are present and whose input files haven't changed are skipped. Input files are compared by their stats (modification time, size, file id) first, and only hashed when those changed, so builds don't read every input every time.
 - `run.py`: Task execution. `tasks_filter_stale` drops tasks that are fresh in the cache, `tasks_run` executes the rest in a given `concurrent.futures` pool (threads for IO-bound copies, processes for CPU-bound encoding) and records successes in the cache. Progress is reported through an optional callback, called in the main thread after each task with the worker that ran it and the tasks running right now (taken from the pool's futures), so workers don't need to communicate anything beyond their results. The examples use it for a live view of what each worker does.
 
-Reference scanning results are cached per file (see `analyze/scan_cache.py`): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks and the {exs.href('ex_watch', 'watch mode')} fast.
+Reference scanning results are cached per file (see `analyze/scan_cache.py`): a file is only rescanned when its stats or the set of asset names change. This keeps repeated checks fast.
 
 Linting follows the same idea (see `lint.py`): checks are `Rule`s, problems are `Violation`s collected into plain lists, and `format_report` turns them into text. Printing the report and raising on errors is up to the pipeline.
 
@@ -1675,41 +1675,6 @@ checks based on more advanced usage tracing.
         )
     }
 
-{exs.code_begin('ex_watch', 'Watch mode')}
-{docs['main_ex_watch']}
-{
-        exs.render(
-            (
-                exs.stub('PROJECT'),
-                exs.stub('OUTPUT'),
-                exs.stub('DEF_LINT_REPORT'),
-                snips['DEF_RUN_CHECK'],
-                snips['MAIN_EX_WATCH'],
-            )
-        )
-    }
-
-{
-        exs.code_reg_stub_src(
-            {
-                'DEF_RUN_CHECK': gen_stub_func('run_check', 'run_build', 'project_watch_filter'),
-            }
-        )
-    }
-
-{exs.code_begin('ex_dev', 'Development loop')}
-{docs['main_ex_dev']}
-{
-        exs.render(
-            (
-                exs.stub('PROJECT'),
-                exs.stub('OUTPUT'),
-                exs.stub('DEF_RUN_CHECK'),
-                snips['MAIN_EX_DEV'],
-            )
-        )
-    }
-
 {head.section_next('Game Juicer').render_header()}
 
 Now that the project is cleared out, it is time for some useful tools.
@@ -1928,6 +1893,20 @@ pages and rooms are written by build tasks, so they're cached:
                 exs.stub('OUTPUT'),
                 exs.stub('CLS_JUICER_CONFIG'),
                 snips['MAIN_JUICER_PACKAGE'],
+            )
+        )
+    }
+
+{exs.code_begin('ex_pipeline', 'Putting it together')}
+All the steps above make up two runs: checks only, and a full build (checks, optional atlas and lean rooms, juicing, compiling and packaging). Quick builds skip the checks, except for reference scans when there are lean rooms.
+{
+        exs.render(
+            (
+                exs.stub('PROJECT'),
+                exs.stub('OUTPUT'),
+                exs.stub('DEF_LINT_REPORT'),
+                exs.stub('CLS_JUICER_CONFIG'),
+                snips['DEF_RUN_CHECK'],
             )
         )
     }

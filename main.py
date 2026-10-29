@@ -3,7 +3,6 @@
 import collections
 import collections.abc as col
 import concurrent.futures
-import contextlib
 import dataclasses
 import functools as ft
 import hashlib
@@ -11,7 +10,6 @@ import itertools as it
 import json
 import logging
 import os
-import queue
 import re
 import secrets
 import shutil
@@ -32,7 +30,6 @@ if sys.platform == 'win32':
 import numpy as np
 import rpack
 import rustworkx as rx
-import watchfiles
 from ahocorasick import Automaton  # ty: ignore[unresolved-import]
 from gmcodec import core as gmc_core
 from gmcodec import file as gmc_file
@@ -582,7 +579,7 @@ class ConfJuicer:
     # pack backgrounds used only by room tiles into atlases (main_ex_atlas)
     atlas: bool = False
     # rooms load exactly the assets they use instead of clusters
-    #  (main_ex_lean), needs hash_names (no cluster folders)
+    #  (main_ex_lean)
     lean: bool = False
     # room changes an asset stays loaded for after its last room
     keep_rooms: int = 1
@@ -4644,8 +4641,6 @@ def run_build(
         protection = main_ex_tile_protection(cfg, assets)
         atlas = main_ex_atlas(cfg, assets, deps, protection)
     needs: dict[str, set[str]] | None = None
-    if cfg.juicer.lean and not cfg.juicer.hash_names:
-        raise ValueError('Lean builds are prod only')
     if cfg.juicer.lean or cfg.lean_clusters:
         if deps is None:
             raise ValueError('Lean rooms need reference scans')
@@ -4659,165 +4654,7 @@ def run_build(
     return game
 
 
-def project_watch_filter(root: Path) -> watchfiles.BaseFilter:
-    """Filter for watching project's source files."""
-
-    class ProjectFilter(watchfiles.DefaultFilter):
-        @override
-        def __call__(self, change: watchfiles.Change, path: str) -> bool:
-            # GameMaker's cache isn't part of the project, and the game
-            #  writes saves into save folder (linked into the build)
-            top = Path(path).relative_to(root).parts[:1]
-            return super().__call__(change, path) and top not in {
-                ('cache',),
-                ('save',),
-            }
-
-    return ProjectFilter()
-
-
 # </snip DEF_RUN_CHECK>
-
-
-def main_ex_watch(cfg: Config) -> None:
-    """Rerun all linters whenever project files change.
-
-    Watch mode makes cluster violations show up right after saving, not at
-    build time. Thanks to the scan cache only changed files get rescanned,
-    so reruns take a second or two.
-
-    Linter errors don't stop the watch; it reports them and waits for the
-    next change. Uses [watchfiles](https://github.com/samuelcolvin/watchfiles)
-    for watching.
-    """
-    # <snip MAIN_EX_WATCH>
-    root = cfg.project.root
-    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
-
-    def check() -> None:
-        errors = 0
-        try:
-            run_check(cfg, scan_cache)
-        except my_lint.LinterFoundError as e:
-            errors = len(e.violations)
-        except Exception:
-            # e.g. a file caught in the middle of being saved
-            log.exception('Check failed')
-        if errors:
-            log.error('Found %d error(s)', errors)
-        log.info('Watching %s for changes, Ctrl+C to stop', root)
-
-    # the watcher yields an empty set on timeout, which is used to run the
-    #  first check once it's watching, so that no changes are missed
-    first = True
-    watcher = watchfiles.watch(
-        root,
-        watch_filter=project_watch_filter(root),
-        yield_on_timeout=True,
-        rust_timeout=200,
-    )
-    try:
-        for changes in watcher:
-            if first:
-                first = False
-                check()
-                continue
-            if not changes:
-                continue
-            if CONSOLE.is_terminal:
-                CONSOLE.clear()
-            log.info('%d file(s) changed', len(changes))
-            # fresh project, so that file reads aren't cached from before
-            cfg = dataclasses.replace(cfg, project=my_proj.Project(root))
-            check()
-    finally:
-        # saved once on exit, saving on every change takes too long
-        scan_cache.save()
-    # </snip MAIN_EX_WATCH>
-
-
-def main_ex_dev(cfg: Config) -> None:
-    """Build and run the game on demand.
-
-    Development loop for the frequent "small edit, build, play" cycle:
-    press Enter to check and build the project and launch the game. The
-    game launched by the previous build is closed first, since the compiler
-    can't overwrite a running ``game.exe``. Caches stay in memory between
-    builds, so only what changed gets processed.
-
-    Saved changes are reported as they happen. Type ``a`` to toggle
-    building automatically after every save, and ``q`` to quit.
-    """
-    # <snip MAIN_EX_DEV>
-    root = cfg.project.root
-    scan_cache = my_scan_cache.ScanCache(cfg.scan_cache)
-    # commands from the keyboard ('', 'a', 'q') and the watcher ('changed')
-    commands: queue.Queue[str] = queue.Queue()
-    stop_watching = threading.Event()
-
-    def read_input() -> None:
-        for line in sys.stdin:
-            commands.put(line.strip().lower())
-        commands.put('q')
-
-    def watch_changes() -> None:
-        for _ in watchfiles.watch(
-            root,
-            watch_filter=project_watch_filter(root),
-            stop_event=stop_watching,
-        ):
-            commands.put('changed')
-
-    threading.Thread(target=read_input, daemon=True).start()
-    threading.Thread(target=watch_changes, daemon=True).start()
-
-    usage = 'Enter: build and run, a: toggle auto build, q: quit'
-    log.info(usage)
-    auto_build = False
-    game: subprocess.Popen[bytes] | None = None
-    try:
-        while True:
-            try:
-                # timeout, so that Ctrl+C gets through on Windows
-                command = commands.get(timeout=0.5)
-            except queue.Empty:
-                continue
-
-            if command == 'q':
-                break
-            if command == 'a':
-                auto_build = not auto_build
-                log.info('Auto build: %s', 'on' if auto_build else 'off')
-                continue
-            if command == 'changed' and not auto_build:
-                log.info('Project changed, press Enter to build')
-                continue
-            if command not in {'', 'changed'}:
-                log.info(usage)
-                continue
-
-            if CONSOLE.is_terminal:
-                CONSOLE.clear()
-            if game is not None and game.poll() is None:
-                log.info('Closing the game')
-                game.terminate()
-                game.wait()
-            # fresh project, so that file reads aren't cached from before
-            cfg = dataclasses.replace(cfg, project=my_proj.Project(root))
-            errors = 0
-            try:
-                game = run_build(cfg, scan_cache)
-            except my_lint.LinterFoundError as e:
-                errors = len(e.violations)
-            except Exception:
-                log.exception('Build failed')
-            if errors:
-                log.error('Build stopped, found %d error(s)', errors)
-            log.info(usage)
-    finally:
-        stop_watching.set()
-        scan_cache.save()
-    # </snip MAIN_EX_DEV>
 
 
 def _build_profile(
@@ -4825,15 +4662,51 @@ def _build_profile(
 ) -> Config:
     """Adjust the juicer config for the build mode and flags."""
     unknown = set(flags) - {'--lean', '--atlas'}
-    if unknown or (flags and mode != 'prod'):
-        raise ValueError(
-            f'Unknown flags {sorted(unknown)}'
-            if unknown
-            else '--lean and --atlas are for prod builds'
-        )
+    if unknown:
+        raise ValueError(f'Unknown flags {sorted(unknown)}')
+    if '--atlas' in flags and mode != 'prod':
+        raise ValueError('--atlas is for prod builds (atlas mode has them)')
+    juicer = cfg.juicer
     if mode == 'quick':
-        juicer = dataclasses.replace(cfg.juicer, encode_audio=False)
-        return dataclasses.replace(cfg, juicer=juicer)
+        juicer = dataclasses.replace(juicer, encode_audio=False)
+    elif mode == 'atlas':
+        # own folder: rooms are copies there, not a link to the source
+        juicer = dataclasses.replace(
+            juicer,
+            dir_out=config_dir.parent / '_build_atlas',
+            file_cache=config_dir.parent / 'clunkster_cache_atlas.json',
+            atlas=True,
+            dump_atlas=True,
+        )
+    elif mode == 'prod':
+        # salt for hashed names, kept out of the config so that it doesn't
+        #  end up in the repository
+        file_salt = config_dir.parent / 'clunkster_salt.txt'
+        if not file_salt.exists():
+            file_salt.write_text(secrets.token_hex(16), encoding='utf-8')
+        juicer = dataclasses.replace(
+            juicer,
+            is_prod=True,
+            dir_out=config_dir.parent / '_build_prod',
+            file_cache=config_dir.parent / 'clunkster_cache_prod.json',
+            hash_names=True,
+            name_salt=file_salt.read_text(encoding='utf-8').strip(),
+            # package=True,     # temp
+            launch=False,
+            atlas='--atlas' in flags,
+        )
+    if '--lean' in flags:
+        # own folder too: assets that stay in the executable differ, and the
+        #  build cache only tracks inputs, so it wouldn't notice the switch
+        juicer = dataclasses.replace(
+            juicer,
+            lean=True,
+            dir_out=juicer.dir_out.with_name(f'{juicer.dir_out.name}_lean'),
+            file_cache=juicer.file_cache.with_name(
+                f'{juicer.file_cache.stem}_lean{juicer.file_cache.suffix}'
+            ),
+        )
+    return dataclasses.replace(cfg, juicer=juicer)
     if mode == 'atlas':
         # own folder: rooms are copies there, not a link to the source
         juicer = dataclasses.replace(
@@ -4870,20 +4743,23 @@ def _build_profile(
 def main() -> None:
     """Pipeline private entrypoint.
 
-    Usage: ``main.py <config dir> [mode]``, where mode is one of
-    ``build`` (default), ``quick``, ``prod``, ``atlas``, ``check``, ``watch``,
-    ``dev`` or ``test``:
+    Usage: ``main.py <config dir> [mode] [--lean] [--atlas]``, where mode is
+    one of ``build`` (default), ``quick``, ``prod``, ``atlas``, ``check`` or
+    ``test``:
 
     - ``build``: check references, build and launch the game
     - ``quick``: build and launch, skipping reference checks (except for
-      scans, with lean clusters) and audio encoding
-    - ``prod [--atlas] [--lean]``: check references, build into
-      ``_build_prod`` with hashed wet asset names, and pack it into a zip;
-      ``--atlas`` adds atlases and baked tiles, ``--lean`` makes rooms load
-      exactly the assets they use
+      scans, for lean rooms) and audio encoding
+    - ``prod``: check references, build into ``_build_prod`` with hashed wet
+      asset names, and pack it into a zip; ``--atlas`` adds atlases and baked
+      tiles
     - ``atlas``: like ``build``, but with atlases and baked tiles, into
       ``_build_atlas``, and atlas pages written to ``atlas_dump`` there (for
       testing them without a full prod build)
+
+    ``--lean`` makes every room load exactly the assets it uses, in any build
+    mode; lean builds go into their own folder (``_build_lean``,
+    ``_build_prod_lean``, ...).
     """
     config_dir = Path(sys.argv[1]).resolve()
     mode = sys.argv[2] if len(sys.argv) > 2 else 'build'
@@ -4906,17 +4782,10 @@ def main() -> None:
             scan_cache.save()
         log.info('All ok, exiting regardless :D')
         return
-    if mode == 'watch':
-        with contextlib.suppress(KeyboardInterrupt):
-            main_ex_watch(cfg)
-        return
-    if mode == 'dev':
-        with contextlib.suppress(KeyboardInterrupt):
-            main_ex_dev(cfg)
-        return
     if mode not in {'build', 'quick', 'prod', 'atlas'}:
         raise ValueError(f'Unknown mode: {mode}')
-    if mode == 'quick' and not cfg.lean_clusters:
+    # quick builds only scan for lean rooms
+    if mode == 'quick' and not (cfg.lean_clusters or cfg.juicer.lean):
         run_build(cfg, None)
         return
 
