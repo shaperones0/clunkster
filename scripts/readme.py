@@ -1835,7 +1835,7 @@ ___
         )
     }
 
-{exs.code_begin('ex_atlas', 'Juicer: texture atlas')}
+{exs.code_begin('ex_atlas', 'Juicer: trimming and baking tiles')}
 {docs['main_ex_atlas']}
 {
         exs.render(
@@ -1898,7 +1898,7 @@ pages and rooms are written by build tasks, so they're cached:
     }
 
 {exs.code_begin('ex_pipeline', 'Putting it together')}
-All the steps above make up two runs: checks only, and a full build (checks, optional atlas and lean rooms, juicing, compiling and packaging). Quick builds skip the checks, except for reference scans when there are lean rooms.
+All the steps above make up two runs: checks only, and a full build (checks, rewriting tiles and lean rooms where enabled, juicing, compiling and packaging). Quick builds skip the checks, except for reference scans when there are lean rooms.
 {
         exs.render(
             (

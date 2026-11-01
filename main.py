@@ -576,7 +576,12 @@ class ConfJuicer:
     package: bool = False
     # launch the game after building
     launch: bool = True
-    # pack backgrounds used only by room tiles into atlases (main_ex_atlas)
+    # rewrite room tiles (main_ex_atlas): backgrounds used only by them get
+    #  trimmed of unused space, layers get baked into models, etc.
+    rewrite_tiles: bool = False
+    # with rewrite_tiles: pack those backgrounds into pages shared per cluster
+    #  instead of trimming each on its own (fewer textures, but rooms load
+    #  whole pages, which works against lean)
     atlas: bool = False
     # rooms load exactly the assets they use instead of clusters
     #  (main_ex_lean)
@@ -2572,13 +2577,14 @@ def main_ex_atlas(
     dependencies: list[Dependency],
     protection: dict[str, TileProtection],
 ) -> Atlas:
-    """Pack tiles into texture atlases, and bake them into models.
+    """Trim backgrounds of unused space, and bake tiles into models.
 
-    Fewer textures and draw calls per room, by rewriting room tile layers:
+    Less texture memory and fewer draw calls per room, by rewriting room tile
+    layers:
 
     1. Only backgrounds referenced from nothing but room tile layers
        qualify: room tiles point to a region of a background, so they can
-       point to a region of an atlas page instead. Others stay as they are.
+       point to a region of a page instead. Others stay as they are.
     2. Tiles of those get their transparent edges cropped (fully transparent
        ones are dropped). Large ones are split into cells: empty cells are
        dropped, single color ones are drawn with a white patch, stretched and
@@ -2587,9 +2593,12 @@ def main_ex_atlas(
        tiles whose parts would land between pixels stay whole.
     3. Regions lying within others, or overlapping them closely enough, are
        stored once, and so are regions with identical pixels.
-    4. Regions are packed onto pages of the cluster of their background (so
-       pages load and unload with their stage), with a border repeating
-       their edges, and tiles are pointed to the pages.
+    4. Regions are packed onto pages, with a border repeating their edges,
+       and tiles are pointed to the pages. Every background gets its own page,
+       a trimmed version of itself, unless that wouldn't be any smaller: then
+       it stays as it is. With ``atlas``, pages are shared by the backgrounds
+       of a cluster instead, so that rooms use fewer textures, but they have
+       to load whole pages.
     5. With a ``model_object`` (it's game-specific), tiles of each layer are
        baked into models drawn by it, one per texture where order allows.
        Tiles overlapping ones that have to stay tiles stay tiles too, so
@@ -2632,6 +2641,12 @@ def main_ex_atlas(
             with Image.open(file) as img:
                 pixels[name] = np.asarray(img.convert('RGBA'))
         return pixels[name]
+
+    def group_of(name: str) -> str:
+        """Get what shares pages with a background."""
+        if cfg.juicer.atlas:
+            return asset_cluster(cfg, backgrounds[name])
+        return name
 
     # read layers
     layers: dict[str, dict[int, list[my_tiles.Tile]]] = {}
@@ -2784,7 +2799,7 @@ def main_ex_atlas(
     # 1-2: crop and split, tiles keep the background they came from
     new_layers: dict[str, dict[int, list[tuple[my_tiles.Tile, str]]]] = {}
     protected: dict[str, dict[int, set[int]]] = {}
-    solid_clusters: set[str] = set()
+    solid_groups: set[str] = set()
     for room_name, room_layers in layers.items():
         prot = protection.get(room_name, TileProtection())
         for depth, tiles in room_layers.items():
@@ -2844,9 +2859,7 @@ def main_ex_atlas(
                             yscale=h * tile.yscale / ATLAS_WHITE_SIZE,
                             color=tint(tile.color, color),
                         )
-                        solid_clusters.add(
-                            asset_cluster(cfg, backgrounds[tile.bg])
-                        )
+                        solid_groups.add(group_of(tile.bg))
                     out.append((piece, tile.bg))
             new_layers.setdefault(room_name, {})[depth] = out
             protected.setdefault(room_name, {})[depth] = keep
@@ -2860,14 +2873,14 @@ def main_ex_atlas(
                 if tile.bg in candidates:
                     regions.setdefault(tile.bg, set()).add(tile.region())
     # (background, region) -> its container, and where that's stored (the
-    #  container itself, or one with identical pixels in the same cluster)
+    #  container itself, or one with identical pixels in the same group)
     stored_as: dict[
         tuple[str, my_atlas.Rect],
         tuple[my_atlas.Rect, tuple[str, my_atlas.Rect]],
     ] = {}
     by_pixels: dict[tuple[str, bytes], tuple[str, my_atlas.Rect]] = {}
     for name in sorted(regions):
-        cluster = asset_cluster(cfg, backgrounds[name])
+        group = group_of(name)
         merged = my_atlas.merge_regions(regions[name], ATLAS_MAX_MERGE_WASTE)
         for rect, container in sorted(merged.items()):
             left, top, w, h = container
@@ -2877,16 +2890,15 @@ def main_ex_atlas(
             ).digest()
             stored_as[name, rect] = (
                 container,
-                by_pixels.setdefault((cluster, digest), (name, container)),
+                by_pixels.setdefault((group, digest), (name, container)),
             )
 
-    # 4: pack per cluster, pages get a white patch if needed
-    by_cluster: dict[str, set[tuple[str, my_atlas.Rect]]] = {}
+    # 4: pack per group, pages get a white patch if needed
+    by_group: dict[str, set[tuple[str, my_atlas.Rect]]] = {}
     for _, (name, rect) in stored_as.values():
-        cluster = asset_cluster(cfg, backgrounds[name])
-        by_cluster.setdefault(cluster, set()).add((name, rect))
-    for cluster in solid_clusters:
-        by_cluster.setdefault(cluster, set())
+        by_group.setdefault(group_of(name), set()).add((name, rect))
+    for group in solid_groups:
+        by_group.setdefault(group, set())
     border = ATLAS_BORDER
     white_size = ATLAS_WHITE_SIZE + 2 * border
     pages: list[AtlasPage] = []
@@ -2897,13 +2909,13 @@ def main_ex_atlas(
     jobs: dict[
         str, tuple[list[tuple[str, my_atlas.Rect]], str, AtlasPackJob]
     ] = {}
-    for cluster, stored in sorted(by_cluster.items()):
+    for group, stored in sorted(by_group.items()):
         keys = sorted(stored, key=lambda k: (-k[1][2] * k[1][3], k))
         job = (
             [(r[2] + 2 * border, r[3] + 2 * border) for _, r in keys],
-            (white_size, white_size) if cluster in solid_clusters else None,
+            (white_size, white_size) if group in solid_groups else None,
         )
-        jobs[cluster] = (
+        jobs[group] = (
             keys,
             hashlib.md5(repr(job).encode()).hexdigest(),
             job,
@@ -2916,23 +2928,36 @@ def main_ex_atlas(
         )
     missing = [c for c, (_, key, _) in jobs.items() if key not in pack_cache]
     if missing:
-        log.info('Packing %d cluster(s)', len(missing))
+        log.info('Packing %d group(s)', len(missing))
         with concurrent.futures.ProcessPoolExecutor() as pool:
-            for cluster, packed_pages in zip(
+            for group, packed_pages in zip(
                 missing,
-                pool.map(_atlas_pack_job, [jobs[c][2] for c in missing]),
+                pool.map(_atlas_pack_job, [jobs[g][2] for g in missing]),
                 strict=True,
             ):
-                pack_cache[jobs[cluster][1]] = packed_pages
+                pack_cache[jobs[group][1]] = packed_pages
     file_pack_cache.parent.mkdir(parents=True, exist_ok=True)
     write_if_changed(
         file_pack_cache,
         json.dumps({key: pack_cache[key] for _, key, _ in jobs.values()}),
     )
 
-    for cluster, (keys, key, _) in jobs.items():
+    # backgrounds that trimming wouldn't make smaller (pages have borders)
+    untrimmed: set[str] = set()
+    for group, (keys, key, _) in jobs.items():
         packed = pack_cache[key]
-        prefix = re.sub(r'\W', '_', cluster)
+        if cfg.juicer.atlas:
+            cluster = group
+        else:
+            cluster = asset_cluster(cfg, backgrounds[group])
+            height, width = image(group).shape[:2]
+            if (
+                group not in solid_groups
+                and sum(w * h for w, h, _ in packed) >= width * height
+            ):
+                untrimmed.add(group)
+                continue
+        prefix = re.sub(r'\W', '_', group)
         for idx, (page_width, page_height, members) in enumerate(packed):
             page_name = f'__atlas_{prefix}_{idx}'
             if page_name in backgrounds:
@@ -2949,7 +2974,7 @@ def main_ex_atlas(
                         x=x + border,
                         y=y + border,
                     )
-                    white.setdefault(cluster, (page_name, entry.x, entry.y))
+                    white.setdefault(group, (page_name, entry.x, entry.y))
                 else:
                     name, rect = keys[item]
                     entry = AtlasEntry(name, *rect, x=x + border, y=y + border)
@@ -2966,9 +2991,9 @@ def main_ex_atlas(
 
     def to_page(tile: my_tiles.Tile, source: str) -> my_tiles.Tile:
         if tile.bg == ATLAS_WHITE:
-            page, x, y = white[asset_cluster(cfg, backgrounds[source])]
+            page, x, y = white[group_of(source)]
             return dataclasses.replace(tile, bg=page, left=x, top=y)
-        if tile.bg not in candidates:
+        if tile.bg not in candidates or tile.bg in untrimmed:
             return tile
         container, key = stored_as[tile.bg, tile.region()]
         page, x, y = placed[key]
@@ -3058,12 +3083,16 @@ def main_ex_atlas(
             )
 
     # every tile of these points to pages now
-    atlased = frozenset(candidates)
+    atlased = frozenset(candidates - untrimmed)
     log.info(
-        'Packed regions of %d background(s) into %d page(s): %s',
+        'Packed regions of %d background(s) into %d page(s), ~%.1f -> ~%.1f '
+        'MB',
         len(atlased),
         len(pages),
-        ', '.join(f'{p.asset.name} {p.width}x{p.height}' for p in pages),
+        sum(image(name).shape[0] * image(name).shape[1] for name in atlased)
+        * 4
+        / 2**20,
+        sum(p.width * p.height for p in pages) * 4 / 2**20,
     )
     log.info(
         'Tiles: %d -> %d tiles and %d models',
@@ -4635,9 +4664,9 @@ def run_build(
     else:
         cfg, assets, deps, room_data = run_check(cfg, scan_cache)
     atlas: Atlas | None = None
-    if cfg.juicer.atlas:
+    if cfg.juicer.rewrite_tiles:
         if deps is None:
-            raise ValueError('Atlas needs reference checks')
+            raise ValueError('Rewriting tiles needs reference checks')
         protection = main_ex_tile_protection(cfg, assets)
         atlas = main_ex_atlas(cfg, assets, deps, protection)
     needs: dict[str, set[str]] | None = None
@@ -4675,6 +4704,7 @@ def _build_profile(
             juicer,
             dir_out=config_dir.parent / '_build_atlas',
             file_cache=config_dir.parent / 'clunkster_cache_atlas.json',
+            rewrite_tiles=True,
             atlas=True,
             dump_atlas=True,
         )
@@ -4684,16 +4714,22 @@ def _build_profile(
         file_salt = config_dir.parent / 'clunkster_salt.txt'
         if not file_salt.exists():
             file_salt.write_text(secrets.token_hex(16), encoding='utf-8')
+        # own folder with atlas pages: the build cache only tracks inputs, so
+        #  it wouldn't notice the switch
+        atlas = '--atlas' in flags
+        suffix = '_atlas' if atlas else ''
         juicer = dataclasses.replace(
             juicer,
             is_prod=True,
-            dir_out=config_dir.parent / '_build_prod',
-            file_cache=config_dir.parent / 'clunkster_cache_prod.json',
+            dir_out=config_dir.parent / f'_build_prod{suffix}',
+            file_cache=config_dir.parent
+            / f'clunkster_cache_prod{suffix}.json',
             hash_names=True,
             name_salt=file_salt.read_text(encoding='utf-8').strip(),
             # package=True,     # temp
             launch=False,
-            atlas='--atlas' in flags,
+            rewrite_tiles=True,
+            atlas=atlas,
         )
     if '--lean' in flags:
         # own folder too: assets that stay in the executable differ, and the
@@ -4706,37 +4742,6 @@ def _build_profile(
                 f'{juicer.file_cache.stem}_lean{juicer.file_cache.suffix}'
             ),
         )
-    return dataclasses.replace(cfg, juicer=juicer)
-    if mode == 'atlas':
-        # own folder: rooms are copies there, not a link to the source
-        juicer = dataclasses.replace(
-            cfg.juicer,
-            dir_out=config_dir.parent / '_build_atlas',
-            file_cache=config_dir.parent / 'clunkster_cache_atlas.json',
-            atlas=True,
-            dump_atlas=True,
-        )
-        return dataclasses.replace(cfg, juicer=juicer)
-    if mode != 'prod':
-        return cfg
-
-    # salt for hashed names, kept out of the config so that it doesn't end
-    #  up in the repository
-    file_salt = config_dir.parent / 'clunkster_salt.txt'
-    if not file_salt.exists():
-        file_salt.write_text(secrets.token_hex(16), encoding='utf-8')
-    juicer = dataclasses.replace(
-        cfg.juicer,
-        is_prod=True,
-        dir_out=config_dir.parent / '_build_prod',
-        file_cache=config_dir.parent / 'clunkster_cache_prod.json',
-        hash_names=True,
-        name_salt=file_salt.read_text(encoding='utf-8').strip(),
-        # package=True,     # temp
-        launch=False,
-        atlas='--atlas' in flags,
-        lean='--lean' in flags,
-    )
     return dataclasses.replace(cfg, juicer=juicer)
 
 
@@ -4751,8 +4756,9 @@ def main() -> None:
     - ``quick``: build and launch, skipping reference checks (except for
       scans, for lean rooms) and audio encoding
     - ``prod``: check references, build into ``_build_prod`` with hashed wet
-      asset names, and pack it into a zip; ``--atlas`` adds atlases and baked
-      tiles
+      asset names, trimmed backgrounds and baked tiles, and pack it into a
+      zip; ``--atlas`` shares textures per cluster instead of trimming each
+      background on its own, into ``_build_prod_atlas``
     - ``atlas``: like ``build``, but with atlases and baked tiles, into
       ``_build_atlas``, and atlas pages written to ``atlas_dump`` there (for
       testing them without a full prod build)
